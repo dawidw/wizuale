@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A10000000000000000000001"
-               BuildableName = "TVVisuals.app"
-               BlueprintName = "TVVisuals"
-               ReferencedContainer = "container:TVVisuals.xcodeproj">
+               BuildableName = "Wizuale.app"
+               BlueprintName = "Wizuale"
+               ReferencedContainer = "container:Wizuale.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -43,9 +43,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A10000000000000000000001"
-            BuildableName = "TVVisuals.app"
-            BlueprintName = "TVVisuals"
-            ReferencedContainer = "container:TVVisuals.xcodeproj">
+            BuildableName = "Wizuale.app"
+            BlueprintName = "Wizuale"
+            ReferencedContainer = "container:Wizuale.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -60,9 +60,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A10000000000000000000001"
-            BuildableName = "TVVisuals.app"
-            BlueprintName = "TVVisuals"
-            ReferencedContainer = "container:TVVisuals.xcodeproj">
+            BuildableName = "Wizuale.app"
+            BlueprintName = "Wizuale"
+            ReferencedContainer = "container:Wizuale.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

@@ -1,6 +1,6 @@
-name: TVVisuals
+name: Wizuale
 options:
-  bundleIdPrefix: app.tvvisuals
+  bundleIdPrefix: app.wizuale
   deploymentTarget:
     tvOS: "17.0"
   createIntermediateGroups: true
@@ -23,23 +23,23 @@ settings:
       SWIFT_OPTIMIZATION_LEVEL: "-O"
       SWIFT_COMPILATION_MODE: wholemodule
 targets:
-  TVVisuals:
+  Wizuale:
     type: application
     platform: tvOS
     sources:
-      - path: TVVisuals
+      - path: Wizuale
         excludes:
           - Info.plist
-          - TVVisuals.entitlements
+          - Wizuale.entitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.tvvisuals.TVVisuals
-        PRODUCT_NAME: TVVisuals
+        PRODUCT_BUNDLE_IDENTIFIER: app.wizuale.Wizuale
+        PRODUCT_NAME: Wizuale
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: NO
-        INFOPLIST_FILE: TVVisuals/Info.plist
-        CODE_SIGN_ENTITLEMENTS: TVVisuals/TVVisuals.entitlements
+        INFOPLIST_FILE: Wizuale/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Wizuale/Wizuale.entitlements
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
         ENABLE_PREVIEWS: YES

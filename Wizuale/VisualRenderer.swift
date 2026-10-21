@@ -127,7 +127,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
             let command = queue.makeCommandBuffer()
         else { return }
 
-        command.label = "TV Visuals"
+        command.label = "Wizuale"
         let size = Self.feedbackSize(for: view.drawableSize)
         guard ensureTextures(size) else { return }
 

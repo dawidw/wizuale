@@ -59,7 +59,7 @@ struct RemoteReader: UIViewControllerRepresentable {
             backgroundColor = .clear
             isUserInteractionEnabled = true
             isAccessibilityElement = true
-            accessibilityLabel = "Visuals"
+            accessibilityLabel = "Wizuale"
             accessibilityHint = "Swipe left or right to change the picture. Click to step forward. Hold to pin the title."
         }
 

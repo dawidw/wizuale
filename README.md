@@ -1,4 +1,4 @@
-# TV Visuals
+# Wizuale
 
 Full-screen generative pictures for Apple TV. Put a record on — Apple Music on the TV, or music you start from this app — and the screen becomes a MilkDrop-style visualizer instead of the screensaver.
 
@@ -35,22 +35,22 @@ The Apple TV screensaver stays off while the app is in front.
 
 ## Open the project
 
-You need a Mac with Xcode 15 or newer. Open `TVVisuals.xcodeproj`. The target is tvOS 17.
+You need a Mac with Xcode 15 or newer. Open `Wizuale.xcodeproj`. The target is tvOS 17.
 
 `project.yml` is only there if you prefer [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen && xcodegen generate`). The checked-in Xcode project is the one to open.
 
 ## Signing and Apple Music
 
-The bundle id is `app.tvvisuals.TVVisuals`. Change it in the target's Signing settings if you already use that id, and create the App ID with the same string.
+The bundle id is `app.wizuale.Wizuale`. Create the App ID with that exact identifier. If you change it, change the target's Signing settings to the same string.
 
 MusicKit needs a paid Apple Developer Program membership. A free personal team cannot enable it.
 
-1. Go to [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/identifiers/list) → Identifiers → your App ID.
+1. Go to [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/identifiers/list) → Identifiers → + → App IDs. Use the explicit identifier `app.wizuale.Wizuale`.
 2. Enable the **MusicKit** service and save.
-3. In Xcode, select the TVVisuals target → Signing & Capabilities → Team. Leave **Automatically manage signing** on.
-4. The MusicKit entitlement is already in `TVVisuals/TVVisuals.entitlements`. If signing fails on that key, the App ID does not have the MusicKit service yet.
+3. In Xcode, select the Wizuale target → Signing & Capabilities → Team. Leave **Automatically manage signing** on.
+4. The MusicKit entitlement is already in `Wizuale/Wizuale.entitlements`. If signing fails on that key, the App ID does not have the MusicKit service yet.
 
-The usage string shown in the permission prompt is: "TV Visuals reads the album you're playing so the picture can borrow its colors. It never listens to the audio."
+The usage string shown in the permission prompt is: "Wizuale reads the album you're playing so the picture can borrow its colors. It never listens to the audio."
 
 ## Run it on an Apple TV
 
@@ -75,8 +75,8 @@ If you deny access, the pictures still run. They use the colors designed for eac
 
 ## Add a picture
 
-1. Add a case to `VisualMode` in `TVVisuals/Presets.swift`. The raw number is the mode the shader switches on, so keep it in sync.
-2. Write a small `emit…` function in `TVVisuals/Shaders.metal` and call it from `emitMode`.
+1. Add a case to `VisualMode` in `Wizuale/Presets.swift`. The raw number is the mode the shader switches on, so keep it in sync.
+2. Write a small `emit…` function in `Wizuale/Shaders.metal` and call it from `emitMode`.
 3. Append a `Preset` in `PresetLibrary.all`.
 4. Set `cyclesAutomatically` if it should join the 45 second rotation. Leave it off and the picture waits until someone swipes.
 
