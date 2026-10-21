@@ -66,7 +66,7 @@ final class MusicSession: ObservableObject {
         case .playing:
             player.pause()
             isPlaying = false
-        case .paused, .interrupted, .seeking:
+        case .paused, .interrupted, .seekingForward, .seekingBackward:
             isPlaying = true
             Task {
                 do { try await player.play() }

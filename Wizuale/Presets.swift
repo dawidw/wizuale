@@ -299,7 +299,7 @@ enum PresetLibrary {
         guard !all.isEmpty else { return nil }
         var cursor = index
         for _ in 0..<all.count {
-            cursor = index(after: cursor, step: 1)
+            cursor = Self.index(after: cursor, step: 1)
             if all[cursor].cyclesAutomatically { return cursor }
         }
         return nil
