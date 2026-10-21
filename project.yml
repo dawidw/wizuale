@@ -61,6 +61,8 @@ targets:
         excludes:
           - Info.plist
           - WizualeMic.entitlements
+      - path: Wizuale/Presets.swift
+      - path: Wizuale/FrameUniforms.swift
       - path: Shared
     settings:
       base:

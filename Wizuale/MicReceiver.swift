@@ -6,6 +6,7 @@ import UIKit
 
 /// What one frame should do with the phone's audio. `presence` fades to 0
 /// after the packets stop so the picture eases back to the beat clock.
+/// Band values are already curved by the hit slider.
 struct MicDrive: Sendable {
     var onset: Float
     var bass: Float
@@ -21,10 +22,13 @@ struct MicDrive: Sendable {
     )
 }
 
-/// Advertises `_wizuale._udp` and keeps the newest packet. The draw loop calls
-/// `sample` on its own thread; the listener queue only stores bytes.
+/// Advertises `_wizuale._udp`, keeps the newest packet, and answers with the
+/// picture that is on screen. The draw loop calls `sample` on its own thread.
+/// The listener queue stores bytes and sends acks.
 final class MicReceiver: @unchecked Sendable {
     var onStatus: (@Sendable (Bool, String) -> Void)?
+    /// Phone preset choice. `-1` means go back to auto. Called on the main queue.
+    var onCommand: (@Sendable (Int) -> Void)?
 
     private let queue = DispatchQueue(label: "app.wizuale.mic.listen")
     private let lock = NSLock()
@@ -34,6 +38,7 @@ final class MicReceiver: @unchecked Sendable {
     private var latestSequence: UInt16 = 0
     private var havePacket = false
     private var lastArrival: CFTimeInterval = 0
+    private var sensitivity: Float = 1
 
     private var onset: Float = 0
     private var bass: Float = 0
@@ -47,11 +52,26 @@ final class MicReceiver: @unchecked Sendable {
     private var haveApplied = false
     private var reportedLive = false
 
+    private var shownIndex = 0
+    private var shownCycling = true
+    private var lastAckTime: CFTimeInterval = 0
+
     func start() {
         let raw = UIDevice.current.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = Self.bonjourName(raw.isEmpty ? "Wizuale" : raw)
         queue.async { [weak self] in
             self?.listen(as: name)
+        }
+    }
+
+    /// The picture the phone should be told about. Safe from the main actor.
+    func setShown(index: Int, cycling: Bool) {
+        lock.lock()
+        shownIndex = index
+        shownCycling = cycling
+        lock.unlock()
+        queue.async { [weak self] in
+            self?.sendAck(force: true)
         }
     }
 
@@ -61,6 +81,7 @@ final class MicReceiver: @unchecked Sendable {
         lock.lock()
         let packet = latest
         let sequence = latestSequence
+        let sens = sensitivity
         let age = havePacket ? CACurrentMediaTime() - lastArrival : 1_000
         if age > 1 {
             haveApplied = false
@@ -75,13 +96,14 @@ final class MicReceiver: @unchecked Sendable {
         let target = fresh ? packet : MicFeatures.zero
         lock.unlock()
 
-        onset *= expf(-dtSafe / 0.075)
-        bass = follow(bass, target.bass, dt: dtSafe, attack: 0.02, release: 0.10)
-        lowMid = follow(lowMid, target.lowMid, dt: dtSafe, attack: 0.03, release: 0.12)
-        mid = follow(mid, target.mid, dt: dtSafe, attack: 0.03, release: 0.12)
-        high = follow(high, target.high, dt: dtSafe, attack: 0.02, release: 0.08)
-        loudness = follow(loudness, target.loudness, dt: dtSafe, attack: 0.03, release: 0.14)
-        flux = follow(flux, target.flux, dt: dtSafe, attack: 0.02, release: 0.08)
+        // Fast attack, a slightly longer hang, so a kick reads as a hit and not a tick.
+        onset *= expf(-dtSafe / 0.14)
+        bass = follow(bass, target.bass, dt: dtSafe, attack: 0.012, release: 0.30)
+        lowMid = follow(lowMid, target.lowMid, dt: dtSafe, attack: 0.018, release: 0.24)
+        mid = follow(mid, target.mid, dt: dtSafe, attack: 0.02, release: 0.16)
+        high = follow(high, target.high, dt: dtSafe, attack: 0.015, release: 0.09)
+        loudness = follow(loudness, target.loudness, dt: dtSafe, attack: 0.02, release: 0.22)
+        flux = follow(flux, target.flux, dt: dtSafe, attack: 0.015, release: 0.10)
 
         let presenceTarget: Float = fresh ? 1 : 0
         let presenceTau: Float = fresh ? 0.05 : 0.40
@@ -96,21 +118,29 @@ final class MicReceiver: @unchecked Sendable {
         }
         lock.unlock()
         if let shouldReport, let onStatus {
+            let report = shouldReport
             DispatchQueue.main.async {
-                onStatus(shouldReport.0, shouldReport.1)
+                onStatus(report.0, report.1)
             }
         }
 
         return MicDrive(
-            onset: onset,
-            bass: bass,
-            lowMid: lowMid,
-            mid: mid,
-            high: high,
-            loudness: loudness,
-            flux: flux,
+            onset: drive(onset, sens),
+            bass: drive(bass, sens),
+            lowMid: drive(lowMid, sens),
+            mid: drive(mid, sens),
+            high: drive(high, sens),
+            loudness: drive(loudness, sens),
+            flux: drive(flux, sens),
             presence: min(max(presence, 0), 1)
         )
+    }
+
+    /// Opens the top of the curve so a real kick is louder than a held note, then
+    /// applies the phone's hit slider once. The shader does not multiply it again.
+    private func drive(_ value: Float, _ sensitivity: Float) -> Float {
+        let curved = powf(min(max(value, 0), MicWire.gainCeiling), 0.85)
+        return min(curved * sensitivity, 1.75)
     }
 
     private func follow(_ current: Float, _ target: Float, dt: Float, attack: Float, release: Float) -> Float {
@@ -168,14 +198,15 @@ final class MicReceiver: @unchecked Sendable {
         }
         connection.start(queue: queue)
         receive(connection, key: key)
+        sendAck(force: true)
     }
 
     private func receive(_ connection: NWConnection, key: ObjectIdentifier) {
         connection.receiveMessage { [weak self] data, _, _, error in
             self?.queue.async {
                 guard let self, self.peers[key] != nil else { return }
-                if let data, let decoded = MicWire.decode(data) {
-                    self.store(decoded.features, sequence: decoded.sequence)
+                if let data {
+                    self.ingest(data)
                 }
                 if error != nil {
                     self.drop(key)
@@ -186,13 +217,60 @@ final class MicReceiver: @unchecked Sendable {
         }
     }
 
-    private func store(_ features: MicFeatures, sequence: UInt16) {
+    private func ingest(_ data: Data) {
+        guard let packet = MicWire.decode(data) else { return }
+        switch packet {
+        case .audio(let sequence, let features, let sens):
+            store(features, sequence: sequence, sensitivity: sens)
+            sendAck(force: false)
+        case .command(_, let preset):
+            apply(preset)
+            sendAck(force: true)
+            let choice = Int(preset)
+            let handler = onCommand
+            if let handler {
+                DispatchQueue.main.async {
+                    handler(choice)
+                }
+            }
+        case .ack:
+            break
+        }
+    }
+
+    private func apply(_ preset: Int16) {
+        lock.lock()
+        if preset < 0 {
+            shownCycling = true
+        } else if PresetLibrary.all.indices.contains(Int(preset)) {
+            shownIndex = Int(preset)
+            shownCycling = false
+        }
+        lock.unlock()
+    }
+
+    private func store(_ features: MicFeatures, sequence: UInt16, sensitivity sens: Float) {
         lock.lock()
         latest = features
         latestSequence = sequence
         havePacket = true
         lastArrival = CACurrentMediaTime()
+        sensitivity = min(max(sens, 0.5), 2)
         lock.unlock()
+    }
+
+    private func sendAck(force: Bool) {
+        let now = CACurrentMediaTime()
+        if !force && now - lastAckTime < 0.12 { return }
+        lastAckTime = now
+        lock.lock()
+        let preset = Int16(clamping: shownIndex)
+        let cycling = shownCycling
+        lock.unlock()
+        let packet = MicWire.encodeAck(preset: preset, cycling: cycling)
+        for connection in peers.values {
+            connection.send(content: packet, completion: .contentProcessed { _ in })
+        }
     }
 
     private func drop(_ key: ObjectIdentifier) {

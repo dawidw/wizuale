@@ -32,6 +32,9 @@
 		F20000000000000000000006 /* MicFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000008 /* MicFrame.swift */; };
 		F20000000000000000000007 /* MicFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000008 /* MicFrame.swift */; };
 		F20000000000000000000008 /* MicReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000009 /* MicReceiver.swift */; };
+		F20000000000000000000009 /* Presets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* Presets.swift */; };
+		F2000000000000000000000A /* FrameUniforms.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* FrameUniforms.swift */; };
+		F2000000000000000000000B /* PresetStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000000000000000000000B /* PresetStrip.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +69,7 @@
 		E20000000000000000000007 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		E20000000000000000000008 /* MicFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicFrame.swift; sourceTree = "<group>"; };
 		E20000000000000000000009 /* MicReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicReceiver.swift; sourceTree = "<group>"; };
+		E2000000000000000000000B /* PresetStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetStrip.swift; sourceTree = "<group>"; };
 		E2000000000000000000000A /* Wizuale Mic.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Wizuale Mic.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -157,6 +161,7 @@
 				E20000000000000000000001 /* MicApp.swift */,
 				E20000000000000000000002 /* MicRootView.swift */,
 				E20000000000000000000003 /* MicCapture.swift */,
+				E2000000000000000000000B /* PresetStrip.swift */,
 				E20000000000000000000006 /* Assets.xcassets */,
 				E20000000000000000000004 /* Info.plist */,
 				E20000000000000000000005 /* WizualeMic.entitlements */,
@@ -294,7 +299,10 @@
 				F20000000000000000000001 /* MicApp.swift in Sources */,
 				F20000000000000000000002 /* MicRootView.swift in Sources */,
 				F20000000000000000000003 /* MicCapture.swift in Sources */,
+				F2000000000000000000000B /* PresetStrip.swift in Sources */,
 				F20000000000000000000006 /* MicFrame.swift in Sources */,
+				F20000000000000000000009 /* Presets.swift in Sources */,
+				F2000000000000000000000A /* FrameUniforms.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

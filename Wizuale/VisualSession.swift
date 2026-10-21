@@ -69,6 +69,7 @@ final class VisualSession: ObservableObject {
     @Published private(set) var micName = ""
 
     private var micWired = false
+    private var phoneLocked = false
     private var lastSwitch = Date.distantPast
     private var cycleToken = UUID()
     private var hideToken = UUID()
@@ -91,8 +92,35 @@ final class VisualSession: ObservableObject {
                     self?.micName = name
                 }
             }
+            micReceiver.onCommand = { [weak self] choice in
+                Task { @MainActor in
+                    self?.applyPhoneChoice(choice)
+                }
+            }
+            micReceiver.setShown(index: presetIndex, cycling: true)
             micReceiver.start()
         }
+    }
+
+    /// `-1` lets the pictures rotate again. Any other index locks that picture
+    /// and cancels the phrase timer until the phone asks for auto.
+    private func applyPhoneChoice(_ choice: Int) {
+        if choice < 0 {
+            phoneLocked = false
+            micReceiver.setShown(index: presetIndex, cycling: true)
+            armCycle()
+            return
+        }
+        guard PresetLibrary.all.indices.contains(choice) else { return }
+        phoneLocked = true
+        cycleToken = UUID()
+        if presetIndex != choice {
+            presetIndex = choice
+            renderState.setTarget(choice)
+            revealOverlay()
+            dismissHint()
+        }
+        micReceiver.setShown(index: choice, cycling: false)
     }
 
     func next() {
@@ -136,12 +164,18 @@ final class VisualSession: ObservableObject {
         renderState.setTarget(index)
         revealOverlay()
         dismissHint()
-        armCycle()
+        if phoneLocked {
+            micReceiver.setShown(index: index, cycling: false)
+        } else {
+            micReceiver.setShown(index: index, cycling: true)
+            armCycle()
+        }
     }
 
     /// MilkDrop pictures change on their own. Aurora and the other quiet ones wait.
     /// With a matched tempo the change waits for the next 8-bar phrase after the hold.
     private func armCycle() {
+        guard !phoneLocked else { return }
         cycleToken = UUID()
         let token = cycleToken
         let index = presetIndex
@@ -179,11 +213,13 @@ final class VisualSession: ObservableObject {
     }
 
     private func advanceCycle(token: UUID, from index: Int) {
+        guard !phoneLocked else { return }
         guard token == cycleToken, presetIndex == index else { return }
         guard let next = PresetLibrary.nextCyclingIndex(after: index) else { return }
         presetIndex = next
         renderState.setTarget(next)
         revealOverlay()
+        micReceiver.setShown(index: next, cycling: true)
         armCycle()
     }
 

@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Big start button, who the phone is sending to, and a live level.
+/// Big start button, whether the TV app has answered, and a preset strip.
 struct MicRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var mic = MicCapture()
@@ -9,26 +9,45 @@ struct MicRootView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 22) {
-                Text("WIZUALE MIC")
-                    .font(.system(size: 15, weight: .semibold))
-                    .tracking(2.4)
-                    .foregroundStyle(.white.opacity(0.55))
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("WIZUALE MIC")
+                        .font(.system(size: 15, weight: .semibold))
+                        .tracking(2.4)
+                        .foregroundStyle(.white.opacity(0.55))
 
-                Text(headline)
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
+                    HStack(alignment: .center, spacing: 10) {
+                        if mic.running {
+                            Circle()
+                                .fill(mic.linked ? Color.green : Color.white.opacity(0.28))
+                                .frame(width: 12, height: 12)
+                        }
+                        Text(headline)
+                            .font(.system(size: 32, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                    }
 
-                Text(mic.status)
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text(mic.status)
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
 
-                meter(title: "Level", value: mic.level)
-                meter(title: "Bass", value: mic.bassLevel)
+                    meter(title: "Level", value: mic.level)
+                    meter(title: "Bass", value: mic.bassLevel)
+                    hitSlider
+                }
+                .padding(.horizontal, 28)
 
-                Spacer(minLength: 12)
+                Spacer(minLength: 8)
+
+                PresetStrip(
+                    active: mic.activePreset,
+                    cycling: mic.cycling,
+                    known: mic.pictureKnown
+                ) { choice in
+                    mic.selectPreset(choice)
+                }
 
                 Button(action: { mic.toggle() }) {
                     Text(mic.running ? "Stop" : "Start")
@@ -40,8 +59,8 @@ struct MicRootView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .padding(.horizontal, 28)
             }
-            .padding(.horizontal, 28)
             .padding(.top, 28)
             .padding(.bottom, 24)
         }
@@ -57,9 +76,29 @@ struct MicRootView: View {
     }
 
     private var headline: String {
-        if mic.linked, !mic.tvName.isEmpty { return mic.tvName }
-        if mic.running { return "Looking for Apple TV" }
-        return "Ready"
+        if !mic.running { return "Ready" }
+        if mic.linked {
+            let name = mic.tvName.isEmpty ? "Apple TV" : mic.tvName
+            return "Connected to \(name)"
+        }
+        return "Searching for Apple TV…"
+    }
+
+    private var hitSlider: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("HIT")
+                    .font(.system(size: 13, weight: .semibold))
+                    .tracking(1.6)
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Text(String(format: "%.1f×", mic.sensitivity))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            Slider(value: $mic.sensitivity, in: 0.5...2.0)
+                .tint(.white)
+        }
     }
 
     private func meter(title: String, value: Float) -> some View {

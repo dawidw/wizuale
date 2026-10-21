@@ -137,17 +137,18 @@ float2 advect(float2 p, constant FrameUniforms &u) {
   // Bass and low-mid shove the warp. Loudness speeds the whole preset up.
   float body = max(u.ear.y, u.link.z * 0.85);
   float loud = u.ear.w;
-  float drive = 1.0 + loud * mic * 0.9;
-  float hit = max(u.ear.x, u.link.y * 0.75);
-  a += (u.flow.y + body * mic * 0.8) * dt * drive;
+  float drive = 1.0 + loud * mic * 0.85;
+  // Onset carries the kick. Flux only fills in if the onset gate missed it.
+  float hit = max(u.ear.x, u.link.y * 0.45);
+  a += (u.flow.y + (body * 1.35 + hit * 0.45) * mic) * dt * drive;
   a += u.flow.z * dt * drive / (r + 0.28);
-  float warpAmt = u.warp.x + body * mic * 0.45;
+  float warpAmt = u.warp.x + (body * 0.95 + hit * 0.62) * mic;
   a += sin(r * u.warp.y - u.time * u.warp.z * drive) * warpAmt * dt * drive;
-  // `punch` is a zoom rate, multiplied by dt below. The clock hit integrates
-  // to a clearly visible zoom (the old 0.65 rate was only a few percent).
-  // The mic hit replaces it while the phone is live, so the two don't stack.
+  // `punch` is a zoom rate, multiplied by dt below. It integrates for the
+  // length of the hit and then stops, so the frame slams forward and settles.
+  // The mic hit replaces the clock while the phone is live, so the two don't stack.
   float clockZoom = clockEnvelope(u) * 2.2;
-  float micZoom = hit * 3.4 + body * 0.30;
+  float micZoom = hit * 4.0 + body * 0.36;
   float punch = mix(clockZoom, micZoom, mic);
   float expand = u.flow.x * drive * (1.0 + beat * (1.0 - mic) * 1.4) + punch;
   r = r / max(exp(expand * dt), 0.0001);
@@ -575,9 +576,9 @@ fragment float4 warpFragment(
     col *= keep;
     col = max(col - float3(0.00065) * (u.deltaTime * 60.0), float3(0.0));
     float mic = liveWeight(u);
-    float hit = max(u.ear.x, u.link.y * 0.75);
-    // A short lift of the history on a hit. It is not applied every frame, so it cannot run away.
-    col *= 1.0 + mix(clockEnvelope(u) * 0.10, hit * 0.20, mic);
+    float hit = max(u.ear.x, u.link.y * 0.45);
+    // A short lift of the history on a hit. It fades with the picture, so it cannot run away.
+    col *= 1.0 + mix(clockEnvelope(u) * 0.10, hit * 0.30, mic);
     float hue = clamp(u.persist.z * u.deltaTime + downbeat(u) * 0.03 * (1.0 - mic) + u.ear.z * mic * 0.055, 0.0, 0.10);
     col = mix(col, col.gbr, hue);
 
@@ -600,7 +601,7 @@ fragment float4 warpFragment(
         e = mix(e, emitMode(spun, modeB, u), w);
     }
     float clockBoost = pulseAmt(u) * 0.85 + downbeat(u) * 0.2;
-    float micBoost = hit * 1.15 + u.ear.w * 0.40 + u.link.w * 0.28 + high * 0.25;
+    float micBoost = hit * 1.65 + u.ear.w * 0.55 + u.link.w * 0.35 + high * 0.35;
     e *= u.style.z * (1.0 + mix(clockBoost, micBoost, mic));
     col += max(e, float3(0.0)) * u.shape.w;
     col += u.baseColor.rgb * u.style.y * u.deltaTime;
@@ -621,8 +622,9 @@ fragment float4 presentFragment(
     c *= mix(1.0, smoothstep(0.95, 0.22, v), clamp(u.grade.w, 0.0, 1.0));
     // Whole-frame lift. The stroke-only pulse was too small to read from a couch.
     float mic = liveWeight(u);
-    float hit = max(u.ear.x, u.link.y * 0.75);
-    float flash = mix(clockEnvelope(u) * 0.36, hit * 0.52 + u.ear.w * 0.16, mic);
+    float hit = max(u.ear.x, u.link.y * 0.45);
+    float body = max(u.ear.y, u.link.z * 0.85);
+    float flash = mix(clockEnvelope(u) * 0.36, hit * 0.88 + body * 0.34, mic);
     c *= u.style.x * (1.0 + flash);
     c = pow(max(c, float3(0.0)), float3(1.25));
     c = c / (1.0 + c);

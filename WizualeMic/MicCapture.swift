@@ -76,7 +76,8 @@ private struct Biquad {
     }
 }
 
-/// Fast attack, slow release, so a quiet room and a loud room both land near 0...1.
+/// Slow attack, slow release. A short kick can rise above the running peak
+/// instead of being pinned at 1, so the TV still hears the transient.
 private struct Normalizer {
     var peak: Float = 1e-4
     var floor: Float = 1e-6
@@ -84,9 +85,9 @@ private struct Normalizer {
     mutating func normalize(_ energy: Float, dt: Float) -> Float {
         let dtSafe = max(dt, 0.0001)
         if energy > peak {
-            peak += (energy - peak) * (1 - expf(-dtSafe / 0.12))
+            peak += (energy - peak) * (1 - expf(-dtSafe / 0.45))
         } else {
-            peak += (energy - peak) * (1 - expf(-dtSafe / 2.8))
+            peak += (energy - peak) * (1 - expf(-dtSafe / 5.5))
         }
         peak = max(peak, 1e-8)
         if energy < floor {
@@ -96,7 +97,7 @@ private struct Normalizer {
         }
         floor = min(floor, peak * 0.5)
         let span = max(peak - floor, peak * 0.22, 1e-8)
-        return min(max((energy - floor) / span, 0), 1)
+        return min(max((energy - floor) / span, 0), 1.8)
     }
 }
 
@@ -169,12 +170,13 @@ private struct BandAnalyzer {
         let bassFlux = max(0, bassPeak - previousBassPeak)
         previousBassPeak = bassPeak
         meanBassFlux += (bassFlux - meanBassFlux) * 0.06
-        let gate = max(meanBassFlux * 2.5, 0.0001)
-        if bassFlux > gate && shaped[0] > 0.34 && loudness > 0.15 && refractory <= 0 {
-            onset = 1
+        let gate = max(meanBassFlux * 1.7, 0.00008)
+        if bassFlux > gate && shaped[0] > 0.28 && loudness > 0.12 && refractory <= 0 {
+            let over = min(bassFlux / gate, 3)
+            onset = min(1.7, 0.85 + 0.28 * over)
             refractory = 0.09
         } else {
-            onset *= expf(-dt / 0.08)
+            onset *= expf(-dt / 0.07)
             refractory = max(0, refractory - dt)
         }
 
@@ -184,13 +186,14 @@ private struct BandAnalyzer {
             mid: shaped[2],
             high: shaped[3],
             loudness: loudness,
-            onset: min(max(onset, 0), 1),
+            onset: min(max(onset, 0), 1.7),
             flux: flux
         )
     }
 }
 
-/// Microphone, analysis, and the UDP send to whichever Apple TV is advertising.
+/// Microphone, analysis, and the UDP link to whichever Apple TV is advertising.
+/// `linked` is true only after the TV has answered, not when the socket opens.
 final class MicCapture: ObservableObject {
     @Published private(set) var running = false
     @Published private(set) var linked = false
@@ -198,6 +201,22 @@ final class MicCapture: ObservableObject {
     @Published private(set) var tvName = ""
     @Published private(set) var level: Float = 0
     @Published private(set) var bassLevel: Float = 0
+    @Published private(set) var activePreset = 0
+    @Published private(set) var cycling = true
+    @Published private(set) var pictureKnown = false
+    @Published var sensitivity: Float = 1 {
+        didSet {
+            let finite = sensitivity.isFinite ? sensitivity : 1
+            let clamped = min(max(finite, 0.5), 2)
+            if clamped != sensitivity {
+                sensitivity = clamped
+                return
+            }
+            flag.lock()
+            heldSensitivity = clamped
+            flag.unlock()
+        }
+    }
 
     private let engine = AVAudioEngine()
     private let network = DispatchQueue(label: "app.wizuale.mic.send")
@@ -205,13 +224,27 @@ final class MicCapture: ObservableObject {
     private var analyzer = BandAnalyzer()
     private var tapInstalled = false
     private var sequence: UInt16 = 0
+    private var commandSequence: UInt16 = 0
+    private var heldSensitivity: Float = 1
     private var lastUI: CFTimeInterval = 0
     private var browser: NWBrowser?
     private var connection: NWConnection?
     private var connectedName = ""
-    private var pending: Data?
+    private var pendingAudio: Data?
+    private var pendingCommands: [Data] = []
+    private var lastCommand: Data?
     private var sending = false
+    private var receiving = false
     private var wantsLink = false
+    private var epoch = 0
+    private var confirmed = false
+    private var lastAck: CFTimeInterval = 0
+    private var sendToken = 0
+    private var expecting = false
+    private var expectCycling = true
+    private var expectPreset = 0
+    private var expectUntil: CFTimeInterval = 0
+    private var expectResends = 0
     private var startGeneration = 0
     private var interruption: NSObjectProtocol?
 
@@ -256,12 +289,40 @@ final class MicCapture: ObservableObject {
         }
     }
 
+    /// `-1` restores auto cycling. Any other value locks that preset on the TV.
+    func selectPreset(_ choice: Int) {
+        if choice < 0 {
+            cycling = true
+        } else {
+            guard PresetLibrary.all.indices.contains(choice) else { return }
+            cycling = false
+            activePreset = choice
+        }
+        pictureKnown = true
+        flag.lock()
+        commandSequence &+= 1
+        if commandSequence == 0 { commandSequence = 1 }
+        let seq = commandSequence
+        flag.unlock()
+        let packet = MicWire.encodeCommand(sequence: seq, preset: Int16(clamping: choice))
+        network.async { [weak self] in
+            guard let self else { return }
+            self.expecting = true
+            self.expectCycling = choice < 0
+            self.expectPreset = choice
+            self.expectUntil = CACurrentMediaTime() + 0.45
+            self.expectResends = 0
+            self.enqueueCommand(packet)
+        }
+    }
+
     func stop() {
         startGeneration += 1
         tearDown(status: "Tap Start. Allow the microphone and local network when asked.")
     }
 
     private func beginEngine() {
+        bumpEpoch()
         let session = AVAudioSession.sharedInstance()
         var measuring = true
         do {
@@ -307,9 +368,9 @@ final class MicCapture: ObservableObject {
         running = true
         UIApplication.shared.isIdleTimerDisabled = true
         if measuring {
-            status = "Listening. Looking for an Apple TV on this Wi-Fi."
+            status = "Listening. Allow Local Network if an Apple TV never appears."
         } else {
-            status = "Listening. System gain is on, so quiet rooms may be squashed. Looking for an Apple TV."
+            status = "Listening. System gain is on, so quiet rooms may be squashed."
         }
         setWantsLink(true)
         network.async { [weak self] in
@@ -318,6 +379,7 @@ final class MicCapture: ObservableObject {
     }
 
     private func tearDown(status next: String) {
+        bumpEpoch()
         setWantsLink(false)
         if tapInstalled {
             engine.inputNode.removeTap(onBus: 0)
@@ -335,6 +397,10 @@ final class MicCapture: ObservableObject {
         bassLevel = 0
         status = next
         UIApplication.shared.isIdleTimerDisabled = false
+        network.async { [weak self] in
+            self?.confirmed = false
+            self?.lastAck = 0
+        }
     }
 
     private func interrupted(_ notification: Notification) {
@@ -352,14 +418,19 @@ final class MicCapture: ObservableObject {
         let features = analyzer.consume(samples, sampleRate: rate)
         sequence &+= 1
         if sequence == 0 { sequence = 1 }
-        let packet = MicWire.encode(sequence: sequence, features: features)
+        let packet = MicWire.encodeAudio(
+            sequence: sequence,
+            features: features,
+            sensitivity: currentSensitivity()
+        )
         let loud = features.loudness
         let bass = features.bass
         let now = CACurrentMediaTime()
         let publishUI = now - lastUI >= (1.0 / 15.0)
         if publishUI { lastUI = now }
         network.async { [weak self] in
-            self?.enqueue(packet)
+            self?.enqueueAudio(packet)
+            if publishUI { self?.refreshLink() }
         }
         if publishUI {
             DispatchQueue.main.async { [weak self] in
@@ -430,6 +501,24 @@ final class MicCapture: ObservableObject {
         return wantsLink
     }
 
+    private func currentSensitivity() -> Float {
+        flag.lock()
+        defer { flag.unlock() }
+        return heldSensitivity
+    }
+
+    private func bumpEpoch() {
+        flag.lock()
+        epoch += 1
+        flag.unlock()
+    }
+
+    private func epochNow() -> Int {
+        flag.lock()
+        defer { flag.unlock() }
+        return epoch
+    }
+
     private func startBrowser() {
         guard linkWanted() else { return }
         browser?.cancel()
@@ -454,6 +543,7 @@ final class MicCapture: ObservableObject {
         switch state {
         case .failed(let error):
             publish(status: "Local network failed. \(error.localizedDescription)", linked: false)
+            confirmed = false
             network.asyncAfter(deadline: .now() + 2) { [weak self] in
                 self?.startBrowser()
             }
@@ -477,7 +567,7 @@ final class MicCapture: ObservableObject {
         // socket there makes the picture hiccup, so only switch when a real list arrives.
         guard let first = found.first else {
             if connection == nil {
-                publish(status: "Listening. Looking for an Apple TV on this Wi-Fi.", tv: "", linked: false)
+                publish(status: "Allow Local Network if an Apple TV never appears.", tv: "", linked: false)
             }
             return
         }
@@ -498,24 +588,35 @@ final class MicCapture: ObservableObject {
             self?.connectionState(state, name: name)
         }
         created.start(queue: network)
-        publish(status: "Connecting to \(name)…", tv: name, linked: false)
+        publish(status: "Found \(name). Waiting for the Wizuale app.", tv: name, linked: false)
     }
 
     private func connectionState(_ state: NWConnection.State, name: String) {
         guard linkWanted(), connectedName == name else { return }
         switch state {
         case .ready:
-            publish(status: "Sending to \(name).", tv: name, linked: true)
+            if !confirmed {
+                publish(status: "Found \(name). Waiting for the Wizuale app.", tv: name, linked: false)
+            }
+            if !receiving {
+                receiving = true
+                receiveAck()
+            }
+            if pendingCommands.isEmpty, let lastCommand {
+                pendingCommands.append(lastCommand)
+            }
             pump()
         case .failed(let error):
+            confirmed = false
             publish(status: "Could not reach \(name). \(error.localizedDescription)", tv: name, linked: false)
             dropConnection()
         case .waiting(let error):
+            confirmed = false
             publish(status: "Waiting for \(name). \(error.localizedDescription)", tv: name, linked: false)
         case .cancelled:
             break
         case .preparing:
-            publish(status: "Connecting to \(name)…", tv: name, linked: false)
+            publish(status: "Found \(name). Waiting for the Wizuale app.", tv: name, linked: false)
         case .setup:
             break
         @unknown default:
@@ -523,19 +624,102 @@ final class MicCapture: ObservableObject {
         }
     }
 
-    private func enqueue(_ data: Data) {
+    private func receiveAck() {
+        guard let connection, receiving else { return }
+        connection.receiveMessage { [weak self] data, _, _, error in
+            self?.network.async {
+                guard let self, self.receiving else { return }
+                if let data, let packet = MicWire.decode(data), case .ack(let preset, let cycling) = packet {
+                    self.noteAck(preset: preset, cycling: cycling)
+                }
+                if error != nil {
+                    self.confirmed = false
+                    let name = self.connectedName
+                    self.publish(
+                        status: name.isEmpty ? "Searching for Apple TV…" : "Lost \(name). Looking again.",
+                        linked: false
+                    )
+                    self.dropConnection()
+                    return
+                }
+                self.receiveAck()
+            }
+        }
+    }
+
+    private func noteAck(preset: Int16, cycling ackCycling: Bool) {
         guard linkWanted() else { return }
-        pending = data
+        lastAck = CACurrentMediaTime()
+        confirmed = true
+        let name = connectedName.isEmpty ? "Apple TV" : connectedName
+        let index = Int(preset)
+        let matches = expectCycling ? ackCycling : (!ackCycling && index == expectPreset)
+        if expecting && !matches && CACurrentMediaTime() < expectUntil {
+            publish(status: "The picture is following this phone.", tv: name, linked: true)
+            return
+        }
+        if expecting && !matches && expectResends < 1 {
+            expectResends += 1
+            expectUntil = CACurrentMediaTime() + 0.45
+            if let lastCommand {
+                pendingCommands.append(lastCommand)
+                pump()
+            }
+            publish(status: "The picture is following this phone.", tv: name, linked: true)
+            return
+        }
+        expecting = false
+        let picture = PresetLibrary.all.indices.contains(index) ? PresetLibrary.all[index].name : "this picture"
+        let detail = ackCycling ? "Auto is on. Showing \(picture)." : "Locked on \(picture)."
+        publish(
+            status: detail,
+            tv: name,
+            linked: true,
+            preset: index,
+            cycling: ackCycling,
+            known: true
+        )
+    }
+
+    private func refreshLink() {
+        guard confirmed else { return }
+        if CACurrentMediaTime() - lastAck > 1.1 {
+            confirmed = false
+            publish(status: "Searching for Apple TV…", linked: false)
+        }
+    }
+
+    private func enqueueAudio(_ data: Data) {
+        guard linkWanted() else { return }
+        pendingAudio = data
+        pump()
+    }
+
+    private func enqueueCommand(_ data: Data) {
+        lastCommand = data
+        pendingCommands.append(data)
+        if pendingCommands.count > 6 {
+            pendingCommands.removeFirst(pendingCommands.count - 6)
+        }
         pump()
     }
 
     private func pump() {
-        guard !sending, let data = pending, let connection, connection.state == .ready else { return }
-        pending = nil
+        guard !sending, let connection, connection.state == .ready else { return }
+        let data: Data
+        if !pendingCommands.isEmpty {
+            data = pendingCommands.removeFirst()
+        } else if let audio = pendingAudio {
+            pendingAudio = nil
+            data = audio
+        } else {
+            return
+        }
         sending = true
+        let token = sendToken
         connection.send(content: data, completion: .contentProcessed { [weak self] _ in
             self?.network.async {
-                guard let self else { return }
+                guard let self, self.sendToken == token else { return }
                 self.sending = false
                 self.pump()
             }
@@ -549,19 +733,37 @@ final class MicCapture: ObservableObject {
     }
 
     private func dropConnection() {
+        sendToken += 1
         connection?.cancel()
         connection = nil
         connectedName = ""
-        pending = nil
+        pendingAudio = nil
+        pendingCommands.removeAll()
         sending = false
+        receiving = false
+        confirmed = false
+        lastAck = 0
     }
 
-    private func publish(status: String? = nil, tv: String? = nil, linked: Bool? = nil) {
+    private func publish(
+        status: String? = nil,
+        tv: String? = nil,
+        linked: Bool? = nil,
+        preset: Int? = nil,
+        cycling: Bool? = nil,
+        known: Bool? = nil
+    ) {
+        let epoch = epochNow()
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.running, self.epochNow() == epoch else { return }
             if let status { self.status = status }
             if let tv { self.tvName = tv }
             if let linked { self.linked = linked }
+            if let preset, PresetLibrary.all.indices.contains(preset) {
+                self.activePreset = preset
+            }
+            if let cycling { self.cycling = cycling }
+            if let known { self.pictureKnown = known }
         }
     }
 }
