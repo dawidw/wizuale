@@ -202,7 +202,7 @@ float3 emitEmber(float2 p, constant FrameUniforms &u) {
   spark *= smoothstep(0.55, 0.12, abs(r - u.shape.y));
   float3 col = mix(u.color0.rgb, u.color1.rgb, lobe);
   col = mix(col, u.color2.rgb, smoothstep(0.12, 0.42, r));
-  float body = col * (ring * 0.7 * (1.0 + k * 0.8) + glow * 0.22 * (1.0 + k * 0.55) + core);
+  float3 body = col * (ring * 0.7 * (1.0 + k * 0.8) + glow * 0.22 * (1.0 + k * 0.55) + core);
   return (body + float3(1.0, 0.92, 0.75) * spark * (0.35 + u.grade.x)) * (1.0 + d * 0.15);
 }
 
