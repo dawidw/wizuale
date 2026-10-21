@@ -407,9 +407,9 @@ float3 emitOrbGrid(float2 p, constant FrameUniforms &u) {
   float2 id = floor(g * 14.0);
   float h = hash21(id);
   float wing = smoothstep(0.18, 0.02, abs(p.x)) * smoothstep(0.72, 0.28, abs(p.y));
-  float dot = exp(-dot(cell, cell) * 180.0) * wing * step(0.35, h);
+  float dt = exp(-dot(cell, cell) * 180.0) * wing * step(0.35, h);
   float3 red = mix(u.color1.rgb, u.color2.rgb, h);
-  return capPeak(orb + red * dot * (0.42 + k * 0.3), 0.46);
+  return capPeak(orb + red * dt * (0.42 + k * 0.3), 0.46);
 }
 
 float3 emitNeonComet(float2 p, constant FrameUniforms &u) {
@@ -446,9 +446,9 @@ float3 emitStarLattice(float2 p, constant FrameUniforms &u) {
   float2 cell = fract(q * 10.0) - 0.5;
   float2 id = floor(q * 10.0);
   float persp = 1.0 / (0.35 + abs(q.y) * 1.4);
-  float dot = exp(-dot(cell, cell) * (120.0 * persp));
+  float dt = exp(-dot(cell, cell) * (120.0 * persp));
   float3 col = ramp(hash21(id) + u.time * 0.02, u);
-  float field = dot * smoothstep(1.05, 0.08, length(p));
+  float field = dt * smoothstep(1.05, 0.08, length(p));
   return capPeak(col * field * (0.48 + k * 0.4), 0.4);
 }
 
