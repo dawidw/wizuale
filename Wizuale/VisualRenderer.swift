@@ -77,6 +77,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
     private let presentPipeline: MTLRenderPipelineState
     private let state: RenderState
     private let beatClock: BeatClock
+    private let micReceiver: MicReceiver
     private let gate = DispatchSemaphore(value: 1)
 
     private var textures: [MTLTexture] = []
@@ -93,7 +94,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
     private var albumWeight: Float = 0
     private var album: AlbumColors?
 
-    init(device: MTLDevice, state: RenderState, beatClock: BeatClock) throws {
+    init(device: MTLDevice, state: RenderState, beatClock: BeatClock, micReceiver: MicReceiver) throws {
         if let problem = FrameUniforms.layoutProblem() {
             throw RendererError.layout(problem)
         }
@@ -104,6 +105,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
         self.queue = queue
         self.state = state
         self.beatClock = beatClock
+        self.micReceiver = micReceiver
 
         let snapshot = state.snapshot()
         let slot = min(max(snapshot.targetIndex, 0), max(PresetLibrary.all.count - 1, 0))
@@ -189,6 +191,9 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
         )
         uniforms.tempo.x = musical.bpm
         wander.apply(to: &uniforms, slot: slotTo, time: time)
+        let heard = micReceiver.sample(dt: dt)
+        uniforms.ear = SIMD4(heard.onset, heard.bass, heard.high, heard.loudness)
+        uniforms.link = SIMD4(heard.presence, heard.flux, heard.lowMid, heard.mid)
 
         let writeIndex = 1 - readIndex
         guard let warp = command.makeRenderCommandEncoder(descriptor: Self.pass(textures[writeIndex])) else {

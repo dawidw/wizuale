@@ -47,7 +47,9 @@ The Apple TV screensaver stays off while the app is in front.
 
 ## Tempo
 
-Wizuale sends the current title and artist to [GetSongBPM](https://getsongbpm.com) and, on a match, locks the picture to that BPM. Each beat gives a short zoom and a brighter stroke. The downbeat is a little stronger. Time signature and key are used when the database has them (the bar length follows the time signature; the phrase is 8 bars, which is 32 beats in 4/4).
+Wizuale sends the current title and artist to [GetSongBPM](https://getsongbpm.com) and, on a match, locks the picture to that BPM. Each beat zooms the whole frame and lifts its brightness. The downbeat is a little stronger. Time signature and key are used when the database has them (the bar length follows the time signature; the phrase is 8 bars, which is 32 beats in 4/4).
+
+If the corner card never shows a BPM, the lookup did not match: no key, the song is not in the database, or the TV's Music player cannot see the track (AirPlay from an iPhone often does not). The picture still pulses on the preset's own tempo. For the actual sound in the room, use Wizuale Mic.
 
 The downbeat is aligned to the start of the track. GetSongBPM does not provide a beat-grid offset, so a song with a long silent intro can sit a little early or late.
 
@@ -67,9 +69,17 @@ The tvOS target reads that through `Config/Base.xcconfig`. The build copies it i
 
 Lookups are cached on device (a match for 30 days, a miss for 3 days). A network failure is not cached; the same song is tried again after a few seconds. While a match is in use, the corner card shows the BPM and the credit line "Tempo data by GetSongBPM" stays on screen.
 
+## Microphone
+
+Wizuale Mic is a second app in this project, for an iPhone on the same Wi-Fi. It listens to the room and sends bass, mids, highs, loudness, and kicks to the Apple TV about 60 times a second. The picture then follows the sound: a kick zooms and brightens, bass bends and spins, highs sparkle and shift the hue, loudness speeds the preset up. Leave the phone app and the picture fades back to the beat clock. A small "Mic" mark sits in the corner of the TV while packets are arriving.
+
+In Xcode, choose the **Wizuale Mic** scheme and your iPhone. The Apple TV app has to be open. Tap Start, and allow the microphone and Local Network. If the TV asks, allow Local Network there too (Settings → General → Privacy & Security → Local Network). The level meters move even before an Apple TV is found, so you can see that the phone hears the room.
+
+The bundle id is `app.wizuale.Wizuale.mic`. Signing is automatic, team `59Z33S5F96`. Install it from Xcode or TestFlight. Audio is analyzed on the phone and is not uploaded.
+
 ## Open the project
 
-You need a Mac with Xcode 15 or newer. Open `Wizuale.xcodeproj`. The target is tvOS 17.
+You need a Mac with Xcode 15 or newer. Open `Wizuale.xcodeproj`. Wizuale is the tvOS 17 target. Wizuale Mic is the iOS 17 target.
 
 `project.yml` is only there if you prefer [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen && xcodegen generate`). The checked-in Xcode project is the one to open.
 
@@ -84,7 +94,7 @@ MusicKit needs a paid Apple Developer Program membership. A free personal team c
 3. In Xcode, select the Wizuale target → Signing & Capabilities → Team. Leave **Automatically manage signing** on.
 4. The MusicKit entitlement is already in `Wizuale/Wizuale.entitlements`. If signing fails on that key, the App ID does not have the MusicKit service yet.
 
-The usage string shown in the permission prompt is: "Wizuale reads the album you're playing so the picture can borrow its colors. It never listens to the audio."
+The usage string shown in the permission prompt is: "Wizuale reads the album you're playing so the picture can borrow its colors and look up the song's tempo. It never listens to the audio."
 
 ## Run it on an Apple TV
 
@@ -120,6 +130,6 @@ The shader comment at the top of `Shaders.metal` names the uniform fields. `beat
 
 ## What was not run here
 
-This project was prepared on a machine without Xcode, so it has not been compiled, signed, or launched on an Apple TV. The pictures, including the newer MilkDrop set, were not compiled here. The older pictures were tuned by running the same warp math in a WebGL preview, not by running the Metal binary. MusicKit, the Siri Remote, album-color extraction, the idle-timer lock, and the GetSongBPM lookup are written to the current tvOS 17 APIs and have not been exercised on hardware. `SystemMusicPlayer.playbackTime` is the documented playhead (it can be NaN when MusicKit has no finite time). The beat clock assumes normal speed between those samples.
+This project was prepared on a machine without Xcode, so it has not been compiled, signed, or launched on an Apple TV or an iPhone. The pictures, including the newer MilkDrop set, were not compiled here. The older pictures were tuned by running the same warp math in a WebGL preview, not by running the Metal binary. MusicKit, the Siri Remote, album-color extraction, the idle-timer lock, the GetSongBPM lookup, and the Wizuale Mic link are written to the current tvOS 17 and iOS 17 APIs and have not been exercised on hardware. `SystemMusicPlayer.playbackTime` is the documented playhead (it can be NaN when MusicKit has no finite time). The beat clock assumes normal speed between those samples. The mic path uses `AVAudioEngine` in measurement mode, `NWListener` / `NWBrowser` on `_wizuale._udp`, and a 36-byte packet defined in `Shared/MicFrame.swift`.
 
 On a Mac, open the project and run it on your Apple TV. If the shader fails to compile, Xcode's issue navigator will point at `Shaders.metal`. If the uniform struct ever disagrees with Swift, the screen shows that message instead of a scrambled picture.

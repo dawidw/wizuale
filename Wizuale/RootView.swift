@@ -27,6 +27,7 @@ struct RootView: View {
                 MetalCanvasView(
                     state: visuals.renderState,
                     beatClock: visuals.beatClock,
+                    micReceiver: visuals.micReceiver,
                     paused: scenePhase != .active,
                     failure: $failure
                 )
@@ -48,6 +49,10 @@ struct RootView: View {
 
             if music.showsTempoCredit && !visuals.overlayVisible {
                 tempoCredit
+            }
+
+            if visuals.micLive {
+                micMark
             }
 
             if visuals.showHint {
@@ -94,6 +99,29 @@ struct RootView: View {
         .task {
             await music.start()
         }
+    }
+
+    private var micMark: some View {
+        VStack {
+            HStack {
+                Spacer()
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(Color(red: 0.45, green: 0.95, blue: 0.62))
+                        .frame(width: 12, height: 12)
+                    Text(visuals.micName.isEmpty ? "Mic" : visuals.micName)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.72))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(.black.opacity(0.35)))
+                .padding(.trailing, 48)
+                .padding(.top, 36)
+            }
+            Spacer()
+        }
+        .allowsHitTesting(false)
     }
 
     /// Stays up after the title card fades. GetSongBPM requires a visible credit while their data is used.

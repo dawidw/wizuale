@@ -1,9 +1,10 @@
 import simd
 
 /// Packed exactly like `FrameUniforms` in Shaders.metal. 16 bytes of header,
-/// then sixteen float4s. `beat` and `music` carry the phase-aligned clock.
-/// `layoutProblem()` is checked before the first frame so a padding mismatch
-/// shows up as an on-screen message instead of a scrambled picture.
+/// then eighteen float4s. `beat` and `music` carry the phase-aligned clock.
+/// `ear` and `link` carry the iPhone mic. `layoutProblem()` is checked before
+/// the first frame so a padding mismatch shows up as an on-screen message
+/// instead of a scrambled picture.
 struct FrameUniforms {
     var resolution: SIMD2<Float>
     var time: Float
@@ -24,8 +25,12 @@ struct FrameUniforms {
     var color1: SIMD4<Float>
     var color2: SIMD4<Float>
     var baseColor: SIMD4<Float>
+    /// onset, bass, high, loudness. From the iPhone mic, faded to 0 when it disconnects.
+    var ear: SIMD4<Float>
+    /// presence (1 = mic live), spectral flux, low-mid, mid.
+    var link: SIMD4<Float>
 
-    static let byteCount = 272
+    static let byteCount = 304
 
     static func layoutProblem() -> String? {
         let size = MemoryLayout<FrameUniforms>.size
@@ -35,9 +40,12 @@ struct FrameUniforms {
         let music = MemoryLayout<FrameUniforms>.offset(of: \.music) ?? -1
         let color0 = MemoryLayout<FrameUniforms>.offset(of: \.color0) ?? -1
         let base = MemoryLayout<FrameUniforms>.offset(of: \.baseColor) ?? -1
+        let ear = MemoryLayout<FrameUniforms>.offset(of: \.ear) ?? -1
+        let link = MemoryLayout<FrameUniforms>.offset(of: \.link) ?? -1
         guard size == byteCount, stride == byteCount,
-              flow == 16, beat == 176, music == 192, color0 == 208, base == 256 else {
-            return "Shader uniforms are misaligned (size \(size), stride \(stride), flow \(flow), beat \(beat), music \(music), color0 \(color0), base \(base)). Expected 272 bytes."
+              flow == 16, beat == 176, music == 192, color0 == 208, base == 256,
+              ear == 272, link == 288 else {
+            return "Shader uniforms are misaligned (size \(size), stride \(stride), flow \(flow), beat \(beat), music \(music), color0 \(color0), base \(base), ear \(ear), link \(link)). Expected 304 bytes."
         }
         return nil
     }

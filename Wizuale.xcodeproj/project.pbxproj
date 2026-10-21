@@ -24,6 +24,14 @@
 		C10000000000000000000011 /* BeatClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* BeatClock.swift */; };
 		C10000000000000000000012 /* TempoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* TempoService.swift */; };
 		C10000000000000000000013 /* TempoText.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* TempoText.swift */; };
+		F20000000000000000000001 /* MicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* MicApp.swift */; };
+		F20000000000000000000002 /* MicRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000002 /* MicRootView.swift */; };
+		F20000000000000000000003 /* MicCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000003 /* MicCapture.swift */; };
+		F20000000000000000000004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000006 /* Assets.xcassets */; };
+		F20000000000000000000005 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000007 /* PrivacyInfo.xcprivacy */; };
+		F20000000000000000000006 /* MicFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000008 /* MicFrame.swift */; };
+		F20000000000000000000007 /* MicFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000008 /* MicFrame.swift */; };
+		F20000000000000000000008 /* MicReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000009 /* MicReceiver.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,10 +57,27 @@
 		B10000000000000000000013 /* TempoText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempoText.swift; sourceTree = "<group>"; };
 		B10000000000000000000014 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		B10000000000000000000015 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
+		E20000000000000000000001 /* MicApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicApp.swift; sourceTree = "<group>"; };
+		E20000000000000000000002 /* MicRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicRootView.swift; sourceTree = "<group>"; };
+		E20000000000000000000003 /* MicCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicCapture.swift; sourceTree = "<group>"; };
+		E20000000000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E20000000000000000000005 /* WizualeMic.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WizualeMic.entitlements; sourceTree = "<group>"; };
+		E20000000000000000000006 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E20000000000000000000007 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		E20000000000000000000008 /* MicFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicFrame.swift; sourceTree = "<group>"; };
+		E20000000000000000000009 /* MicReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicReceiver.swift; sourceTree = "<group>"; };
+		E2000000000000000000000A /* Wizuale Mic.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Wizuale Mic.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A10000000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20000000000000000000004 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -67,6 +92,8 @@
 			children = (
 				A10000000000000000000010 /* Config */,
 				A1000000000000000000000E /* Wizuale */,
+				D20000000000000000000021 /* Shared */,
+				D20000000000000000000020 /* WizualeMic */,
 				A1000000000000000000000F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -98,6 +125,7 @@
 				B10000000000000000000012 /* TempoService.swift */,
 				B10000000000000000000013 /* TempoText.swift */,
 				B1000000000000000000000C /* Shaders.metal */,
+				E20000000000000000000009 /* MicReceiver.swift */,
 				B1000000000000000000000D /* Assets.xcassets */,
 				B1000000000000000000000F /* Info.plist */,
 				B10000000000000000000010 /* Wizuale.entitlements */,
@@ -110,8 +138,31 @@
 			isa = PBXGroup;
 			children = (
 				A1000000000000000000000C /* Wizuale.app */,
+				E2000000000000000000000A /* Wizuale Mic.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D20000000000000000000021 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				E20000000000000000000008 /* MicFrame.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		D20000000000000000000020 /* WizualeMic */ = {
+			isa = PBXGroup;
+			children = (
+				E20000000000000000000001 /* MicApp.swift */,
+				E20000000000000000000002 /* MicRootView.swift */,
+				E20000000000000000000003 /* MicCapture.swift */,
+				E20000000000000000000006 /* Assets.xcassets */,
+				E20000000000000000000004 /* Info.plist */,
+				E20000000000000000000005 /* WizualeMic.entitlements */,
+				E20000000000000000000007 /* PrivacyInfo.xcprivacy */,
+			);
+			path = WizualeMic;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -134,6 +185,23 @@
 			productReference = A1000000000000000000000C /* Wizuale.app */;
 			productType = "com.apple.product-type.application";
 		};
+		D20000000000000000000001 /* WizualeMic */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D20000000000000000000007 /* Build configuration list for PBXNativeTarget "WizualeMic" */;
+			buildPhases = (
+				D20000000000000000000003 /* Sources */,
+				D20000000000000000000004 /* Frameworks */,
+				D20000000000000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WizualeMic;
+			productName = "Wizuale Mic";
+			productReference = E2000000000000000000000A /* Wizuale Mic.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -145,6 +213,10 @@
 				ORGANIZATIONNAME = Wizuale;
 				TargetAttributes = {
 					A10000000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+						ProvisioningStyle = Automatic;
+					};
+					D20000000000000000000001 = {
 						CreatedOnToolsVersion = 15.0;
 						ProvisioningStyle = Automatic;
 					};
@@ -164,6 +236,7 @@
 			projectRoot = "";
 			targets = (
 				A10000000000000000000001 /* Wizuale */,
+				D20000000000000000000001 /* WizualeMic */,
 			);
 		};
 /* End PBXProject section */
@@ -175,6 +248,15 @@
 			files = (
 				C1000000000000000000000D /* Assets.xcassets in Resources */,
 				C1000000000000000000000E /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20000000000000000000005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F20000000000000000000004 /* Assets.xcassets in Resources */,
+				F20000000000000000000005 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -200,6 +282,19 @@
 				C10000000000000000000012 /* TempoService.swift in Sources */,
 				C10000000000000000000013 /* TempoText.swift in Sources */,
 				C1000000000000000000000C /* Shaders.metal in Sources */,
+				F20000000000000000000008 /* MicReceiver.swift in Sources */,
+				F20000000000000000000007 /* MicFrame.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F20000000000000000000001 /* MicApp.swift in Sources */,
+				F20000000000000000000002 /* MicRootView.swift in Sources */,
+				F20000000000000000000003 /* MicCapture.swift in Sources */,
+				F20000000000000000000006 /* MicFrame.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -384,6 +479,68 @@
 			};
 			name = Release;
 		};
+		D2000000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = WizualeMic/WizualeMic.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 59Z33S5F96;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WizualeMic/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Wizuale Mic";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.wizuale.Wizuale.mic;
+				PRODUCT_NAME = "Wizuale Mic";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		D2000000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = WizualeMic/WizualeMic.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 59Z33S5F96;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WizualeMic/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Wizuale Mic";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.wizuale.Wizuale.mic;
+				PRODUCT_NAME = "Wizuale Mic";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -401,6 +558,15 @@
 			buildConfigurations = (
 				A1000000000000000000000A /* Debug */,
 				A1000000000000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D20000000000000000000007 /* Build configuration list for PBXNativeTarget "WizualeMic" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D2000000000000000000000A /* Debug */,
+				D2000000000000000000000B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -54,16 +54,21 @@ final class RenderState: @unchecked Sendable {
 final class VisualSession: ObservableObject {
     let renderState = RenderState()
     let beatClock: BeatClock
+    let micReceiver: MicReceiver
 
     init(beatClock: BeatClock) {
         self.beatClock = beatClock
+        micReceiver = MicReceiver()
     }
 
     @Published private(set) var presetIndex = 0
     @Published private(set) var overlayVisible = false
     @Published private(set) var overlayPinned = false
     @Published private(set) var showHint = true
+    @Published private(set) var micLive = false
+    @Published private(set) var micName = ""
 
+    private var micWired = false
     private var lastSwitch = Date.distantPast
     private var cycleToken = UUID()
     private var hideToken = UUID()
@@ -78,6 +83,16 @@ final class VisualSession: ObservableObject {
         revealOverlay()
         armCycle()
         scheduleHintHide()
+        if !micWired {
+            micWired = true
+            micReceiver.onStatus = { [weak self] live, name in
+                Task { @MainActor in
+                    self?.micLive = live
+                    self?.micName = name
+                }
+            }
+            micReceiver.start()
+        }
     }
 
     func next() {

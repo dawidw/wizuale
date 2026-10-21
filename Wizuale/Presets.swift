@@ -125,7 +125,9 @@ struct PresetParams: Equatable {
         album: AlbumColors?,
         albumWeight: Float,
         beat: SIMD4<Float> = SIMD4<Float>(0, 0, 0, 0),
-        music: SIMD4<Float> = SIMD4<Float>(0, 0, 0, 0)
+        music: SIMD4<Float> = SIMD4<Float>(0, 0, 0, 0),
+        ear: SIMD4<Float> = SIMD4<Float>(0, 0, 0, 0),
+        link: SIMD4<Float> = SIMD4<Float>(0, 0, 0, 0)
     ) -> FrameUniforms {
         let influence = albumInfluence * albumWeight
         let mixed0 = mix(color0, album?.first ?? color0, influence)
@@ -151,7 +153,9 @@ struct PresetParams: Equatable {
             color0: v4(mixed0),
             color1: v4(mixed1),
             color2: v4(mixed2),
-            baseColor: v4(base)
+            baseColor: v4(base),
+            ear: ear,
+            link: link
         )
     }
 }
