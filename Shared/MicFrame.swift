@@ -41,12 +41,14 @@ struct MicBandEnergy: Equatable, Sendable {
 enum MicPacket: Equatable, Sendable {
     case audio(sequence: UInt16, features: MicFeatures, sensitivity: Float)
     case command(sequence: UInt16, preset: Int16)
-    case settings(sequence: UInt16, latencyMs: Int16, sensitivity: Float, albumArt: Bool?, zoom: Float?)
+    case settings(sequence: UInt16, latencyMs: Int16, sensitivity: Float)
+    case pcm(sequence: UInt16, sampleRate: Float, samples: [Int16])
+    case cycle(sequence: UInt16, autoAdvance: Bool, intervalSeconds: Int)
     case boost(sequence: UInt16, amount: Float)
     case ack(preset: Int16, cycling: Bool, latencyMs: Int?, sensitivity: Float?)
 }
 
-/// Picture choice on the wire. Both apps use `PresetLibrary.all` in this order.
+/// Picture choice on the wire. Both apps use `MilkPresetCatalog.presets` in this order.
 /// `auto` is not an entry in that array: the TV keeps cycling and the ack names
 /// whichever picture is actually on screen.
 enum PresetWire {
@@ -57,10 +59,9 @@ enum PresetWire {
 ///
 /// Audio, 40 bytes: magic u32, kind u16 = 1, sequence u16, seven f32 gains, sensitivity f32.
 /// Command, 10 bytes: magic, kind = 2, sequence u16, preset i16.
-/// Settings, 16 bytes: magic, kind = 4, sequence u16, latency i16, album u16, sensitivity f32.
-/// A 20-byte settings packet appends zoom f32 (about 0.5...2). Older TVs still read the
-/// first 16 bytes. A 16-byte packet leaves zoom unset, and the TV uses 1.
-/// Album is 0 when an older packet did not say, 1 for on, 2 for off.
+/// Settings, 16 bytes: magic, kind = 4, sequence u16, latency i16, reserved u16, sensitivity f32.
+/// PCM, 16 + 2*N bytes: kind = 6, sampleRate f32, sampleCount u16, reserved u16, int16 mono samples (max 512).
+/// Cycle, 12 bytes: kind = 7, auto u16 (0/1), intervalSeconds u16 (15…600).
 /// Boost, 12 bytes: magic, kind = 5, sequence u16, amount f32 (0...1).
 /// Ack, 16 bytes: magic, kind = 3, preset i16, cycling u16, latency i16, sensitivity f32.
 /// A 10-byte ack from the previous build still decodes; latency and sensitivity are absent.
@@ -74,14 +75,18 @@ enum MicWire {
     static let kindAck: UInt16 = 3
     static let kindSettings: UInt16 = 4
     static let kindBoost: UInt16 = 5
+    static let kindPcm: UInt16 = 6
+    static let kindCycle: UInt16 = 7
     static let gainCeiling: Float = 2.5
     static let audioBytes = 40
     static let commandBytes = 10
     static let ackBytes = 10
     static let ackTunedBytes = 16
     static let settingsBytes = 16
-    static let settingsZoomBytes = 20
+    static let cycleBytes = 12
     static let boostBytes = 12
+    static let pcmHeaderBytes = 16
+    static let pcmMaxSamples = 512
 
     /// Kind field at byte offset 4, without full decode.
     static func peekKind(_ data: Data) -> UInt16? {
@@ -115,15 +120,39 @@ enum MicWire {
         return data
     }
 
-    static func encodeSettings(sequence: UInt16, latencyMs: Int, sensitivity: Float, albumArt: Bool, zoom: Float) -> Data {
-        var data = Data(capacity: settingsZoomBytes)
+    static func encodeSettings(sequence: UInt16, latencyMs: Int, sensitivity: Float) -> Data {
+        var data = Data(capacity: settingsBytes)
         write(magic, &data)
         write(kindSettings, &data)
         write(sequence, &data)
         write(Int16(clamping: MicTuning.clampLatency(latencyMs)), &data)
-        write(albumArt ? UInt16(1) : UInt16(2), &data)
+        write(UInt16(0), &data)
         write(slider(sensitivity), &data)
-        write(MicTuning.clampZoom(zoom), &data)
+        return data
+    }
+
+    static func encodePCM(sequence: UInt16, sampleRate: Float, samples: [Int16]) -> Data {
+        let count = min(samples.count, pcmMaxSamples)
+        var data = Data(capacity: pcmHeaderBytes + count * 2)
+        write(magic, &data)
+        write(kindPcm, &data)
+        write(sequence, &data)
+        write(sampleRate, &data)
+        write(UInt16(count), &data)
+        write(UInt16(0), &data)
+        for i in 0..<count {
+            write(samples[i], &data)
+        }
+        return data
+    }
+
+    static func encodeCycle(sequence: UInt16, autoAdvance: Bool, intervalSeconds: Int) -> Data {
+        var data = Data(capacity: cycleBytes)
+        write(magic, &data)
+        write(kindCycle, &data)
+        write(sequence, &data)
+        write(autoAdvance ? UInt16(1) : UInt16(0), &data)
+        write(UInt16(clamping: MicTuning.clampCycleSeconds(intervalSeconds)), &data)
         return data
     }
 
@@ -185,15 +214,36 @@ enum MicWire {
         if kind == kindSettings {
             guard data.count >= settingsBytes else { return nil }
             guard let sensitivity = readSlider(data, 12) else { return nil }
-            let albumRaw = readUInt16(data, 10)
-            let albumArt: Bool? = albumRaw == 1 ? true : (albumRaw == 2 ? false : nil)
-            let zoom: Float? = data.count >= settingsZoomBytes ? readZoom(data, 16) : nil
             return .settings(
                 sequence: readUInt16(data, 6),
                 latencyMs: readInt16(data, 8),
-                sensitivity: sensitivity,
-                albumArt: albumArt,
-                zoom: zoom
+                sensitivity: sensitivity
+            )
+        }
+        if kind == kindPcm {
+            guard data.count >= pcmHeaderBytes else { return nil }
+            let sequence = readUInt16(data, 6)
+            let rate = Float(bitPattern: readUInt32(data, 8))
+            let count = Int(readUInt16(data, 12))
+            guard count > 0, count <= pcmMaxSamples else { return nil }
+            guard data.count >= pcmHeaderBytes + count * 2 else { return nil }
+            var samples = [Int16]()
+            samples.reserveCapacity(count)
+            var offset = pcmHeaderBytes
+            for _ in 0..<count {
+                samples.append(readInt16(data, offset))
+                offset += 2
+            }
+            return .pcm(sequence: sequence, sampleRate: rate.isFinite ? rate : 48_000, samples: samples)
+        }
+        if kind == kindCycle {
+            guard data.count >= cycleBytes else { return nil }
+            let auto = readUInt16(data, 8) != 0
+            let seconds = Int(readUInt16(data, 10))
+            return .cycle(
+                sequence: readUInt16(data, 6),
+                autoAdvance: auto,
+                intervalSeconds: MicTuning.clampCycleSeconds(seconds)
             )
         }
         if kind == kindBoost {

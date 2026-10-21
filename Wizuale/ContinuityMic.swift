@@ -8,6 +8,7 @@ import QuartzCore
 /// and it mixes with whatever is already playing.
 final class ContinuityMic: NSObject {
     var onFeatures: ((MicFeatures) -> Void)?
+    var onPCM: (([Int16], Float) -> Void)?
     var onStatus: ((String) -> Void)?
 
     private let engine = AVAudioEngine()
@@ -159,12 +160,16 @@ final class ContinuityMic: NSObject {
     private func handle(_ buffer: AVAudioPCMBuffer) {
         let rate = buffer.format.sampleRate
         guard rate > 1, buffer.frameLength > 0 else { return }
-        let samples = MicPCM.monoFloats(from: buffer)
-        guard !samples.isEmpty else { return }
+        let floats = MicPCM.monoFloats(from: buffer)
+        guard !floats.isEmpty else { return }
         lock.lock()
-        let features = analyzer.consume(samples, sampleRate: rate)
+        let features = analyzer.consume(floats, sampleRate: rate)
         lock.unlock()
         onFeatures?(features)
+        let packed = MicPCM.monoInt16(from: buffer)
+        if !packed.samples.isEmpty {
+            onPCM?(packed.samples, packed.sampleRate)
+        }
     }
 
     private func tearDownEngine() {

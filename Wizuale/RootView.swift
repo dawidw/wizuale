@@ -25,10 +25,9 @@ struct RootView: View {
                     .multilineTextAlignment(.center)
                     .padding(80)
             } else {
-                MetalCanvasView(
-                    state: visuals.renderState,
-                    beatClock: visuals.beatClock,
-                    micReceiver: visuals.micReceiver,
+                ProjectMCanvasView(
+                    renderState: visuals.projectMState,
+                    audioHub: visuals.audioHub,
                     paused: scenePhase != .active,
                     failure: $failure
                 )
@@ -36,7 +35,7 @@ struct RootView: View {
             }
 
             NowPlayingOverlay(
-                presetName: visuals.currentPreset.name,
+                presetName: visuals.currentPresetName,
                 title: music.title,
                 artist: music.artist,
                 artwork: music.artwork,
@@ -76,7 +75,6 @@ struct RootView: View {
                     source: visuals.micSource,
                     sensitivity: visuals.sensitivity,
                     latencyMs: visuals.latencyMs,
-                    zoom: visuals.zoom,
                     continuityStatus: visuals.continuityStatus,
                     onSource: { visuals.setMicSource($0) },
                     onSensitivity: { visuals.setSensitivity($0) },
@@ -114,9 +112,6 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             applyIdleTimer(phase)
-        }
-        .onChange(of: music.albumColors) { _, colors in
-            visuals.renderState.setAlbum(colors)
         }
         .onChange(of: music.trackID) { _, _ in
             visuals.revealOverlay()
@@ -193,7 +188,7 @@ struct RootView: View {
     private func applyIdleTimer(_ phase: ScenePhase) {
         let active = phase == .active
         UIApplication.shared.isIdleTimerDisabled = active
-        visuals.renderState.setPaused(!active)
+        visuals.projectMState.setPaused(!active)
     }
 }
 

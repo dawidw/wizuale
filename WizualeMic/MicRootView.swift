@@ -39,8 +39,7 @@ struct MicRootView: View {
                         meter(title: "Bass", value: mic.bassLevel)
                         sensitivitySlider
                         latencySlider
-                        zoomSlider
-                        albumArtToggle
+                        autoCycleControls
                         calibrateControl
                     }
                     .padding(.horizontal, 28)
@@ -141,35 +140,40 @@ struct MicRootView: View {
         }
     }
 
-    private var zoomSlider: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("ZOOM")
+    private var autoCycleControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: $mic.autoCycle) {
+                Text("AUTO-ADVANCE PRESETS")
                     .font(.system(size: 13, weight: .semibold))
                     .tracking(1.6)
                     .foregroundStyle(.white.opacity(0.5))
-                Spacer()
-                Text(zoomText(mic.zoom))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.7))
             }
-            Slider(
-                value: $mic.zoom,
-                in: MicTuning.zoomMin...MicTuning.zoomMax,
-                step: 0.05
-            )
             .tint(.white)
-        }
-    }
 
-    private var albumArtToggle: some View {
-        Toggle(isOn: $mic.albumArt) {
-            Text("ALBUM ART COLORS")
-                .font(.system(size: 13, weight: .semibold))
-                .tracking(1.6)
-                .foregroundStyle(.white.opacity(0.5))
+            if mic.autoCycle {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("INTERVAL")
+                            .font(.system(size: 13, weight: .semibold))
+                            .tracking(1.6)
+                            .foregroundStyle(.white.opacity(0.5))
+                        Spacer()
+                        Text("\(mic.cycleSeconds)s")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(mic.cycleSeconds) },
+                            set: { mic.cycleSeconds = Int($0.rounded()) }
+                        ),
+                        in: Double(MicTuning.cycleSecondsMin)...Double(MicTuning.cycleSecondsMax),
+                        step: 5
+                    )
+                    .tint(.white)
+                }
+            }
         }
-        .tint(.white)
     }
 
     private var calibrateControl: some View {
@@ -232,17 +236,6 @@ struct MicRootView: View {
     private func gainText(_ value: Float) -> String {
         if abs(value - value.rounded()) < 0.02 {
             return String(format: "%.0f×", value)
-        }
-        return String(format: "%.2f×", value)
-    }
-
-    private func zoomText(_ value: Float) -> String {
-        if abs(value - value.rounded()) < 0.02 {
-            return String(format: "%.0f×", value)
-        }
-        let tenths = value * 10
-        if abs(tenths - tenths.rounded()) < 0.05 {
-            return String(format: "%.1f×", value)
         }
         return String(format: "%.2f×", value)
     }

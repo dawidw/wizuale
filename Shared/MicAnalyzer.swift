@@ -271,4 +271,18 @@ enum MicPCM {
         guard got > 0 else { return [] }
         return Array(UnsafeBufferPointer(start: channels[0], count: got))
     }
+
+    /// Mono int16 for the Wi-Fi PCM side channel (~512 samples per datagram).
+    static func monoInt16(from buffer: AVAudioPCMBuffer, maxFrames: Int = 512) -> (samples: [Int16], sampleRate: Float) {
+        let floats = monoFloats(from: buffer)
+        let rate = Float(buffer.format.sampleRate)
+        guard !floats.isEmpty else { return ([], rate) }
+        let count = min(floats.count, maxFrames)
+        var out = [Int16](repeating: 0, count: count)
+        for i in 0..<count {
+            let clamped = min(max(floats[i], -1), 1)
+            out[i] = Int16(clamped * 32767)
+        }
+        return (out, rate)
+    }
 }

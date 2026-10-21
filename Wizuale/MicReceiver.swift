@@ -38,10 +38,10 @@ final class MicReceiver: @unchecked Sendable {
     var onCommand: (@Sendable (Int) -> Void)?
     /// Latency in milliseconds and sensitivity. Called on the main queue when a settings packet arrives.
     var onTuning: (@Sendable (Int, Float) -> Void)?
-    /// Whether album art may tint the picture. Called on the main queue when a settings packet says so.
-    var onAlbumArt: (@Sendable (Bool) -> Void)?
-    /// Uniform zoom, about 0.5...2. Called on the main queue when a settings packet says so.
-    var onZoom: (@Sendable (Float) -> Void)?
+    /// Mono PCM for libprojectM. Called on the mic listener queue.
+    var onPCM: (@Sendable (Float, [Int16]) -> Void)?
+    /// Auto-advance toggle and interval from the phone.
+    var onCycle: (@Sendable (Bool, Int) -> Void)?
 
     private struct Stamp {
         var features: MicFeatures
@@ -59,8 +59,6 @@ final class MicReceiver: @unchecked Sendable {
     private var lastArrival: CFTimeInterval = 0
     private var sensitivity: Float
     private var latencyMs: Int
-    private var albumArt: Bool
-    private var zoom: Float
     private var source: MicInputSource
     private var localSequence: UInt16 = 0
     private var dropTarget: Float = 0
@@ -94,8 +92,6 @@ final class MicReceiver: @unchecked Sendable {
     init() {
         sensitivity = MicTuning.loadSensitivity()
         latencyMs = MicTuning.loadLatency()
-        albumArt = MicTuning.loadAlbumArt()
-        zoom = MicTuning.loadZoom()
         source = MicTuning.loadSource()
     }
 
@@ -370,9 +366,19 @@ final class MicReceiver: @unchecked Sendable {
                     handler(choice)
                 }
             }
-        case .settings(_, let latency, let sens, let art, let zoom):
-            adoptSettings(latencyMs: Int(latency), sensitivity: sens, albumArt: art, zoom: zoom)
+        case .settings(_, let latency, let sens):
+            adoptSettings(latencyMs: Int(latency), sensitivity: sens)
             sendAck(force: true)
+        case .pcm(_, let rate, let samples):
+            let handler = onPCM
+            handler?(rate, samples)
+        case .cycle(_, let auto, let seconds):
+            let handler = onCycle
+            if let handler {
+                DispatchQueue.main.async {
+                    handler(auto, seconds)
+                }
+            }
         case .boost(_, let amount):
             lock.lock()
             dropTarget = amount
@@ -398,38 +404,18 @@ final class MicReceiver: @unchecked Sendable {
         }
     }
 
-    private func adoptSettings(latencyMs ms: Int, sensitivity sens: Float, albumArt art: Bool?, zoom scale: Float?) {
+    private func adoptSettings(latencyMs ms: Int, sensitivity sens: Float) {
         let clampedMs = MicTuning.clampLatency(ms)
         let clamped = MicTuning.clampSensitivity(sens)
-        let clampedZoom = MicTuning.clampZoom(scale ?? MicTuning.zoomDefault)
         lock.lock()
         latencyMs = clampedMs
         sensitivity = clamped
-        let zoomChanged = abs(clampedZoom - zoom) > 0.001
-        zoom = clampedZoom
-        var artChanged = false
-        if let art, art != albumArt {
-            albumArt = art
-            artChanged = true
-        }
         lock.unlock()
         MicTuning.saveLatency(clampedMs)
         MicTuning.saveSensitivity(clamped)
-        MicTuning.saveZoom(clampedZoom)
-        if artChanged, let art {
-            MicTuning.saveAlbumArt(art)
-        }
         let handler = onTuning
-        let artHandler = onAlbumArt
-        let zoomHandler = onZoom
         DispatchQueue.main.async {
             handler?(clampedMs, clamped)
-            if artChanged, let art {
-                artHandler?(art)
-            }
-            if zoomChanged {
-                zoomHandler?(clampedZoom)
-            }
         }
     }
 
@@ -449,7 +435,7 @@ final class MicReceiver: @unchecked Sendable {
         lock.lock()
         if preset < 0 {
             shownCycling = true
-        } else if PresetLibrary.all.indices.contains(Int(preset)) {
+        } else if MilkPresetCatalog.presets.indices.contains(Int(preset)) {
             shownIndex = Int(preset)
             shownCycling = false
         }

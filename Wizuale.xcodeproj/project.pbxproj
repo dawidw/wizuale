@@ -42,6 +42,15 @@
 		F2000000000000000000000F /* MicTuning.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000000000000000000000D /* MicTuning.swift */; };
 		F20000000000000000000010 /* ContinuityMic.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000000000000000000000E /* ContinuityMic.swift */; };
 		F20000000000000000000011 /* MicSettingsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000000000000000000000F /* MicSettingsPanel.swift */; };
+		C100000000000000000001A /* MilkPresetCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001A /* MilkPresetCatalog.swift */; };
+		F20000000000000000000012 /* MilkPresetCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001A /* MilkPresetCatalog.swift */; };
+		C100000000000000000001B /* ProjectMController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001B /* ProjectMController.swift */; };
+		C100000000000000000001C /* ProjectMAudioHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001C /* ProjectMAudioHub.swift */; };
+		C100000000000000000001D /* ProjectMRenderState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001D /* ProjectMRenderState.swift */; };
+		C100000000000000000001E /* ProjectMCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001E /* ProjectMCanvasView.swift */; };
+		C100000000000000000002A /* projectm-tvos.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B100000000000000000002A /* projectm-tvos.xcframework */; };
+		C100000000000000000002B /* Presets in Resources */ = {isa = PBXBuildFile; fileRef = B100000000000000000002B /* Presets */; };
+		F20000000000000000000013 /* Presets in Resources */ = {isa = PBXBuildFile; fileRef = B100000000000000000002B /* Presets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -83,6 +92,14 @@
 		E2000000000000000000000E /* ContinuityMic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContinuityMic.swift; sourceTree = "<group>"; };
 		E2000000000000000000000F /* MicSettingsPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicSettingsPanel.swift; sourceTree = "<group>"; };
 		E2000000000000000000000A /* Wizuale Mic.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Wizuale Mic.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B100000000000000000001A /* MilkPresetCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MilkPresetCatalog.swift; sourceTree = "<group>"; };
+		B100000000000000000001B /* ProjectMController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMController.swift; sourceTree = "<group>"; };
+		B100000000000000000001C /* ProjectMAudioHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMAudioHub.swift; sourceTree = "<group>"; };
+		B100000000000000000001D /* ProjectMRenderState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMRenderState.swift; sourceTree = "<group>"; };
+		B100000000000000000001E /* ProjectMCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMCanvasView.swift; sourceTree = "<group>"; };
+		B100000000000000000001F /* Wizuale-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Wizuale-Bridging-Header.h"; sourceTree = "<group>"; };
+		B100000000000000000002A /* projectm-tvos.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = projectm-tvos.xcframework; path = ThirdParty/projectm-tvos.xcframework; sourceTree = "<group>"; };
+		B100000000000000000002B /* Presets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Presets; path = Wizuale/Resources/Presets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -90,6 +107,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C100000000000000000002A /* projectm-tvos.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -107,6 +125,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000010 /* Config */,
+				A100000000000000000001G /* ThirdParty */,
 				A1000000000000000000000E /* Wizuale */,
 				D20000000000000000000021 /* Shared */,
 				D20000000000000000000020 /* WizualeMic */,
@@ -123,28 +142,43 @@
 			path = Config;
 			sourceTree = "<group>";
 		};
+		A100000000000000000001G /* ThirdParty */ = {
+			isa = PBXGroup;
+			children = (
+				B100000000000000000002A /* projectm-tvos.xcframework */,
+			);
+			name = ThirdParty;
+			sourceTree = "<group>";
+		};
+		A100000000000000000001H /* ProjectM */ = {
+			isa = PBXGroup;
+			children = (
+				B100000000000000000001B /* ProjectMController.swift */,
+				B100000000000000000001C /* ProjectMAudioHub.swift */,
+				B100000000000000000001D /* ProjectMRenderState.swift */,
+			);
+			path = ProjectM;
+			sourceTree = "<group>";
+		};
 		A1000000000000000000000E /* Wizuale */ = {
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000001 /* App.swift */,
 				B10000000000000000000002 /* RootView.swift */,
 				B10000000000000000000003 /* VisualSession.swift */,
-				B10000000000000000000004 /* VisualRenderer.swift */,
-				B10000000000000000000005 /* MetalCanvasView.swift */,
+				B100000000000000000001E /* ProjectMCanvasView.swift */,
+				A100000000000000000001H /* ProjectM */,
+				B100000000000000000001F /* Wizuale-Bridging-Header.h */,
 				B10000000000000000000006 /* MusicSession.swift */,
-				B10000000000000000000007 /* ArtworkPalette.swift */,
 				B10000000000000000000008 /* NowPlayingOverlay.swift */,
 				B10000000000000000000009 /* RemoteReader.swift */,
-				B1000000000000000000000A /* FrameUniforms.swift */,
-				B1000000000000000000000B /* Presets.swift */,
-				B10000000000000000000016 /* ToneMath.swift */,
 				B10000000000000000000011 /* BeatClock.swift */,
 				B10000000000000000000012 /* TempoService.swift */,
 				B10000000000000000000013 /* TempoText.swift */,
-				B1000000000000000000000C /* Shaders.metal */,
 				E20000000000000000000009 /* MicReceiver.swift */,
 				E2000000000000000000000E /* ContinuityMic.swift */,
 				E2000000000000000000000F /* MicSettingsPanel.swift */,
+				B100000000000000000002B /* Presets */,
 				B1000000000000000000000D /* Assets.xcassets */,
 				B1000000000000000000000F /* Info.plist */,
 				B10000000000000000000010 /* Wizuale.entitlements */,
@@ -168,6 +202,7 @@
 				E20000000000000000000008 /* MicFrame.swift */,
 				E2000000000000000000000C /* MicAnalyzer.swift */,
 				E2000000000000000000000D /* MicTuning.swift */,
+				B100000000000000000001A /* MilkPresetCatalog.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -270,6 +305,7 @@
 			files = (
 				C1000000000000000000000D /* Assets.xcassets in Resources */,
 				C1000000000000000000000E /* PrivacyInfo.xcprivacy in Resources */,
+				C100000000000000000002B /* Presets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -279,6 +315,7 @@
 			files = (
 				F20000000000000000000004 /* Assets.xcassets in Resources */,
 				F20000000000000000000005 /* PrivacyInfo.xcprivacy in Resources */,
+				F20000000000000000000013 /* Presets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -292,19 +329,17 @@
 				C10000000000000000000001 /* App.swift in Sources */,
 				C10000000000000000000002 /* RootView.swift in Sources */,
 				C10000000000000000000003 /* VisualSession.swift in Sources */,
-				C10000000000000000000004 /* VisualRenderer.swift in Sources */,
-				C10000000000000000000005 /* MetalCanvasView.swift in Sources */,
+				C100000000000000000001E /* ProjectMCanvasView.swift in Sources */,
+				C100000000000000000001B /* ProjectMController.swift in Sources */,
+				C100000000000000000001C /* ProjectMAudioHub.swift in Sources */,
+				C100000000000000000001D /* ProjectMRenderState.swift in Sources */,
 				C10000000000000000000006 /* MusicSession.swift in Sources */,
-				C10000000000000000000007 /* ArtworkPalette.swift in Sources */,
 				C10000000000000000000008 /* NowPlayingOverlay.swift in Sources */,
 				C10000000000000000000009 /* RemoteReader.swift in Sources */,
-				C1000000000000000000000A /* FrameUniforms.swift in Sources */,
-				C1000000000000000000000B /* Presets.swift in Sources */,
-				C10000000000000000000014 /* ToneMath.swift in Sources */,
 				C10000000000000000000011 /* BeatClock.swift in Sources */,
 				C10000000000000000000012 /* TempoService.swift in Sources */,
 				C10000000000000000000013 /* TempoText.swift in Sources */,
-				C1000000000000000000000C /* Shaders.metal in Sources */,
+				C100000000000000000001A /* MilkPresetCatalog.swift in Sources */,
 				F20000000000000000000008 /* MicReceiver.swift in Sources */,
 				F20000000000000000000007 /* MicFrame.swift in Sources */,
 				F2000000000000000000000D /* MicAnalyzer.swift in Sources */,
@@ -325,8 +360,7 @@
 				F20000000000000000000006 /* MicFrame.swift in Sources */,
 				F2000000000000000000000C /* MicAnalyzer.swift in Sources */,
 				F2000000000000000000000E /* MicTuning.swift in Sources */,
-				F20000000000000000000009 /* Presets.swift in Sources */,
-				F2000000000000000000000A /* FrameUniforms.swift in Sources */,
+				F20000000000000000000012 /* MilkPresetCatalog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -465,18 +499,27 @@
 				DEVELOPMENT_TEAM = 59Z33S5F96;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/ThirdParty";
 				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/ThirdParty/projectm/include";
 				INFOPLIST_FILE = Wizuale/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-lc++",
+					"-framework",
+					OpenGLES,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = app.wizuale.Wizuale;
 				PRODUCT_NAME = Wizuale;
 				SDKROOT = appletvos;
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG WIZUALE_PROJECTM";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = Wizuale/Wizuale-Bridging-Header.h;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 3;
 				TVOS_DEPLOYMENT_TARGET = 17.0;
@@ -493,18 +536,27 @@
 				DEVELOPMENT_TEAM = 59Z33S5F96;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/ThirdParty";
 				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/ThirdParty/projectm/include";
 				INFOPLIST_FILE = Wizuale/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-lc++",
+					"-framework",
+					OpenGLES,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = app.wizuale.Wizuale;
 				PRODUCT_NAME = Wizuale;
 				SDKROOT = appletvos;
 				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = WIZUALE_PROJECTM;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = Wizuale/Wizuale-Bridging-Header.h;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 3;
 				TVOS_DEPLOYMENT_TARGET = 17.0;

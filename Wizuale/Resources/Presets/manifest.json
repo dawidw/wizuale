@@ -1,0 +1,11 @@
+{
+  "source": "placeholder-run-scripts/fetch-presets.sh",
+  "count": 1,
+  "presets": [
+    {
+      "id": 0,
+      "name": "Run fetch-presets.sh",
+      "file": "files/placeholder.milk"
+    }
+  ]
+}

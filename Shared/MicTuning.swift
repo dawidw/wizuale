@@ -23,8 +23,8 @@ enum MicTuning {
     static let sensitivityKey = "wizuale.mic.sensitivity"
     static let latencyKey = "wizuale.mic.latencyMs"
     static let sourceKey = "wizuale.mic.source"
-    static let albumArtKey = "wizuale.mic.albumArt"
-    static let zoomKey = "wizuale.mic.zoom"
+    static let autoCycleKey = "wizuale.mic.autoCycle"
+    static let cycleSecondsKey = "wizuale.mic.cycleSeconds"
 
     static let sensitivityMin: Float = 0.25
     static let sensitivityMax: Float = 3
@@ -32,9 +32,9 @@ enum MicTuning {
     static let latencyMin = -200
     static let latencyMax = 400
     static let latencyStep = 10
-    static let zoomMin: Float = 0.5
-    static let zoomMax: Float = 2
-    static let zoomDefault: Float = 1
+    static let cycleSecondsMin = 15
+    static let cycleSecondsMax = 600
+    static let cycleSecondsDefault = 45
 
     static func clampSensitivity(_ value: Float) -> Float {
         guard value.isFinite else { return sensitivityDefault }
@@ -75,28 +75,28 @@ enum MicTuning {
         UserDefaults.standard.set(source.rawValue, forKey: sourceKey)
     }
 
-    /// Missing key means on. The phone sends the choice; the TV keeps the last one it heard.
-    static func loadAlbumArt() -> Bool {
-        guard UserDefaults.standard.object(forKey: albumArtKey) != nil else { return true }
-        return UserDefaults.standard.bool(forKey: albumArtKey)
+    static func clampCycleSeconds(_ seconds: Int) -> Int {
+        min(max(seconds, cycleSecondsMin), cycleSecondsMax)
     }
 
-    static func saveAlbumArt(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: albumArtKey)
+    static func loadAutoCycle() -> Bool {
+        guard UserDefaults.standard.object(forKey: autoCycleKey) != nil else { return true }
+        return UserDefaults.standard.bool(forKey: autoCycleKey)
     }
 
-    static func clampZoom(_ value: Float) -> Float {
-        guard value.isFinite else { return zoomDefault }
-        return min(max(value, zoomMin), zoomMax)
+    static func saveAutoCycle(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: autoCycleKey)
     }
 
-    static func loadZoom() -> Float {
-        guard UserDefaults.standard.object(forKey: zoomKey) != nil else { return zoomDefault }
-        return clampZoom(UserDefaults.standard.float(forKey: zoomKey))
+    static func loadCycleSeconds() -> Int {
+        guard UserDefaults.standard.object(forKey: cycleSecondsKey) != nil else {
+            return cycleSecondsDefault
+        }
+        return clampCycleSeconds(UserDefaults.standard.integer(forKey: cycleSecondsKey))
     }
 
-    static func saveZoom(_ value: Float) {
-        UserDefaults.standard.set(clampZoom(value), forKey: zoomKey)
+    static func saveCycleSeconds(_ seconds: Int) {
+        UserDefaults.standard.set(clampCycleSeconds(seconds), forKey: cycleSecondsKey)
     }
 }
 

@@ -52,23 +52,23 @@ final class MicCapture: ObservableObject {
             scheduleSettings()
         }
     }
-    @Published var albumArt: Bool = MicTuning.loadAlbumArt() {
+    @Published var autoCycle: Bool = MicTuning.loadAutoCycle() {
         didSet {
-            guard !applyingRemote, albumArt != oldValue else { return }
-            MicTuning.saveAlbumArt(albumArt)
-            scheduleSettings()
+            guard !applyingRemote, autoCycle != oldValue else { return }
+            MicTuning.saveAutoCycle(autoCycle)
+            scheduleCycle()
         }
     }
-    @Published var zoom: Float = MicTuning.loadZoom() {
+    @Published var cycleSeconds: Int = MicTuning.loadCycleSeconds() {
         didSet {
-            let clamped = MicTuning.clampZoom(zoom)
-            if clamped != zoom {
-                zoom = clamped
+            let clamped = MicTuning.clampCycleSeconds(cycleSeconds)
+            if clamped != cycleSeconds {
+                cycleSeconds = clamped
                 return
             }
-            guard clamped != oldValue else { return }
-            MicTuning.saveZoom(clamped)
-            scheduleSettings()
+            guard !applyingRemote, clamped != oldValue else { return }
+            MicTuning.saveCycleSeconds(clamped)
+            scheduleCycle()
         }
     }
 
@@ -82,6 +82,9 @@ final class MicCapture: ObservableObject {
     private var commandSequence: UInt16 = 0
     private var settingsSequence: UInt16 = 0
     private var boostSequence: UInt16 = 0
+    private var pcmSequence: UInt16 = 0
+    private var cycleSequence: UInt16 = 0
+    private var pendingPCM: [Data] = []
     private var heldSensitivity: Float = MicTuning.loadSensitivity()
     private var applyingRemote = false
     private var lastUI: CFTimeInterval = 0
@@ -171,7 +174,7 @@ final class MicCapture: ObservableObject {
         if choice < 0 {
             wire = PresetWire.auto
         } else {
-            guard PresetLibrary.all.indices.contains(choice) else { return }
+            guard MilkPresetCatalog.presets.indices.contains(choice) else { return }
             wire = Int16(clamping: choice)
         }
         let stalePreset = activePreset
@@ -302,16 +305,15 @@ final class MicCapture: ObservableObject {
         setWantsLink(true)
         let sens = sensitivity
         let latency = latencyMs
-        let art = albumArt
-        let scale = zoom
         network.async { [weak self] in
             guard let self else { return }
             if self.lastSettings == nil {
                 self.settingsSequence = 1
                 self.lastSettings = MicWire.encodeSettings(
-                    sequence: 1, latencyMs: latency, sensitivity: sens, albumArt: art, zoom: scale
+                    sequence: 1, latencyMs: latency, sensitivity: sens
                 )
             }
+            self.scheduleCycleOnNetwork()
             self.startBrowser()
         }
     }
@@ -364,6 +366,14 @@ final class MicCapture: ObservableObject {
             features: features,
             sensitivity: currentSensitivity()
         )
+        let pcmPacked = MicPCM.monoInt16(from: buffer)
+        pcmSequence &+= 1
+        if pcmSequence == 0 { pcmSequence = 1 }
+        let pcmPacket = MicWire.encodePCM(
+            sequence: pcmSequence,
+            sampleRate: pcmPacked.sampleRate,
+            samples: pcmPacked.samples
+        )
         let loud = features.loudness
         let bass = features.bass
         let now = CACurrentMediaTime()
@@ -371,6 +381,7 @@ final class MicCapture: ObservableObject {
         if publishUI { lastUI = now }
         network.async { [weak self] in
             self?.enqueueAudio(packet)
+            self?.enqueuePCM(pcmPacket)
             if publishUI { self?.refreshLink() }
         }
         if publishUI {
@@ -483,14 +494,12 @@ final class MicCapture: ObservableObject {
     private func scheduleSettings() {
         let sens = sensitivity
         let latency = latencyMs
-        let art = albumArt
-        let scale = zoom
         flag.lock()
         settingsSequence &+= 1
         if settingsSequence == 0 { settingsSequence = 1 }
         let seq = settingsSequence
         flag.unlock()
-        let packet = MicWire.encodeSettings(sequence: seq, latencyMs: latency, sensitivity: sens, albumArt: art, zoom: scale)
+        let packet = MicWire.encodeSettings(sequence: seq, latencyMs: latency, sensitivity: sens)
         network.async { [weak self] in
             guard let self else { return }
             self.sensHold = sens
@@ -501,6 +510,28 @@ final class MicCapture: ObservableObject {
             self.lastSettings = packet
             self.pump()
         }
+    }
+
+    private func scheduleCycle() {
+        network.async { [weak self] in
+            self?.scheduleCycleOnNetwork()
+        }
+    }
+
+    private func scheduleCycleOnNetwork() {
+        let auto = autoCycle
+        let seconds = cycleSeconds
+        flag.lock()
+        cycleSequence &+= 1
+        if cycleSequence == 0 { cycleSequence = 1 }
+        let seq = cycleSequence
+        flag.unlock()
+        let packet = MicWire.encodeCycle(sequence: seq, autoAdvance: auto, intervalSeconds: seconds)
+        pendingCommands.append(packet)
+        if pendingCommands.count > 8 {
+            pendingCommands.removeFirst(pendingCommands.count - 8)
+        }
+        pump()
     }
 
     private func beginBoost(_ amount: Float) {
@@ -687,7 +718,7 @@ final class MicCapture: ObservableObject {
         confirmed = true
         let name = connectedName.isEmpty ? "Apple TV" : connectedName
         let index = Int(preset)
-        guard PresetLibrary.all.indices.contains(index) else {
+        guard MilkPresetCatalog.presets.indices.contains(index) else {
             log.error("ack ignored invalid preset index \(index)")
             return
         }
@@ -700,7 +731,7 @@ final class MicCapture: ObservableObject {
             return
         }
         log.debug("highlight applied preset=\(index) cycling=\(ackCycling)")
-        let picture = PresetLibrary.all[index].name
+        let picture = MilkPresetCatalog.preset(at: index)?.displayName ?? "Preset"
         let detail = ackCycling ? "Auto is on. Showing \(picture)." : "Locked on \(picture)."
         applyPictureHighlight(preset: index, cycling: ackCycling, known: true)
         publish(status: detail, tv: name, linked: true)
@@ -746,6 +777,15 @@ final class MicCapture: ObservableObject {
         pump()
     }
 
+    private func enqueuePCM(_ data: Data) {
+        guard linkWanted() else { return }
+        pendingPCM.append(data)
+        if pendingPCM.count > 4 {
+            pendingPCM.removeFirst(pendingPCM.count - 4)
+        }
+        pump()
+    }
+
     private func enqueueCommand(_ data: Data) {
         lastCommand = data
         pendingCommands.append(data)
@@ -766,6 +806,8 @@ final class MicCapture: ObservableObject {
         } else if let settings = pendingSettings {
             pendingSettings = nil
             data = settings
+        } else if !pendingPCM.isEmpty {
+            data = pendingPCM.removeFirst()
         } else if let audio = pendingAudio {
             pendingAudio = nil
             data = audio
@@ -795,6 +837,7 @@ final class MicCapture: ObservableObject {
         connection = nil
         connectedName = ""
         pendingAudio = nil
+        pendingPCM.removeAll()
         pendingCommands.removeAll()
         sending = false
         receiving = false
@@ -807,7 +850,7 @@ final class MicCapture: ObservableObject {
     private func applyPictureHighlight(choice: Int) {
         if choice < 0 || choice == Int(PresetWire.auto) {
             applyPictureHighlight(preset: activePreset, cycling: true, known: true)
-        } else if PresetLibrary.all.indices.contains(choice) {
+        } else if MilkPresetCatalog.presets.indices.contains(choice) {
             applyPictureHighlight(preset: choice, cycling: false, known: true)
         }
     }
@@ -815,7 +858,7 @@ final class MicCapture: ObservableObject {
     private func applyPictureHighlight(preset: Int, cycling: Bool, known: Bool) {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.running else { return }
-            if PresetLibrary.all.indices.contains(preset) {
+            if MilkPresetCatalog.presets.indices.contains(preset) {
                 self.activePreset = preset
             }
             self.cycling = cycling

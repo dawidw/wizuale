@@ -1,76 +1,11 @@
 import Combine
 import Foundation
 
-/// What the renderer is allowed to read. The draw loop is not on the main actor,
-/// so every field here is copied out under a lock.
-struct RenderSnapshot: Sendable {
-    var targetIndex: Int
-    var album: AlbumColors?
-    var wantsAlbum: Bool
-    var paused: Bool
-    var zoom: Float
-}
-
-/// Handoff between the SwiftUI session and the Metal draw loop.
-final class RenderState: @unchecked Sendable {
-    private let lock = NSLock()
-    private var targetIndex = 0
-    private var album: AlbumColors?
-    private var albumArt = true
-    private var wantsAlbum = false
-    private var paused = false
-    private var zoom = MicTuning.zoomDefault
-
-    func snapshot() -> RenderSnapshot {
-        lock.lock()
-        defer { lock.unlock() }
-        return RenderSnapshot(
-            targetIndex: targetIndex,
-            album: album,
-            wantsAlbum: wantsAlbum,
-            paused: paused,
-            zoom: zoom
-        )
-    }
-
-    func setTarget(_ index: Int) {
-        lock.lock()
-        targetIndex = index
-        lock.unlock()
-    }
-
-    func setAlbum(_ colors: AlbumColors?) {
-        lock.lock()
-        album = colors
-        wantsAlbum = albumArt && colors != nil
-        lock.unlock()
-    }
-
-    /// Off fades the cover colors out and leaves each preset on its own palette.
-    func setAlbumArt(_ enabled: Bool) {
-        lock.lock()
-        albumArt = enabled
-        wantsAlbum = enabled && album != nil
-        lock.unlock()
-    }
-
-    func setPaused(_ value: Bool) {
-        lock.lock()
-        paused = value
-        lock.unlock()
-    }
-
-    func setZoom(_ value: Float) {
-        lock.lock()
-        zoom = MicTuning.clampZoom(value)
-        lock.unlock()
-    }
-}
-
 /// Which picture is showing, and the small title card in the corner.
 @MainActor
 final class VisualSession: ObservableObject {
-    let renderState = RenderState()
+    let projectMState = ProjectMRenderState()
+    let audioHub = ProjectMAudioHub()
     let beatClock: BeatClock
     let micReceiver: MicReceiver
 
@@ -78,8 +13,8 @@ final class VisualSession: ObservableObject {
         self.beatClock = beatClock
         micReceiver = MicReceiver()
         beatClock.setVisualLatency(ms: MicTuning.loadLatency())
-        renderState.setAlbumArt(MicTuning.loadAlbumArt())
-        renderState.setZoom(zoom)
+        projectMState.setBeatSensitivity(MicTuning.loadSensitivity())
+        projectMState.setAutoCycle(MicTuning.loadAutoCycle(), seconds: MicTuning.loadCycleSeconds())
     }
 
     @Published private(set) var presetIndex = 0
@@ -91,7 +26,8 @@ final class VisualSession: ObservableObject {
     @Published var micSource = MicTuning.loadSource()
     @Published var sensitivity = MicTuning.loadSensitivity()
     @Published var latencyMs = MicTuning.loadLatency()
-    @Published var zoom = MicTuning.loadZoom()
+    @Published var autoCycle = MicTuning.loadAutoCycle()
+    @Published var cycleSeconds = MicTuning.loadCycleSeconds()
     @Published var showMicSettings = false
     @Published var showContinuityPicker = false
     @Published private(set) var continuityStatus = ""
@@ -104,12 +40,12 @@ final class VisualSession: ObservableObject {
     private var hideToken = UUID()
     private var hintToken = UUID()
 
-    var currentPreset: Preset {
-        PresetLibrary.all[presetIndex]
+    var currentPresetName: String {
+        MilkPresetCatalog.preset(at: presetIndex)?.displayName ?? "Preset"
     }
 
     func start() {
-        renderState.setTarget(presetIndex)
+        projectMState.setTarget(presetIndex)
         revealOverlay()
         armCycle()
         scheduleHintHide()
@@ -132,18 +68,20 @@ final class VisualSession: ObservableObject {
                     self.latencyMs = ms
                     self.sensitivity = sens
                     self.beatClock.setVisualLatency(ms: ms)
+                    self.projectMState.setBeatSensitivity(sens)
+                    self.audioHub.setBeatSensitivity(sens)
                 }
             }
-            micReceiver.onAlbumArt = { [weak self] enabled in
-                Task { @MainActor in
-                    self?.renderState.setAlbumArt(enabled)
-                }
+            micReceiver.onPCM = { [weak self] rate, samples in
+                self?.audioHub.enqueue(sampleRate: rate, samples: samples)
             }
-            micReceiver.onZoom = { [weak self] scale in
+            micReceiver.onCycle = { [weak self] auto, seconds in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.zoom = scale
-                    self.renderState.setZoom(scale)
+                    self.autoCycle = auto
+                    self.cycleSeconds = seconds
+                    self.projectMState.setAutoCycle(auto, seconds: seconds)
+                    if auto && !self.phoneLocked { self.armCycle() }
                 }
             }
             micReceiver.setShown(index: presetIndex, cycling: true)
@@ -178,6 +116,8 @@ final class VisualSession: ObservableObject {
         let clamped = MicTuning.clampSensitivity(value)
         sensitivity = clamped
         micReceiver.setSensitivity(clamped)
+        projectMState.setBeatSensitivity(clamped)
+        audioHub.setBeatSensitivity(clamped)
     }
 
     func setLatency(_ ms: Int) {
@@ -185,6 +125,20 @@ final class VisualSession: ObservableObject {
         latencyMs = clamped
         micReceiver.setLatency(clamped)
         beatClock.setVisualLatency(ms: clamped)
+    }
+
+    func setAutoCycle(_ enabled: Bool) {
+        autoCycle = enabled
+        MicTuning.saveAutoCycle(enabled)
+        projectMState.setAutoCycle(enabled, seconds: cycleSeconds)
+        if enabled && !phoneLocked { armCycle() } else { cycleToken = UUID() }
+    }
+
+    func setCycleSeconds(_ seconds: Int) {
+        let clamped = MicTuning.clampCycleSeconds(seconds)
+        cycleSeconds = clamped
+        MicTuning.saveCycleSeconds(clamped)
+        projectMState.setAutoCycle(autoCycle, seconds: clamped)
     }
 
     func beginContinuityPairing() {
@@ -198,8 +152,8 @@ final class VisualSession: ObservableObject {
             mic = continuity
         } else {
             let created = ContinuityMic()
-            created.onFeatures = { [weak self] features in
-                self?.micReceiver.ingestLocal(features)
+            created.onPCM = { [weak self] samples, rate in
+                self?.audioHub.enqueue(sampleRate: rate, samples: samples)
             }
             created.onStatus = { [weak self] text in
                 Task { @MainActor in
@@ -216,51 +170,38 @@ final class VisualSession: ObservableObject {
         continuity?.stop()
     }
 
-    /// `-1` lets the pictures rotate again. Any other index locks that picture
-    /// and cancels the phrase timer until the phone asks for auto.
     private func applyPhoneChoice(_ choice: Int) {
         if choice < 0 || choice == Int(PresetWire.auto) {
             phoneLocked = false
             micReceiver.setShown(index: presetIndex, cycling: true)
+            projectMState.setAutoCycle(true, seconds: cycleSeconds)
             revealOverlay()
             armCycle()
             return
         }
-        guard PresetLibrary.all.indices.contains(choice) else { return }
+        guard MilkPresetCatalog.presets.indices.contains(choice) else { return }
         phoneLocked = true
         cycleToken = UUID()
         if presetIndex != choice {
             presetIndex = choice
-            renderState.setTarget(choice)
+            projectMState.setTarget(choice)
             dismissHint()
         }
         revealOverlay()
         micReceiver.setShown(index: choice, cycling: false)
     }
 
-    func next() {
-        step(1)
-    }
-
-    func previous() {
-        step(-1)
-    }
-
-    /// Click moves forward through every picture.
-    func advance() {
-        step(1)
-    }
+    func next() { step(1) }
+    func previous() { step(-1) }
+    func advance() { step(1) }
 
     func togglePin() {
         let now = Date()
         guard now.timeIntervalSince(lastSwitch) > 0.18 else { return }
         lastSwitch = now
         overlayPinned.toggle()
-        if overlayPinned {
-            overlayVisible = true
-        } else {
-            scheduleHide()
-        }
+        overlayVisible = overlayPinned ? true : overlayVisible
+        if !overlayPinned { scheduleHide() }
         dismissHint()
     }
 
@@ -273,10 +214,10 @@ final class VisualSession: ObservableObject {
         let now = Date()
         guard now.timeIntervalSince(lastSwitch) > 0.18 else { return }
         lastSwitch = now
-        let index = PresetLibrary.index(after: presetIndex, step: delta)
-        guard PresetLibrary.all.indices.contains(index) else { return }
+        let index = MilkPresetCatalog.index(after: presetIndex, step: delta)
+        guard MilkPresetCatalog.presets.indices.contains(index) else { return }
         presetIndex = index
-        renderState.setTarget(index)
+        projectMState.setTarget(index)
         revealOverlay()
         dismissHint()
         if phoneLocked {
@@ -287,52 +228,24 @@ final class VisualSession: ObservableObject {
         }
     }
 
-    /// Classic presets rotate on their own when Auto is on.
-    /// With a matched tempo the change waits for the next 8-bar phrase after the hold.
     private func armCycle() {
-        guard !phoneLocked else { return }
+        guard !phoneLocked, autoCycle else { return }
         cycleToken = UUID()
         let token = cycleToken
         let index = presetIndex
-        guard PresetLibrary.all.indices.contains(index),
-              PresetLibrary.all[index].cyclesAutomatically else { return }
-        let started = Date()
+        let hold = Double(cycleSeconds)
         Task { [weak self] in
-            await self?.waitForCycle(token: token, from: index, started: started)
+            try? await Task.sleep(nanoseconds: UInt64(hold * 1_000_000_000))
+            await self?.advanceCycle(token: token, from: index)
         }
-    }
-
-    private func waitForCycle(token: UUID, from index: Int, started: Date) async {
-        let earliest = started.addingTimeInterval(PresetLibrary.cycleHold)
-        while token == cycleToken, presetIndex == index {
-            let now = Date()
-            if now < earliest {
-                let nap = min(earliest.timeIntervalSince(now), 0.5)
-                try? await Task.sleep(nanoseconds: sleepNanos(nap))
-                continue
-            }
-            if let remaining = beatClock.secondsUntilPhraseBoundary(), remaining.isFinite {
-                if remaining <= 0.1 { break }
-                let nap = min(max(remaining - 0.04, 0.05), 1.0)
-                try? await Task.sleep(nanoseconds: sleepNanos(nap))
-                continue
-            }
-            break
-        }
-        advanceCycle(token: token, from: index)
-    }
-
-    private func sleepNanos(_ seconds: TimeInterval) -> UInt64 {
-        guard seconds.isFinite, seconds > 0 else { return 0 }
-        return UInt64(seconds * 1_000_000_000)
     }
 
     private func advanceCycle(token: UUID, from index: Int) {
-        guard !phoneLocked else { return }
+        guard !phoneLocked, autoCycle else { return }
         guard token == cycleToken, presetIndex == index else { return }
-        guard let next = PresetLibrary.nextCyclingIndex(after: index) else { return }
+        let next = MilkPresetCatalog.randomIndex(excluding: index)
         presetIndex = next
-        renderState.setTarget(next)
+        projectMState.setTarget(next)
         revealOverlay()
         micReceiver.setShown(index: next, cycling: true)
         armCycle()
@@ -347,7 +260,7 @@ final class VisualSession: ObservableObject {
         }
     }
 
-    private func hideIfNeeded(_ token: UUID) {
+    private func hideIfNeeded(_ token: UUID) async {
         guard token == hideToken, !overlayPinned else { return }
         overlayVisible = false
     }
@@ -356,18 +269,17 @@ final class VisualSession: ObservableObject {
         hintToken = UUID()
         let token = hintToken
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 8_000_000_000)
-            await self?.hideHint(token)
+            try? await Task.sleep(nanoseconds: 9_000_000_000)
+            await self?.dismissHintIfNeeded(token)
         }
     }
 
-    private func hideHint(_ token: UUID) {
+    private func dismissHintIfNeeded(_ token: UUID) async {
         guard token == hintToken else { return }
         showHint = false
     }
 
-    private func dismissHint() {
+    func dismissHint() {
         showHint = false
-        hintToken = UUID()
     }
 }
