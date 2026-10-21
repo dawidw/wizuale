@@ -12,6 +12,16 @@ enum VisualMode: Int, CaseIterable, Identifiable {
     case bloom = 7
     case border = 8
     case drift = 9
+    case scope = 10
+    case mirror = 11
+    case plasma = 12
+    case warpStars = 13
+    case well = 14
+    case bleed = 15
+    case vortex = 16
+    case mesh = 17
+    case water = 18
+    case flame = 19
 
     var id: Int { rawValue }
 }
@@ -160,7 +170,8 @@ enum PresetLibrary {
     /// How long a self-cycling preset holds before it may advance.
     /// A matched tempo waits for the next 8-bar phrase after this, instead of cutting on the timer.
     static let cycleHold: Double = 45
-    static let blendDuration: Float = 3.2
+    /// Emit crossfade. Warp parameters ease across this window in the renderer.
+    static let blendDuration: Float = 4.8
 
     static let all: [Preset] = [
         make(.spiral, "Spiral Star", cycles: true, album: 0.52, PresetParams(
@@ -292,8 +303,143 @@ enum PresetLibrary {
             bpm: 64, centerHole: 0.05, centerDark: 0.15, grain: 0.0014,
             color0: SIMD3(0.75, 0.88, 1), color1: SIMD3(1, 0.86, 0.55), color2: SIMD3(0.35, 0.8, 0.75),
             base: SIMD3(0.008, 0.012, 0.028), albumInfluence: 0
+        )),
+        make(.scope, "Scope Trace", cycles: true, album: 0.48, PresetParams(
+            expansion: 0.16, rotation: 0.42, rotationInner: 0.18, kaleidoSpin: 0.05,
+            warp: 0.22, warpFrequency: 5.5, warpSpeed: 0.28, radialWarp: 0.04,
+            centerAmplitude: 0, goo: 0.06, folds: 1, kaleidoMix: 0,
+            decayTau: 0.78, blur: 0.45, hueShift: 0.08, chroma: 0.55,
+            frequency: 6, thickness: 0.008, radiusOffset: 0,
+            count: 5, radius: 0.3, softness: 1, intensity: 1.05,
+            sparkle: 0.05, saturation: 1.4, vignette: 0.22,
+            exposure: 2.45, baseLevel: 0, emissionGain: 0.95, pulseAmount: 0.12,
+            bpm: 108, centerHole: 0.02, centerDark: 0.2, grain: 0.0005,
+            color0: SIMD3(0.15, 0.95, 1), color1: SIMD3(1, 0.25, 0.75), color2: SIMD3(0.85, 0.95, 1),
+            base: SIMD3(0.01, 0.012, 0.03), albumInfluence: 0
+        )),
+        make(.mirror, "Mirror Hall", cycles: true, album: 0.5, PresetParams(
+            expansion: 0.18, rotation: 0.22, rotationInner: 0.08, kaleidoSpin: 0.06,
+            warp: 0.2, warpFrequency: 6.0, warpSpeed: 0.26, radialWarp: 0.03,
+            centerAmplitude: 0, goo: 0.05, folds: 6, kaleidoMix: 1,
+            decayTau: 0.64, blur: 0.4, hueShift: 0.12, chroma: 0.6,
+            frequency: 6, thickness: 0.007, radiusOffset: 0,
+            count: 6, radius: 0.28, softness: 1, intensity: 1.05,
+            sparkle: 0.08, saturation: 1.42, vignette: 0.24,
+            exposure: 2.5, baseLevel: 0, emissionGain: 0.9, pulseAmount: 0.12,
+            bpm: 100, centerHole: 0.04, centerDark: 0.35, grain: 0.0004,
+            color0: SIMD3(1, 0.82, 0.25), color1: SIMD3(0.62, 0.28, 1), color2: SIMD3(0.75, 0.95, 1),
+            base: SIMD3(0.02, 0.01, 0.03), albumInfluence: 0
+        )),
+        make(.plasma, "Plasma Veil", cycles: true, album: 0.46, PresetParams(
+            expansion: 0.08, rotation: 0.12, rotationInner: 0.04, kaleidoSpin: 0.02,
+            warp: 0.34, warpFrequency: 4.4, warpSpeed: 0.22, radialWarp: 0.03,
+            centerAmplitude: 0.01, goo: 0.12, folds: 1, kaleidoMix: 0,
+            decayTau: 0.72, blur: 0.7, hueShift: 0.1, chroma: 0.45,
+            frequency: 5, thickness: 0.01, radiusOffset: 0,
+            count: 1, radius: 0.2, softness: 1, intensity: 1,
+            sparkle: 0, saturation: 1.48, vignette: 0.2,
+            exposure: 2.4, baseLevel: 0, emissionGain: 0.9, pulseAmount: 0.1,
+            bpm: 96, centerHole: 0, centerDark: 0.08, grain: 0.0006,
+            color0: SIMD3(1, 0.1, 0.65), color1: SIMD3(0.15, 0.9, 1), color2: SIMD3(1, 0.92, 0.2),
+            base: SIMD3(0.015, 0.005, 0.02), albumInfluence: 0
+        )),
+        make(.warpStars, "Warp Stars", cycles: true, album: 0.4, PresetParams(
+            expansion: 0.7, rotation: 0.05, rotationInner: 0.15, kaleidoSpin: 0,
+            warp: 0.08, warpFrequency: 2.2, warpSpeed: 0.16, radialWarp: 0.01,
+            centerAmplitude: 0, goo: 0.02, folds: 1, kaleidoMix: 0,
+            decayTau: 0.48, blur: 0.35, hueShift: 0.04, chroma: 0.35,
+            frequency: 4, thickness: 0.01, radiusOffset: 0,
+            count: 1, radius: 0.2, softness: 1, intensity: 1.1,
+            sparkle: 0.4, saturation: 1.2, vignette: 0.4,
+            exposure: 2.7, baseLevel: 0, emissionGain: 0.85, pulseAmount: 0.16,
+            bpm: 124, centerHole: 0.03, centerDark: 0.5, grain: 0.0003,
+            color0: SIMD3(0.75, 0.88, 1), color1: SIMD3(1, 0.95, 0.8), color2: SIMD3(0.45, 0.6, 1),
+            base: SIMD3(0, 0, 0.01), albumInfluence: 0
+        )),
+        make(.well, "Fractal Well", cycles: true, album: 0.48, PresetParams(
+            expansion: 0.38, rotation: 0.16, rotationInner: 0.35, kaleidoSpin: 0.04,
+            warp: 0.18, warpFrequency: 8.0, warpSpeed: 0.4, radialWarp: 0.04,
+            centerAmplitude: 0, goo: 0.06, folds: 4, kaleidoMix: 0.85,
+            decayTau: 0.58, blur: 0.4, hueShift: 0.16, chroma: 0.8,
+            frequency: 9, thickness: 0.008, radiusOffset: 0,
+            count: 4, radius: 0.25, softness: 1.4, intensity: 1.05,
+            sparkle: 0.06, saturation: 1.4, vignette: 0.32,
+            exposure: 2.55, baseLevel: 0, emissionGain: 0.92, pulseAmount: 0.14,
+            bpm: 118, centerHole: 0.05, centerDark: 0.85, grain: 0.0005,
+            color0: SIMD3(0.55, 0.15, 1), color1: SIMD3(1, 0.2, 0.55), color2: SIMD3(0.15, 0.9, 0.85),
+            base: SIMD3(0.01, 0, 0.02), albumInfluence: 0
+        )),
+        make(.bleed, "Color Bleed", cycles: true, album: 0.55, PresetParams(
+            expansion: 0.05, rotation: 0.28, rotationInner: 0.06, kaleidoSpin: 0.03,
+            warp: 0.26, warpFrequency: 3.2, warpSpeed: 0.16, radialWarp: 0.02,
+            centerAmplitude: 0.02, goo: 0.2, folds: 1, kaleidoMix: 0,
+            decayTau: 1.35, blur: 1.45, hueShift: 0.07, chroma: 0.35,
+            frequency: 3, thickness: 0.02, radiusOffset: 0,
+            count: 3, radius: 0.2, softness: 1, intensity: 0.9,
+            sparkle: 0, saturation: 1.3, vignette: 0.26,
+            exposure: 2.2, baseLevel: 0.04, emissionGain: 0.75, pulseAmount: 0.08,
+            bpm: 84, centerHole: 0, centerDark: 0.06, grain: 0.0012,
+            color0: SIMD3(1, 0.12, 0.28), color1: SIMD3(1, 0.48, 0.12), color2: SIMD3(0.95, 0.2, 0.7),
+            base: SIMD3(0.03, 0.005, 0.015), albumInfluence: 0
+        )),
+        make(.vortex, "Vortex Eye", cycles: true, album: 0.46, PresetParams(
+            expansion: 0.22, rotation: 0.62, rotationInner: 0.55, kaleidoSpin: 0.04,
+            warp: 0.3, warpFrequency: 6.5, warpSpeed: 0.38, radialWarp: 0.06,
+            centerAmplitude: 0, goo: 0.1, folds: 1, kaleidoMix: 0,
+            decayTau: 0.7, blur: 0.55, hueShift: 0.1, chroma: 0.65,
+            frequency: 6, thickness: 0.01, radiusOffset: 0,
+            count: 4, radius: 0.22, softness: 1, intensity: 1.05,
+            sparkle: 0.04, saturation: 1.38, vignette: 0.28,
+            exposure: 2.5, baseLevel: 0, emissionGain: 0.95, pulseAmount: 0.15,
+            bpm: 110, centerHole: 0.035, centerDark: 0.9, grain: 0.00045,
+            color0: SIMD3(0.2, 0.55, 1), color1: SIMD3(0.85, 0.92, 1), color2: SIMD3(0.35, 0.15, 0.95),
+            base: SIMD3(0.005, 0.01, 0.03), albumInfluence: 0
+        )),
+        make(.mesh, "Mesh Tide", cycles: true, album: 0.44, PresetParams(
+            expansion: 0.1, rotation: 0.08, rotationInner: 0.02, kaleidoSpin: 0,
+            warp: 0.42, warpFrequency: 5.2, warpSpeed: 0.3, radialWarp: 0.04,
+            centerAmplitude: 0.012, goo: 0.16, folds: 1, kaleidoMix: 0,
+            decayTau: 0.66, blur: 0.5, hueShift: 0.09, chroma: 0.4,
+            frequency: 8, thickness: 0.008, radiusOffset: 0,
+            count: 1, radius: 0.2, softness: 1, intensity: 1,
+            sparkle: 0, saturation: 1.35, vignette: 0.18,
+            exposure: 2.45, baseLevel: 0, emissionGain: 0.85, pulseAmount: 0.11,
+            bpm: 104, centerHole: 0, centerDark: 0.05, grain: 0.0005,
+            color0: SIMD3(0.2, 1, 0.55), color1: SIMD3(0.95, 1, 0.3), color2: SIMD3(0.2, 0.85, 1),
+            base: SIMD3(0.005, 0.015, 0.012), albumInfluence: 0
+        )),
+        make(.water, "Water Glass", cycles: true, album: 0.5, PresetParams(
+            expansion: 0.06, rotation: 0.04, rotationInner: 0.02, kaleidoSpin: 0,
+            warp: 0.2, warpFrequency: 3.6, warpSpeed: 0.18, radialWarp: 0.025,
+            centerAmplitude: 0.018, goo: 0.14, folds: 1, kaleidoMix: 0,
+            decayTau: 0.88, blur: 0.85, hueShift: 0.05, chroma: 0.3,
+            frequency: 8, thickness: 0.008, radiusOffset: 0,
+            count: 1, radius: 0.2, softness: 1, intensity: 1,
+            sparkle: 0.12, saturation: 1.28, vignette: 0.22,
+            exposure: 2.35, baseLevel: 0.02, emissionGain: 0.85, pulseAmount: 0.1,
+            bpm: 90, centerHole: 0, centerDark: 0.05, grain: 0.0007,
+            color0: SIMD3(0.1, 0.35, 0.95), color1: SIMD3(0.35, 0.95, 0.9), color2: SIMD3(0.85, 0.95, 1),
+            base: SIMD3(0.005, 0.012, 0.03), albumInfluence: 0
+        )),
+        make(.flame, "Flame Lift", cycles: true, album: 0.42, PresetParams(
+            expansion: 0.04, rotation: 0.06, rotationInner: 0.02, kaleidoSpin: 0,
+            warp: 0.24, warpFrequency: 3.8, warpSpeed: 0.32, radialWarp: 0.02,
+            centerAmplitude: 0.01, goo: 0.18, folds: 1, kaleidoMix: 0,
+            decayTau: 0.95, blur: 1.05, hueShift: 0.03, chroma: 0.5,
+            frequency: 4, thickness: 0.02, radiusOffset: 0,
+            count: 4, radius: 0.2, softness: 1, intensity: 1.05,
+            sparkle: 0.2, saturation: 1.32, vignette: 0.36,
+            exposure: 2.55, baseLevel: 0, emissionGain: 0.9, pulseAmount: 0.14,
+            bpm: 98, centerHole: 0.02, centerDark: 0.25, grain: 0.0008,
+            color0: SIMD3(0.85, 0.05, 0.02), color1: SIMD3(1, 0.42, 0.05), color2: SIMD3(1, 0.86, 0.28),
+            base: SIMD3(0.01, 0, 0), albumInfluence: 0
         ))
     ]
+
+    static func mode(at slot: Int) -> Int {
+        guard all.indices.contains(slot) else { return 0 }
+        return all[slot].mode.rawValue
+    }
 
     static func index(after index: Int, step: Int) -> Int {
         let count = all.count

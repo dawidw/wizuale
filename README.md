@@ -8,7 +8,7 @@ The picture does not listen to the audio. Apple Music is protected, and this app
 
 ## Pictures
 
-Six MilkDrop presets play on their own and blend into the next over a few seconds. Without a matched tempo they hold for about 45 seconds. With a matched tempo they wait for the next 8-bar phrase after that, so the change lands on the music:
+Sixteen MilkDrop presets play on their own. They morph into the next over a few seconds: the new stroke crossfades, and the warp eases across the same window instead of cutting. Without a matched tempo they hold for about 45 seconds. With a matched tempo they wait for the next 8-bar phrase after that, so the change lands on the music. Each picture also wanders a little on its own (zoom, spin, warp, hue), retargeting every few seconds.
 
 1. **Spiral Star** — eight neon arms, pink, gold, and teal, over a dark warp
 2. **Petal Veil** — a green spiral of glowing petals with fine contour lines
@@ -16,8 +16,18 @@ Six MilkDrop presets play on their own and blend into the next over a few second
 4. **Neon Tunnel** — four-fold rings rushing outward
 5. **Liquid Silk** — slow ribbons
 6. **Prism Wheel** — a twelve-spoke wheel
+7. **Scope Trace** — a rose-curve oscilloscope the feedback turns into a spirograph
+8. **Mirror Hall** — mirrored arcs repeated in a six-fold kaleidoscope
+9. **Plasma Veil** — thin contour lines of a plasma field
+10. **Warp Stars** — a starfield stretched by a fast zoom
+11. **Fractal Well** — nested log-zoom rings
+12. **Color Bleed** — soft color smears with a long trail and a slow spin
+13. **Vortex Eye** — a tight swirling spiral
+14. **Mesh Tide** — an undulating grid of thin lines
+15. **Water Glass** — ripples moving out from a drifting center
+16. **Flame Lift** — rising flame tongues
 
-Four quieter pictures stay until you swipe away: **Aurora**, **Soft Bloom**, **Night Border**, and **Slow Drift**.
+Four quieter pictures stay until you swipe away: **Aurora**, **Soft Bloom**, **Night Border**, and **Slow Drift**. They sit between Prism Wheel and Scope Trace in the swipe order, and the automatic rotation skips them.
 
 Each frame is the previous frame, warped (zoom, rotation, swirl, kaleidoscope), faded, and hue-shifted, with a thin new stroke drawn on top. That feedback is what makes the trails.
 
@@ -110,6 +120,6 @@ The shader comment at the top of `Shaders.metal` names the uniform fields. `beat
 
 ## What was not run here
 
-This project was prepared on a machine without Xcode, so it has not been compiled, signed, or launched on an Apple TV. The pictures were tuned by running the same warp math in a WebGL preview, not by running the Metal binary. MusicKit, the Siri Remote, album-color extraction, the idle-timer lock, and the GetSongBPM lookup are written to the current tvOS 17 APIs and have not been exercised on hardware. `SystemMusicPlayer.playbackTime` is the documented playhead (it can be NaN when MusicKit has no finite time). The beat clock assumes normal speed between those samples.
+This project was prepared on a machine without Xcode, so it has not been compiled, signed, or launched on an Apple TV. The pictures, including the newer MilkDrop set, were not compiled here. The older pictures were tuned by running the same warp math in a WebGL preview, not by running the Metal binary. MusicKit, the Siri Remote, album-color extraction, the idle-timer lock, and the GetSongBPM lookup are written to the current tvOS 17 APIs and have not been exercised on hardware. `SystemMusicPlayer.playbackTime` is the documented playhead (it can be NaN when MusicKit has no finite time). The beat clock assumes normal speed between those samples.
 
 On a Mac, open the project and run it on your Apple TV. If the shader fails to compile, Xcode's issue navigator will point at `Shaders.metal`. If the uniform struct ever disagrees with Swift, the screen shows that message instead of a scrambled picture.
