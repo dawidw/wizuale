@@ -98,8 +98,8 @@
 		B100000000000000000001D /* ProjectMRenderState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMRenderState.swift; sourceTree = "<group>"; };
 		B100000000000000000001E /* ProjectMCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMCanvasView.swift; sourceTree = "<group>"; };
 		B100000000000000000001F /* Wizuale-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Wizuale-Bridging-Header.h"; sourceTree = "<group>"; };
-		B100000000000000000002A /* projectm-tvos.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = projectm-tvos.xcframework; path = ThirdParty/projectm-tvos.xcframework; sourceTree = "<group>"; };
-		B100000000000000000002B /* Presets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Presets; path = Wizuale/Resources/Presets; sourceTree = "<group>"; };
+		B100000000000000000002A /* projectm-tvos.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = projectm-tvos.xcframework; path = ThirdParty/projectm-tvos.xcframework; sourceTree = SOURCE_ROOT; };
+		B100000000000000000002B /* Presets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Presets; path = Wizuale/Resources/Presets; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */

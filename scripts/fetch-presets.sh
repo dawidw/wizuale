@@ -31,13 +31,31 @@ mkdir -p "$FILES" "$TEX"
 rm -f "$FILES"/*.milk "$FILES"/*.milk2 2>/dev/null || true
 
 echo "==> Selecting $COUNT .milk files (sorted, stable order)"
-find "$TMP/cream" -iname '*.milk' | LC_ALL=C sort | head -n "$COUNT" | while read -r path; do
-  base="$(basename "$path")"
-  cp "$path" "$FILES/$base"
-done
+python3 - "$TMP/cream" "$FILES" "$COUNT" <<'PY'
+import os, sys, random, shutil
+src, dst, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
+bydir = {}
+for r, _, fs in os.walk(src):
+    if '/.git' in r: continue
+    for f in fs:
+        if f.lower().endswith('.milk'):
+            bydir.setdefault(os.path.relpath(r, src).split(os.sep)[0], []).append(os.path.join(r, f))
+rng = random.Random(42)
+for k in bydir: bydir[k].sort(); rng.shuffle(bydir[k])
+picked, keys = [], sorted(bydir)
+while len(picked) < n and any(bydir.values()):
+    for k in keys:
+        if bydir[k] and len(picked) < n: picked.append(bydir[k].pop())
+seen=set()
+for p in picked:
+    b=os.path.basename(p)
+    if b in seen: continue
+    seen.add(b); shutil.copy(p, os.path.join(dst, b))
+print(len(seen), "picked from", len(keys), "categories")
+PY
 
 echo "==> Copying texture pack"
-cp -R "$TMP/textures"/. "$TEX/" 2>/dev/null || cp -R "$TMP/textures"/* "$TEX/" || true
+rm -rf "$TMP/textures/.git"; cp -R "$TMP/textures"/. "$TEX/"
 
 echo "==> Writing manifest.json"
 python3 - <<PY

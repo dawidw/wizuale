@@ -23,7 +23,7 @@ final class ProjectMController {
         let paths = MilkPresetCatalog.textureSearchPaths()
         if !paths.isEmpty {
             paths.withCStringArray { cPaths, count in
-                projectm_set_texture_search_paths(created, cPaths, count)
+                projectm_set_texture_search_paths(created, UnsafeMutablePointer(mutating: cPaths), count)
             }
         }
         loadPreset(index: 0, smooth: false)

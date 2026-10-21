@@ -2,7 +2,7 @@ import Foundation
 
 /// Stock `.milk` presets bundled with the TV app. The Mic app reads the same
 /// `manifest.json` from its copy of `Wizuale/Resources/Presets` (see `project.yml`).
-struct MilkPreset: Equatable, Identifiable, Sendable {
+struct MilkPreset: Equatable, Identifiable, Sendable, Codable {
     var id: Int
     var name: String
     /// Path relative to the `Presets` folder in the bundle (e.g. `files/foo.milk`).

@@ -331,7 +331,7 @@ enum MicWire {
     private static func readZoom(_ data: Data, _ offset: Int) -> Float? {
         let value = Float(bitPattern: readUInt32(data, offset))
         guard value.isFinite else { return nil }
-        return MicTuning.clampZoom(value)
+        return min(max(value, 0.5), 2.0)
     }
 
     private static func readBoost(_ data: Data, _ offset: Int) -> Float? {

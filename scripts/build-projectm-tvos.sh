@@ -40,6 +40,8 @@ else
   git -C "$SRC" checkout "$TAG" 2>/dev/null || git -C "$SRC" checkout master
 fi
 
+git -C "$SRC" submodule update --init --recursive --depth 1
+
 echo "==> Installing API headers to $HEADERS_DST"
 rm -rf "$HEADERS_DST/projectM-4"
 cp -R "$SRC/src/api/include/projectM-4" "$HEADERS_DST/"
@@ -64,10 +66,15 @@ build_one() {
     -DENABLE_INSTALL=OFF \
     -DENABLE_GLES=ON \
     -DENABLE_SYSTEM_PROJECTM_EVAL=OFF \
-    -DBUILD_TESTING=OFF
+    -DBUILD_TESTING=OFF >&2
 
-  cmake --build "$BUILD_DIR" --target projectM
-  echo "$BUILD_DIR/src/libprojectM/libprojectM.a"
+  cmake --build "$BUILD_DIR" >&2
+  # merge projectM + its static deps (projectm-eval etc.) into one archive
+  local LIBS
+  LIBS="$(find "$BUILD_DIR" -name '*.a' | tr '\n' ' ')"
+  echo "libs: $LIBS" >&2
+  libtool -static -o "$BUILD_DIR/libprojectM-merged.a" $LIBS >&2
+  echo "$BUILD_DIR/libprojectM-merged.a"
 }
 
 echo "==> Building for appletvos (device)"
