@@ -37,6 +37,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
     private let warpPipeline: MTLRenderPipelineState
     private let presentPipeline: MTLRenderPipelineState
     private let state: RenderState
+    private let beatClock: BeatClock
     private let gate = DispatchSemaphore(value: 1)
 
     private var textures: [MTLTexture] = []
@@ -52,7 +53,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
     private var albumWeight: Float = 0
     private var album: AlbumColors?
 
-    init(device: MTLDevice, state: RenderState) throws {
+    init(device: MTLDevice, state: RenderState, beatClock: BeatClock) throws {
         if let problem = FrameUniforms.layoutProblem() {
             throw RendererError.layout(problem)
         }
@@ -62,6 +63,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
         self.device = device
         self.queue = queue
         self.state = state
+        self.beatClock = beatClock
 
         let snapshot = state.snapshot()
         let index = min(max(snapshot.targetIndex, 0), max(PresetLibrary.all.count - 1, 0))
@@ -132,6 +134,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
         guard ensureTextures(size) else { return }
 
         step(dt: dt, snapshot: snapshot)
+        let musical = beatClock.sample(fallbackBPM: displayed.bpm)
         var uniforms = displayed.makeUniforms(
             resolution: SIMD2(Float(size.x), Float(size.y)),
             time: time,
@@ -140,8 +143,11 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
             modeTo: modeTo,
             modeT: modeT,
             album: album,
-            albumWeight: albumWeight
+            albumWeight: albumWeight,
+            beat: SIMD4(musical.kick, musical.downbeat, musical.beatPhase, musical.barPhase),
+            music: SIMD4(musical.phrasePhase, musical.beatsPerBar, musical.hasRealTempo ? 1 : 0, 0)
         )
+        uniforms.tempo.x = musical.bpm
 
         let writeIndex = 1 - readIndex
         guard let warp = command.makeRenderCommandEncoder(descriptor: Self.pass(textures[writeIndex])) else {

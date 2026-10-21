@@ -53,6 +53,11 @@ final class RenderState: @unchecked Sendable {
 @MainActor
 final class VisualSession: ObservableObject {
     let renderState = RenderState()
+    let beatClock: BeatClock
+
+    init(beatClock: BeatClock) {
+        self.beatClock = beatClock
+    }
 
     @Published private(set) var presetIndex = 0
     @Published private(set) var overlayVisible = false
@@ -120,17 +125,42 @@ final class VisualSession: ObservableObject {
     }
 
     /// MilkDrop pictures change on their own. Aurora and the other quiet ones wait.
+    /// With a matched tempo the change waits for the next 8-bar phrase after the hold.
     private func armCycle() {
         cycleToken = UUID()
         let token = cycleToken
         let index = presetIndex
         guard PresetLibrary.all.indices.contains(index),
               PresetLibrary.all[index].cyclesAutomatically else { return }
-        let hold = UInt64(PresetLibrary.cycleHold * 1_000_000_000)
+        let started = Date()
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: hold)
-            await self?.advanceCycle(token: token, from: index)
+            await self?.waitForCycle(token: token, from: index, started: started)
         }
+    }
+
+    private func waitForCycle(token: UUID, from index: Int, started: Date) async {
+        let earliest = started.addingTimeInterval(PresetLibrary.cycleHold)
+        while token == cycleToken, presetIndex == index {
+            let now = Date()
+            if now < earliest {
+                let nap = min(earliest.timeIntervalSince(now), 0.5)
+                try? await Task.sleep(nanoseconds: sleepNanos(nap))
+                continue
+            }
+            if let remaining = beatClock.secondsUntilPhraseBoundary(), remaining.isFinite {
+                if remaining <= 0.1 { break }
+                let nap = min(max(remaining - 0.04, 0.05), 1.0)
+                try? await Task.sleep(nanoseconds: sleepNanos(nap))
+                continue
+            }
+            break
+        }
+        advanceCycle(token: token, from: index)
+    }
+
+    private func sleepNanos(_ seconds: TimeInterval) -> UInt64 {
+        guard seconds.isFinite, seconds > 0 else { return 0 }
+        return UInt64(seconds * 1_000_000_000)
     }
 
     private func advanceCycle(token: UUID, from index: Int) {

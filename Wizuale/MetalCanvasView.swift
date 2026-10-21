@@ -5,6 +5,7 @@ import SwiftUI
 /// `MTKView.delegate` is weak, and a released renderer draws nothing.
 struct MetalCanvasView: UIViewRepresentable {
     var state: RenderState
+    var beatClock: BeatClock
     var paused: Bool
     @Binding var failure: String?
 
@@ -31,7 +32,7 @@ struct MetalCanvasView: UIViewRepresentable {
         }
         view.device = device
         do {
-            let renderer = try VisualRenderer(device: device, state: state)
+            let renderer = try VisualRenderer(device: device, state: state, beatClock: beatClock)
             context.coordinator.renderer = renderer
             view.delegate = renderer
         } catch {

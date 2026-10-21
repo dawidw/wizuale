@@ -11,6 +11,8 @@ struct NowPlayingOverlay: View {
     var pinned: Bool
     var isPlaying: Bool
     var visible: Bool
+    var tempoDetail: String = ""
+    var showsTempoCredit: Bool = false
 
     private var headline: String {
         title.isEmpty ? "Nothing playing" : title
@@ -73,6 +75,18 @@ struct NowPlayingOverlay: View {
                     .font(.system(size: 24, weight: .regular))
                     .foregroundStyle(.white.opacity(0.78))
                     .lineLimit(1)
+                if !tempoDetail.isEmpty {
+                    Text(tempoDetail)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
+                if showsTempoCredit {
+                    Text("Tempo data by GetSongBPM")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
+                }
             }
             .padding(.trailing, 8)
         }

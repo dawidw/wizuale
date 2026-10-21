@@ -45,5 +45,9 @@ targets:
         ENABLE_PREVIEWS: YES
         TARGETED_DEVICE_FAMILY: "3"
         TVOS_DEPLOYMENT_TARGET: "17.0"
+        DEVELOPMENT_TEAM: 59Z33S5F96
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
     scheme:
       gatherCoverageData: false
