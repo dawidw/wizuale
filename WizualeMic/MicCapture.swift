@@ -2,6 +2,7 @@ import AVFoundation
 import Combine
 import Foundation
 import Network
+import os
 import QuartzCore
 import UIKit
 
@@ -9,6 +10,8 @@ import UIKit
 /// `linked` is true only after the TV has answered, not when the socket opens.
 /// The screen stays awake for as long as this is running.
 final class MicCapture: ObservableObject {
+    private let log = Logger(subsystem: "app.wizuale", category: "MicPhone")
+
     @Published private(set) var running = false
     @Published private(set) var linked = false
     @Published private(set) var status = "Tap Start. Allow the microphone and local network when asked."
@@ -99,15 +102,10 @@ final class MicCapture: ObservableObject {
     private var confirmed = false
     private var lastAck: CFTimeInterval = 0
     private var sendToken = 0
-    private var expecting = false
-    private var expectCycling = true
-    private var expectPreset = 0
-    private var expectUntil: CFTimeInterval = 0
-    private var expectResends = 0
-    /// Picture the TV was showing when this phone asked for a change.
-    /// An ack that still names it is stale and does not move the highlight.
-    private var stalePreset = 0
-    private var staleCycling = true
+    /// After a tap, ignore acks that still name the pre-tap picture for this long.
+    private var tapIgnoreUntil: CFTimeInterval = 0
+    private var tapStalePreset = 0
+    private var tapStaleCycling = true
     private var sensHold: Float = 1
     private var latHold = 0
     private var sensHoldUntil: CFTimeInterval = 0
@@ -167,7 +165,7 @@ final class MicCapture: ObservableObject {
     }
 
     /// `PresetWire.auto` restores auto cycling. Any other value asks the TV to
-    /// lock that index. The highlight moves when the TV's ack comes back.
+    /// lock that index. The strip updates immediately; the TV ack keeps it honest.
     func selectPreset(_ choice: Int) {
         let wire: Int16
         if choice < 0 {
@@ -176,8 +174,9 @@ final class MicCapture: ObservableObject {
             guard PresetLibrary.all.indices.contains(choice) else { return }
             wire = Int16(clamping: choice)
         }
-        let previous = activePreset
-        let previousCycling = cycling
+        let stalePreset = activePreset
+        let staleCycling = cycling
+        applyPictureHighlight(choice: choice)
         flag.lock()
         commandSequence &+= 1
         if commandSequence == 0 { commandSequence = 1 }
@@ -186,13 +185,9 @@ final class MicCapture: ObservableObject {
         let packet = MicWire.encodeCommand(sequence: seq, preset: wire)
         network.async { [weak self] in
             guard let self else { return }
-            self.expecting = true
-            self.expectCycling = wire == PresetWire.auto
-            self.expectPreset = Int(wire)
-            self.stalePreset = previous
-            self.staleCycling = previousCycling
-            self.expectUntil = CACurrentMediaTime() + 0.45
-            self.expectResends = 0
+            self.tapIgnoreUntil = CACurrentMediaTime() + 0.4
+            self.tapStalePreset = stalePreset
+            self.tapStaleCycling = staleCycling
             self.enqueueCommand(packet)
         }
     }
@@ -660,10 +655,15 @@ final class MicCapture: ObservableObject {
         connection.receiveMessage { [weak self] data, _, _, error in
             self?.network.async {
                 guard let self, self.receiving else { return }
-                if let data, let packet = MicWire.decode(data) {
-                    if case .ack(let preset, let cycling, let latency, let sensitivity) = packet {
-                        self.noteAck(preset: preset, cycling: cycling)
-                        self.noteRemoteTuning(latency: latency, sensitivity: sensitivity)
+                if let data {
+                    if let packet = MicWire.decode(data) {
+                        if case .ack(let preset, let cycling, let latency, let sensitivity) = packet {
+                            self.log.debug("ack received preset=\(preset) cycling=\(cycling)")
+                            self.noteAck(preset: preset, cycling: cycling)
+                            self.noteRemoteTuning(latency: latency, sensitivity: sensitivity)
+                        }
+                    } else if data.count >= 6, MicWire.peekKind(data) == MicWire.kindAck {
+                        self.log.error("ack decode failed (\(data.count) bytes)")
                     }
                 }
                 if error != nil {
@@ -687,37 +687,23 @@ final class MicCapture: ObservableObject {
         confirmed = true
         let name = connectedName.isEmpty ? "Apple TV" : connectedName
         let index = Int(preset)
-        guard PresetLibrary.all.indices.contains(index) else { return }
-        let matches = expecting && (expectCycling ? ackCycling : (!ackCycling && index == expectPreset))
-        let stale = expecting && ackCycling == staleCycling && index == stalePreset && !matches
-        if matches {
-            expecting = false
-        } else if stale && CACurrentMediaTime() < expectUntil {
-            publish(status: "The picture is following this phone.", tv: name, linked: true)
+        guard PresetLibrary.all.indices.contains(index) else {
+            log.error("ack ignored invalid preset index \(index)")
             return
-        } else if stale && expectResends < 1 {
-            expectResends += 1
-            expectUntil = CACurrentMediaTime() + 0.45
-            if let lastCommand {
-                pendingCommands.append(lastCommand)
-                pump()
-            }
-            publish(status: "The picture is following this phone.", tv: name, linked: true)
-            return
-        } else {
-            // The TV moved on, or the request landed. Its ack is the picture.
-            expecting = false
         }
-        let picture = PresetLibrary.all.indices.contains(index) ? PresetLibrary.all[index].name : "this picture"
+        let now = CACurrentMediaTime()
+        if now < tapIgnoreUntil,
+           index == tapStalePreset,
+           ackCycling == tapStaleCycling {
+            log.debug("ack ignored stale preset=\(index) cycling=\(ackCycling)")
+            publish(status: "The picture is following this phone.", tv: name, linked: true)
+            return
+        }
+        log.debug("highlight applied preset=\(index) cycling=\(ackCycling)")
+        let picture = PresetLibrary.all[index].name
         let detail = ackCycling ? "Auto is on. Showing \(picture)." : "Locked on \(picture)."
-        publish(
-            status: detail,
-            tv: name,
-            linked: true,
-            preset: index,
-            cycling: ackCycling,
-            known: true
-        )
+        applyPictureHighlight(preset: index, cycling: ackCycling, known: true)
+        publish(status: detail, tv: name, linked: true)
     }
 
     private func noteRemoteTuning(latency: Int?, sensitivity: Float?) {
@@ -814,15 +800,33 @@ final class MicCapture: ObservableObject {
         receiving = false
         confirmed = false
         lastAck = 0
+        tapIgnoreUntil = 0
+    }
+
+    /// Optimistic strip highlight from a tap (`choice` is `-1` or `PresetWire.auto` for Auto).
+    private func applyPictureHighlight(choice: Int) {
+        if choice < 0 || choice == Int(PresetWire.auto) {
+            applyPictureHighlight(preset: activePreset, cycling: true, known: true)
+        } else if PresetLibrary.all.indices.contains(choice) {
+            applyPictureHighlight(preset: choice, cycling: false, known: true)
+        }
+    }
+
+    private func applyPictureHighlight(preset: Int, cycling: Bool, known: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.running else { return }
+            if PresetLibrary.all.indices.contains(preset) {
+                self.activePreset = preset
+            }
+            self.cycling = cycling
+            self.pictureKnown = known
+        }
     }
 
     private func publish(
         status: String? = nil,
         tv: String? = nil,
-        linked: Bool? = nil,
-        preset: Int? = nil,
-        cycling: Bool? = nil,
-        known: Bool? = nil
+        linked: Bool? = nil
     ) {
         let epoch = epochNow()
         DispatchQueue.main.async { [weak self] in
@@ -830,11 +834,6 @@ final class MicCapture: ObservableObject {
             if let status { self.status = status }
             if let tv { self.tvName = tv }
             if let linked { self.linked = linked }
-            if let preset, PresetLibrary.all.indices.contains(preset) {
-                self.activePreset = preset
-            }
-            if let cycling { self.cycling = cycling }
-            if let known { self.pictureKnown = known }
         }
     }
 }

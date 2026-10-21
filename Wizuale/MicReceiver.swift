@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import Network
+import os
 import QuartzCore
 import UIKit
 
@@ -30,6 +31,8 @@ struct MicDrive: Sendable {
 /// and answers with the picture that is on screen. The draw loop calls
 /// `sample` on its own thread. The listener queue stores bytes and sends acks.
 final class MicReceiver: @unchecked Sendable {
+    private let log = Logger(subsystem: "app.wizuale", category: "MicTV")
+
     var onStatus: (@Sendable (Bool, String) -> Void)?
     /// Phone preset choice. `-1` means go back to auto. Called on the main queue.
     var onCommand: (@Sendable (Int) -> Void)?
@@ -81,6 +84,10 @@ final class MicReceiver: @unchecked Sendable {
     private var shownIndex = 0
     private var shownCycling = true
     private var lastAckTime: CFTimeInterval = 0
+    /// Last phone peer that sent a packet. Replies go here first so acks land on the
+    /// same NWConnection the Mic app is receiving on.
+    private var lastPeerKey: ObjectIdentifier?
+    private var ackHeartbeat: DispatchWorkItem?
 
     private let hitCap: Float = 3.5
 
@@ -290,6 +297,7 @@ final class MicReceiver: @unchecked Sendable {
             }
             created.start(queue: queue)
             listener = created
+            scheduleAckHeartbeat()
         } catch {
             listener = nil
             queue.asyncAfter(deadline: .now() + 2) { [weak self] in
@@ -328,7 +336,7 @@ final class MicReceiver: @unchecked Sendable {
             self?.queue.async {
                 guard let self, self.peers[key] != nil else { return }
                 if let data {
-                    self.ingest(data)
+                    self.ingest(data, from: key)
                 }
                 if error != nil {
                     self.drop(key)
@@ -339,7 +347,8 @@ final class MicReceiver: @unchecked Sendable {
         }
     }
 
-    private func ingest(_ data: Data) {
+    private func ingest(_ data: Data, from key: ObjectIdentifier) {
+        lastPeerKey = key
         guard let packet = MicWire.decode(data) else { return }
         switch packet {
         case .audio(let sequence, let features, let sens):
@@ -458,14 +467,36 @@ final class MicReceiver: @unchecked Sendable {
         let sens = sensitivity
         lock.unlock()
         let packet = MicWire.encodeAck(preset: preset, cycling: cycling, latencyMs: ms, sensitivity: sens)
-        for connection in peers.values {
+        let targets: [NWConnection]
+        if let lastPeerKey, let peer = peers[lastPeerKey] {
+            targets = [peer]
+        } else {
+            targets = Array(peers.values)
+        }
+        guard !targets.isEmpty else { return }
+        log.debug("ack sent preset=\(preset) cycling=\(cycling) peers=\(targets.count)")
+        for connection in targets {
             connection.send(content: packet, completion: .contentProcessed { _ in })
         }
+    }
+
+    private func scheduleAckHeartbeat() {
+        ackHeartbeat?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.listener != nil else { return }
+            self.sendAck(force: true)
+            self.scheduleAckHeartbeat()
+        }
+        ackHeartbeat = work
+        queue.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
     private func drop(_ key: ObjectIdentifier) {
         peers[key]?.cancel()
         peers[key] = nil
+        if lastPeerKey == key {
+            lastPeerKey = nil
+        }
     }
 
     private static func bonjourName(_ raw: String) -> String {

@@ -83,6 +83,13 @@ enum MicWire {
     static let settingsZoomBytes = 20
     static let boostBytes = 12
 
+    /// Kind field at byte offset 4, without full decode.
+    static func peekKind(_ data: Data) -> UInt16? {
+        guard data.count >= 6 else { return nil }
+        guard readUInt32(data, 0) == magic else { return nil }
+        return readUInt16(data, 4)
+    }
+
     static func encodeAudio(sequence: UInt16, features: MicFeatures, sensitivity: Float) -> Data {
         var data = Data(capacity: audioBytes)
         write(magic, &data)
