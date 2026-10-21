@@ -366,14 +366,23 @@ final class MicCapture: ObservableObject {
             features: features,
             sensitivity: currentSensitivity()
         )
-        let pcmPacked = MicPCM.monoInt16(from: buffer)
-        pcmSequence &+= 1
-        if pcmSequence == 0 { pcmSequence = 1 }
-        let pcmPacket = MicWire.encodePCM(
-            sequence: pcmSequence,
-            sampleRate: pcmPacked.sampleRate,
-            samples: pcmPacked.samples
-        )
+        // iOS often delivers ~4800 frames per tap regardless of bufferSize,
+        // so split the whole buffer into wire-sized chunks instead of truncating.
+        let pcmPacked = MicPCM.monoInt16(from: buffer, maxFrames: Int.max)
+        var pcmPackets: [Data] = []
+        var start = 0
+        let chunk = MicWire.pcmMaxSamples
+        while start < pcmPacked.samples.count {
+            let end = min(start + chunk, pcmPacked.samples.count)
+            pcmSequence &+= 1
+            if pcmSequence == 0 { pcmSequence = 1 }
+            pcmPackets.append(MicWire.encodePCM(
+                sequence: pcmSequence,
+                sampleRate: pcmPacked.sampleRate,
+                samples: Array(pcmPacked.samples[start..<end])
+            ))
+            start = end
+        }
         let loud = features.loudness
         let bass = features.bass
         let now = CACurrentMediaTime()
@@ -381,7 +390,7 @@ final class MicCapture: ObservableObject {
         if publishUI { lastUI = now }
         network.async { [weak self] in
             self?.enqueueAudio(packet)
-            self?.enqueuePCM(pcmPacket)
+            for p in pcmPackets { self?.enqueuePCM(p) }
             if publishUI { self?.refreshLink() }
         }
         if publishUI {
@@ -780,8 +789,8 @@ final class MicCapture: ObservableObject {
     private func enqueuePCM(_ data: Data) {
         guard linkWanted() else { return }
         pendingPCM.append(data)
-        if pendingPCM.count > 4 {
-            pendingPCM.removeFirst(pendingPCM.count - 4)
+        if pendingPCM.count > 24 {
+            pendingPCM.removeFirst(pendingPCM.count - 24)
         }
         pump()
     }
