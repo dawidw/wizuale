@@ -49,6 +49,13 @@ final class MicCapture: ObservableObject {
             scheduleSettings()
         }
     }
+    @Published var albumArt: Bool = MicTuning.loadAlbumArt() {
+        didSet {
+            guard !applyingRemote, albumArt != oldValue else { return }
+            MicTuning.saveAlbumArt(albumArt)
+            scheduleSettings()
+        }
+    }
 
     private let engine = AVAudioEngine()
     private let network = DispatchQueue(label: "app.wizuale.mic.send")
@@ -280,11 +287,14 @@ final class MicCapture: ObservableObject {
         setWantsLink(true)
         let sens = sensitivity
         let latency = latencyMs
+        let art = albumArt
         network.async { [weak self] in
             guard let self else { return }
             if self.lastSettings == nil {
                 self.settingsSequence = 1
-                self.lastSettings = MicWire.encodeSettings(sequence: 1, latencyMs: latency, sensitivity: sens)
+                self.lastSettings = MicWire.encodeSettings(
+                    sequence: 1, latencyMs: latency, sensitivity: sens, albumArt: art
+                )
             }
             self.startBrowser()
         }
@@ -457,12 +467,13 @@ final class MicCapture: ObservableObject {
     private func scheduleSettings() {
         let sens = sensitivity
         let latency = latencyMs
+        let art = albumArt
         flag.lock()
         settingsSequence &+= 1
         if settingsSequence == 0 { settingsSequence = 1 }
         let seq = settingsSequence
         flag.unlock()
-        let packet = MicWire.encodeSettings(sequence: seq, latencyMs: latency, sensitivity: sens)
+        let packet = MicWire.encodeSettings(sequence: seq, latencyMs: latency, sensitivity: sens, albumArt: art)
         network.async { [weak self] in
             guard let self else { return }
             self.sensHold = sens

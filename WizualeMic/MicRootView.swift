@@ -10,7 +10,7 @@ struct MicRootView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         Text("WIZUALE MIC")
@@ -39,36 +39,41 @@ struct MicRootView: View {
                         meter(title: "Bass", value: mic.bassLevel)
                         sensitivitySlider
                         latencySlider
+                        albumArtToggle
                         calibrateControl
                     }
                     .padding(.horizontal, 28)
-                    .padding(.top, 28)
+                    .padding(.top, 20)
+                    .padding(.bottom, 8)
+
+                    PresetStrip(
+                        active: mic.activePreset,
+                        cycling: mic.cycling,
+                        known: mic.pictureKnown
+                    ) { choice in
+                        mic.selectPreset(choice)
+                    }
+                    .padding(.bottom, 16)
                 }
 
-                PresetStrip(
-                    active: mic.activePreset,
-                    cycling: mic.cycling,
-                    known: mic.pictureKnown
-                ) { choice in
-                    mic.selectPreset(choice)
+                HStack(spacing: 12) {
+                    dropButton
+                    Button(action: { mic.toggle() }) {
+                        Text(mic.running ? "Stop" : "Start")
+                            .font(.system(size: 17, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(mic.running ? Color.white.opacity(0.14) : Color.white)
+                            .foregroundStyle(mic.running ? Color.white : Color.black)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
                 }
-
-                dropButton
-                    .padding(.horizontal, 28)
-
-                Button(action: { mic.toggle() }) {
-                    Text(mic.running ? "Stop" : "Start")
-                        .font(.system(size: 28, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 22)
-                        .background(mic.running ? Color.white.opacity(0.14) : Color.white)
-                        .foregroundStyle(mic.running ? Color.white : Color.black)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 28)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+                .background(Color.black)
             }
-            .padding(.bottom, 24)
         }
         .preferredColorScheme(.dark)
         .onChange(of: scenePhase) { _, phase in
@@ -135,6 +140,16 @@ struct MicRootView: View {
         }
     }
 
+    private var albumArtToggle: some View {
+        Toggle(isOn: $mic.albumArt) {
+            Text("ALBUM ART COLORS")
+                .font(.system(size: 13, weight: .semibold))
+                .tracking(1.6)
+                .foregroundStyle(.white.opacity(0.5))
+        }
+        .tint(.white)
+    }
+
     private var calibrateControl: some View {
         VStack(alignment: .leading, spacing: 8) {
             if mic.calibrating {
@@ -170,9 +185,9 @@ struct MicRootView: View {
 
     private var dropButton: some View {
         Text(mic.dropActive ? "Dropping" : "Drop")
-            .font(.system(size: 28, weight: .semibold))
+            .font(.system(size: 17, weight: .semibold))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 22)
+            .frame(height: 48)
             .background(mic.dropActive ? Color.white : Color.white.opacity(0.14))
             .foregroundStyle(mic.dropActive ? Color.black : Color.white)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))

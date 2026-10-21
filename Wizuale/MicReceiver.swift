@@ -35,6 +35,8 @@ final class MicReceiver: @unchecked Sendable {
     var onCommand: (@Sendable (Int) -> Void)?
     /// Latency in milliseconds and sensitivity. Called on the main queue when a settings packet arrives.
     var onTuning: (@Sendable (Int, Float) -> Void)?
+    /// Whether album art may tint the picture. Called on the main queue when a settings packet says so.
+    var onAlbumArt: (@Sendable (Bool) -> Void)?
 
     private struct Stamp {
         var features: MicFeatures
@@ -52,6 +54,7 @@ final class MicReceiver: @unchecked Sendable {
     private var lastArrival: CFTimeInterval = 0
     private var sensitivity: Float
     private var latencyMs: Int
+    private var albumArt: Bool
     private var source: MicInputSource
     private var localSequence: UInt16 = 0
     private var dropTarget: Float = 0
@@ -81,6 +84,7 @@ final class MicReceiver: @unchecked Sendable {
     init() {
         sensitivity = MicTuning.loadSensitivity()
         latencyMs = MicTuning.loadLatency()
+        albumArt = MicTuning.loadAlbumArt()
         source = MicTuning.loadSource()
     }
 
@@ -353,8 +357,8 @@ final class MicReceiver: @unchecked Sendable {
                     handler(choice)
                 }
             }
-        case .settings(_, let latency, let sens):
-            adoptSettings(latencyMs: Int(latency), sensitivity: sens)
+        case .settings(_, let latency, let sens, let art):
+            adoptSettings(latencyMs: Int(latency), sensitivity: sens, albumArt: art)
             sendAck(force: true)
         case .boost(_, let amount):
             lock.lock()
@@ -381,18 +385,30 @@ final class MicReceiver: @unchecked Sendable {
         }
     }
 
-    private func adoptSettings(latencyMs ms: Int, sensitivity sens: Float) {
+    private func adoptSettings(latencyMs ms: Int, sensitivity sens: Float, albumArt art: Bool?) {
         let clampedMs = MicTuning.clampLatency(ms)
         let clamped = MicTuning.clampSensitivity(sens)
         lock.lock()
         latencyMs = clampedMs
         sensitivity = clamped
+        var artChanged = false
+        if let art, art != albumArt {
+            albumArt = art
+            artChanged = true
+        }
         lock.unlock()
         MicTuning.saveLatency(clampedMs)
         MicTuning.saveSensitivity(clamped)
+        if artChanged, let art {
+            MicTuning.saveAlbumArt(art)
+        }
         let handler = onTuning
+        let artHandler = onAlbumArt
         DispatchQueue.main.async {
             handler?(clampedMs, clamped)
+            if artChanged, let art {
+                artHandler?(art)
+            }
         }
     }
 

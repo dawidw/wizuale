@@ -10,7 +10,7 @@ struct PresetStrip: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("PICTURE")
+            Text("PRESETS")
                 .font(.system(size: 13, weight: .semibold))
                 .tracking(1.6)
                 .foregroundStyle(.white.opacity(0.5))

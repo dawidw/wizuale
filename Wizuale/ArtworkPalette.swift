@@ -1,8 +1,10 @@
 import simd
 import UIKit
 
-/// Three saturated colors from album art. Near-white text colors from
-/// `Artwork` are ignored on purpose; the pixels of the cover are the palette.
+/// Three saturated colors from album art. Near-white, near-black, and grey
+/// pixels are skipped. What remains is pushed toward a real hue and never
+/// brighter than about 0.75, so a white cover cannot wash the picture out.
+/// Nil means the cover had no usable color and the preset palette should stay.
 enum ArtworkPalette {
     static func extract(from image: UIImage) -> AlbumColors? {
         let side = 40
@@ -37,7 +39,11 @@ enum ArtworkPalette {
             g = min(max(g, 0), 1)
             b = min(max(b, 0), 1)
             let (hue, saturation, value) = hsv(r, g, b)
-            guard value >= 0.18, saturation >= 0.28 else { continue }
+            let darkest = min(r, min(g, b))
+            // Near-black, grey, and near-white (including pale pastels) do not vote.
+            if value < 0.16 || saturation < 0.28 { continue }
+            if darkest > 0.78 { continue }
+            if value > 0.90 && saturation < 0.50 { continue }
             let sample = saturation * value
             let bin = min(binCount - 1, Int(hue * Float(binCount)))
             weight[bin] += sample
@@ -47,7 +53,7 @@ enum ArtworkPalette {
         }
 
         let ranked = (0..<binCount)
-            .filter { weight[$0] > 1.5 }
+            .filter { weight[$0] > 8 }
             .sorted { weight[$0] > weight[$1] }
 
         var picked: [SIMD3<Float>] = []
@@ -56,7 +62,7 @@ enum ArtworkPalette {
             let crowded = used.contains { circularDistance($0, bin, binCount) < 2 }
             if crowded { continue }
             let amount = max(weight[bin], 0.0001)
-            picked.append(SIMD3(red[bin] / amount, green[bin] / amount, blue[bin] / amount))
+            picked.append(tame(SIMD3(red[bin] / amount, green[bin] / amount, blue[bin] / amount)))
             used.append(bin)
             if picked.count == 3 { break }
         }
@@ -120,7 +126,16 @@ enum ArtworkPalette {
         var (hue, saturation, value) = hsv(color.x, color.y, color.z)
         hue += amount
         hue -= floor(hue)
-        return hsvToRGB(hue, max(saturation, 0.55), max(value, 0.55))
+        return tame(hsvToRGB(hue, saturation, value))
+    }
+
+    /// More chroma, and no channel above ~0.75, so the mix cannot climb to white.
+    private static func tame(_ color: SIMD3<Float>) -> SIMD3<Float> {
+        var (hue, saturation, value) = hsv(color.x, color.y, color.z)
+        saturation = min(1, max(saturation * 1.4, 0.55))
+        value = min(max(value, 0.32), 0.75)
+        let rgb = hsvToRGB(hue, saturation, value)
+        return SIMD3(min(rgb.x, 0.75), min(rgb.y, 0.75), min(rgb.z, 0.75))
     }
 
     private static func circularDistance(_ a: Int, _ b: Int, _ count: Int) -> Int {

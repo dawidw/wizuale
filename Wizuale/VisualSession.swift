@@ -15,6 +15,7 @@ final class RenderState: @unchecked Sendable {
     private let lock = NSLock()
     private var targetIndex = 0
     private var album: AlbumColors?
+    private var albumArt = true
     private var wantsAlbum = false
     private var paused = false
 
@@ -38,7 +39,15 @@ final class RenderState: @unchecked Sendable {
     func setAlbum(_ colors: AlbumColors?) {
         lock.lock()
         album = colors
-        wantsAlbum = colors != nil
+        wantsAlbum = albumArt && colors != nil
+        lock.unlock()
+    }
+
+    /// Off fades the cover colors out and leaves each preset on its own palette.
+    func setAlbumArt(_ enabled: Bool) {
+        lock.lock()
+        albumArt = enabled
+        wantsAlbum = enabled && album != nil
         lock.unlock()
     }
 
@@ -60,6 +69,7 @@ final class VisualSession: ObservableObject {
         self.beatClock = beatClock
         micReceiver = MicReceiver()
         beatClock.setVisualLatency(ms: MicTuning.loadLatency())
+        renderState.setAlbumArt(MicTuning.loadAlbumArt())
     }
 
     @Published private(set) var presetIndex = 0
@@ -111,6 +121,11 @@ final class VisualSession: ObservableObject {
                     self.latencyMs = ms
                     self.sensitivity = sens
                     self.beatClock.setVisualLatency(ms: ms)
+                }
+            }
+            micReceiver.onAlbumArt = { [weak self] enabled in
+                Task { @MainActor in
+                    self?.renderState.setAlbumArt(enabled)
                 }
             }
             micReceiver.setShown(index: presetIndex, cycling: true)

@@ -577,15 +577,25 @@ fragment float4 warpFragment(
     col.r = mix(col.r, samplePrev(src + motionDir * ca, prevTex, samp).r, 0.7);
     col.b = mix(col.b, samplePrev(src - motionDir * ca, prevTex, samp).b, 0.7);
 
-    float keep = exp(-u.deltaTime / max(u.persist.x, 0.05));
-    col *= keep;
-    col = max(col - float3(0.00065) * (u.deltaTime * 60.0), float3(0.0));
     float mic = liveWeight(u);
     float hit = max(u.ear.x, u.link.y * 0.45);
     float drop = clamp(u.hole.w, 0.0, 1.0);
     float slam = clamp(u.grade.y, 0.0, 1.5);
-    // A short lift of the history on a hit. It fades with the picture, so it cannot run away.
-    col *= 1.0 + mix(clockEnvelope(u) * 0.10, hit * 0.30, mic) + drop * 0.20 + slam * 0.16;
+    // The middle of a kaleidoscope stacks on itself. Once it is already light,
+    // decay it faster so the core cannot sit at a flat white.
+    float center = smoothstep(0.78, 0.06, length(p0));
+    float lumaIn = dot(max(col, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
+    float burn = smoothstep(0.48, 1.25, lumaIn);
+    float keep = exp(-u.deltaTime / max(u.persist.x, 0.05) * (1.0 + burn * (1.15 + center * 2.4)));
+    col *= keep;
+    col = max(col - float3(0.00105 + burn * 0.0048) * (u.deltaTime * 60.0), float3(0.0));
+    // A short lift on a hit. Capped, and almost off once the core is already hot,
+    // so a kick changes the picture instead of pinning it white.
+    float lumaMid = dot(max(col, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
+    float lift = mix(clockEnvelope(u) * 0.08, min(hit, 1.2) * 0.18, mic);
+    lift += min(drop, 1.0) * 0.10 + min(slam, 1.0) * 0.08;
+    lift *= mix(1.0, 0.22, smoothstep(0.62, 1.15, lumaMid) * (0.3 + center * 0.7));
+    col *= 1.0 + min(lift, 0.28);
     float hue = clamp(u.persist.z * u.deltaTime + downbeat(u) * 0.03 * (1.0 - mic) + u.ear.z * mic * 0.055 + drop * 0.08, 0.0, 0.16);
     col = mix(col, col.gbr, hue);
 
@@ -608,11 +618,20 @@ fragment float4 warpFragment(
         e = mix(e, emitMode(spun, modeB, u), w);
     }
     float clockBoost = pulseAmt(u) * 0.85 + downbeat(u) * 0.2;
-    float micBoost = hit * 1.65 + u.ear.w * 0.55 + u.link.w * 0.35 + high * 0.35;
-    e *= u.style.z * (1.0 + mix(clockBoost, micBoost, mic) + drop * 1.25);
-    col += max(e, float3(0.0)) * u.shape.w;
-    col += u.baseColor.rgb * u.style.y * u.deltaTime;
-    col = clamp(col, float3(0.0), float3(4.0));
+    float micBoost = min(hit, 1.6) * 1.15 + min(u.ear.w, 1.6) * 0.4 + min(u.link.w, 1.4) * 0.28 + min(high, 1.4) * 0.28;
+    e *= u.style.z * (1.0 + min(mix(clockBoost, micBoost, mic) + drop * 0.7, 1.8));
+    float lumaNow = dot(max(col, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
+    // Less new light where the frame is already bright, and less again in the
+    // center, so additive cores stop filling in to a solid disk.
+    float room = 1.0 / (1.0 + max(lumaNow - 0.42, 0.0) * (1.15 + center * 1.7));
+    float centerGate = mix(1.0, 0.42, center * smoothstep(0.4, 1.0, lumaNow));
+    col += max(e, float3(0.0)) * u.shape.w * room * centerGate;
+    col += u.baseColor.rgb * u.style.y * u.deltaTime * room;
+    // Shoulder into the history. Dim trails pass through; highlights compress
+    // and cannot be stored as a flat ceiling.
+    float3 over = max(col - float3(0.62), float3(0.0));
+    col = min(col, float3(0.62)) + over / (1.0 + over * (0.8 + center * 1.05));
+    col = clamp(col, float3(0.0), float3(1.35));
     return float4(col, 1.0);
 }
 
@@ -633,10 +652,17 @@ fragment float4 presentFragment(
     float body = max(u.ear.y, u.link.z * 0.85);
     float drop = clamp(u.hole.w, 0.0, 1.0);
     float slam = clamp(u.grade.y, 0.0, 1.5);
-    float flash = mix(clockEnvelope(u) * 0.36, hit * 0.88 + body * 0.34, mic);
-    flash += drop * 0.9 + slam * 0.5;
+    // Cap the lift. Sensitivity 3× and Drop still zoom and warp, but they
+    // cannot multiply the whole frame into a clipped white.
+    float flash = mix(clockEnvelope(u) * 0.28, min(hit, 1.35) * 0.40 + min(body, 1.35) * 0.15, mic);
+    flash += min(drop, 1.0) * 0.34 + min(slam, 1.0) * 0.18;
+    flash = min(flash, 0.58);
     c *= u.style.x * (1.0 + flash);
-    c = pow(max(c, float3(0.0)), float3(1.25));
+    c = pow(max(c, float3(0.0)), float3(1.15));
+    // Soft shoulder before the display curve so a hot core keeps its hue.
+    float peak = max(c.r, max(c.g, c.b));
+    float crush = smoothstep(1.05, 3.2, peak);
+    c = mix(c, c * (0.92 / max(peak, 0.001)), crush);
     c = c / (1.0 + c);
     c = pow(clamp(c, 0.0, 1.0), float3(1.0 / 2.2));
     float n = hash21(in.position.xy + fract(u.time * 9.0)) - 0.5;

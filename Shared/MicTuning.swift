@@ -23,6 +23,7 @@ enum MicTuning {
     static let sensitivityKey = "wizuale.mic.sensitivity"
     static let latencyKey = "wizuale.mic.latencyMs"
     static let sourceKey = "wizuale.mic.source"
+    static let albumArtKey = "wizuale.mic.albumArt"
 
     static let sensitivityMin: Float = 0.25
     static let sensitivityMax: Float = 3
@@ -68,6 +69,16 @@ enum MicTuning {
 
     static func saveSource(_ source: MicInputSource) {
         UserDefaults.standard.set(source.rawValue, forKey: sourceKey)
+    }
+
+    /// Missing key means on. The phone sends the choice; the TV keeps the last one it heard.
+    static func loadAlbumArt() -> Bool {
+        guard UserDefaults.standard.object(forKey: albumArtKey) != nil else { return true }
+        return UserDefaults.standard.bool(forKey: albumArtKey)
+    }
+
+    static func saveAlbumArt(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: albumArtKey)
     }
 }
 
