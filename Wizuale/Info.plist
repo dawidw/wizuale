@@ -28,6 +28,8 @@
 	<string>$(GETSONGBPM_API_KEY)</string>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>Wizuale reads the album you're playing so the picture can borrow its colors and look up the song's tempo. It never listens to the audio.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Wizuale listens through a Continuity Microphone so the picture can follow the music in the room. It does not record or upload the audio.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Wizuale listens for the Wizuale Mic app on this Wi-Fi so the picture can react to the room.</string>
 	<key>NSBonjourServices</key>

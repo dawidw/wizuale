@@ -19,20 +19,41 @@ struct MicFeatures: Equatable, Sendable {
     )
 }
 
-/// What crossed the link. Audio rides with the hit slider. A command locks a
-/// preset (`-1` restores auto). The TV answers with an ack naming the picture
-/// that is actually showing.
+/// Raw band energy, before the noise floor and the auto gain. Calibration
+/// averages this for a few quiet seconds.
+struct MicBandEnergy: Equatable, Sendable {
+    var bass: Float
+    var lowMid: Float
+    var mid: Float
+    var high: Float
+    var loudness: Float
+
+    static let zero = MicBandEnergy(bass: 0, lowMid: 0, mid: 0, high: 0, loudness: 0)
+}
+
+/// What crossed the link.
+///
+/// Audio rides with the sensitivity slider. A command locks a preset
+/// (`-1` restores auto). Settings carry latency and sensitivity on the
+/// control channel. Boost is the Drop button, 1 while it is held and 0
+/// when it lets go. The TV answers with an ack naming the picture that is
+/// actually showing, plus the latency and sensitivity it is using.
 enum MicPacket: Equatable, Sendable {
     case audio(sequence: UInt16, features: MicFeatures, sensitivity: Float)
     case command(sequence: UInt16, preset: Int16)
-    case ack(preset: Int16, cycling: Bool)
+    case settings(sequence: UInt16, latencyMs: Int16, sensitivity: Float)
+    case boost(sequence: UInt16, amount: Float)
+    case ack(preset: Int16, cycling: Bool, latencyMs: Int?, sensitivity: Float?)
 }
 
 /// Little-endian datagram both apps share. Magic bytes on the wire are `MIC1`.
 ///
 /// Audio, 40 bytes: magic u32, kind u16 = 1, sequence u16, seven f32 gains, sensitivity f32.
 /// Command, 10 bytes: magic, kind = 2, sequence u16, preset i16.
-/// Ack, 10 bytes: magic, kind = 3, preset i16, cycling u16 (1 or 0).
+/// Settings, 16 bytes: magic, kind = 4, sequence u16, latency i16, reserved u16, sensitivity f32.
+/// Boost, 12 bytes: magic, kind = 5, sequence u16, amount f32 (0...1).
+/// Ack, 16 bytes: magic, kind = 3, preset i16, cycling u16, latency i16, sensitivity f32.
+/// A 10-byte ack from the previous build still decodes; latency and sensitivity are absent.
 ///
 /// A 36-byte packet from the first mic build is ignored. Both apps ship together.
 enum MicWire {
@@ -41,10 +62,15 @@ enum MicWire {
     static let kindAudio: UInt16 = 1
     static let kindCommand: UInt16 = 2
     static let kindAck: UInt16 = 3
+    static let kindSettings: UInt16 = 4
+    static let kindBoost: UInt16 = 5
     static let gainCeiling: Float = 2.5
     static let audioBytes = 40
     static let commandBytes = 10
     static let ackBytes = 10
+    static let ackTunedBytes = 16
+    static let settingsBytes = 16
+    static let boostBytes = 12
 
     static func encodeAudio(sequence: UInt16, features: MicFeatures, sensitivity: Float) -> Data {
         var data = Data(capacity: audioBytes)
@@ -71,12 +97,34 @@ enum MicWire {
         return data
     }
 
-    static func encodeAck(preset: Int16, cycling: Bool) -> Data {
-        var data = Data(capacity: ackBytes)
+    static func encodeSettings(sequence: UInt16, latencyMs: Int, sensitivity: Float) -> Data {
+        var data = Data(capacity: settingsBytes)
+        write(magic, &data)
+        write(kindSettings, &data)
+        write(sequence, &data)
+        write(Int16(clamping: MicTuning.clampLatency(latencyMs)), &data)
+        write(UInt16(0), &data)
+        write(slider(sensitivity), &data)
+        return data
+    }
+
+    static func encodeBoost(sequence: UInt16, amount: Float) -> Data {
+        var data = Data(capacity: boostBytes)
+        write(magic, &data)
+        write(kindBoost, &data)
+        write(sequence, &data)
+        write(boost(amount), &data)
+        return data
+    }
+
+    static func encodeAck(preset: Int16, cycling: Bool, latencyMs: Int, sensitivity: Float) -> Data {
+        var data = Data(capacity: ackTunedBytes)
         write(magic, &data)
         write(kindAck, &data)
         write(preset, &data)
         write(cycling ? UInt16(1) : UInt16(0), &data)
+        write(Int16(clamping: MicTuning.clampLatency(latencyMs)), &data)
+        write(slider(sensitivity), &data)
         return data
     }
 
@@ -115,10 +163,32 @@ enum MicWire {
             guard data.count >= commandBytes else { return nil }
             return .command(sequence: readUInt16(data, 6), preset: readInt16(data, 8))
         }
+        if kind == kindSettings {
+            guard data.count >= settingsBytes else { return nil }
+            guard let sensitivity = readSlider(data, 12) else { return nil }
+            return .settings(
+                sequence: readUInt16(data, 6),
+                latencyMs: readInt16(data, 8),
+                sensitivity: sensitivity
+            )
+        }
+        if kind == kindBoost {
+            guard data.count >= boostBytes else { return nil }
+            guard let amount = readBoost(data, 8) else { return nil }
+            return .boost(sequence: readUInt16(data, 6), amount: amount)
+        }
         if kind == kindAck {
             guard data.count >= ackBytes else { return nil }
             let cycling = readUInt16(data, 8) != 0
-            return .ack(preset: readInt16(data, 6), cycling: cycling)
+            if data.count >= ackTunedBytes, let sensitivity = readSlider(data, 12) {
+                return .ack(
+                    preset: readInt16(data, 6),
+                    cycling: cycling,
+                    latencyMs: Int(readInt16(data, 10)),
+                    sensitivity: sensitivity
+                )
+            }
+            return .ack(preset: readInt16(data, 6), cycling: cycling, latencyMs: nil, sensitivity: nil)
         }
         return nil
     }
@@ -129,8 +199,12 @@ enum MicWire {
     }
 
     private static func slider(_ value: Float) -> Float {
-        guard value.isFinite else { return 1 }
-        return min(max(value, 0.5), 2)
+        MicTuning.clampSensitivity(value)
+    }
+
+    private static func boost(_ value: Float) -> Float {
+        guard value.isFinite else { return 0 }
+        return min(max(value, 0), 1)
     }
 
     private static func write(_ value: UInt32, _ data: inout Data) {
@@ -177,6 +251,12 @@ enum MicWire {
     private static func readSlider(_ data: Data, _ offset: Int) -> Float? {
         let value = Float(bitPattern: readUInt32(data, offset))
         guard value.isFinite else { return nil }
-        return min(max(value, 0.5), 2)
+        return MicTuning.clampSensitivity(value)
+    }
+
+    private static func readBoost(_ data: Data, _ offset: Int) -> Float? {
+        let value = Float(bitPattern: readUInt32(data, offset))
+        guard value.isFinite else { return nil }
+        return min(max(value, 0), 1)
     }
 }

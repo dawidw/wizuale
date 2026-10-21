@@ -1,3 +1,4 @@
+import AVKit
 import SwiftUI
 import UIKit
 
@@ -64,10 +65,25 @@ struct RootView: View {
                 onRight: { visuals.next() },
                 onSelect: { visuals.advance() },
                 onLongPress: { visuals.togglePin() },
-                onPlayPause: { music.togglePlayback() }
+                onPlayPause: { music.togglePlayback() },
+                capturesFocus: !visuals.showMicSettings
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
+
+            if visuals.showMicSettings {
+                MicSettingsPanel(
+                    source: visuals.micSource,
+                    sensitivity: visuals.sensitivity,
+                    latencyMs: visuals.latencyMs,
+                    continuityStatus: visuals.continuityStatus,
+                    onSource: { visuals.setMicSource($0) },
+                    onSensitivity: { visuals.setSensitivity($0) },
+                    onLatency: { visuals.setLatency($0) },
+                    onPair: { visuals.beginContinuityPairing() },
+                    onClose: { visuals.closeSettings() }
+                )
+            }
         }
         .preferredColorScheme(.dark)
         .onMoveCommand { direction in
@@ -76,10 +92,18 @@ struct RootView: View {
                 visuals.previous()
             case .right:
                 visuals.next()
+            case .down:
+                if !visuals.showMicSettings {
+                    visuals.openSettings()
+                }
             default:
                 break
             }
         }
+        .modifier(CloseMicSettingsOnMenu(open: visuals.showMicSettings) {
+            visuals.closeSettings()
+        })
+        .continuityDevicePicker(isPresented: $visuals.showContinuityPicker) { _ in }
         .onPlayPauseCommand {
             music.togglePlayback()
         }
@@ -142,11 +166,11 @@ struct RootView: View {
 
     private var hint: some View {
         VStack {
-            Text("Swipe for another picture. Click steps forward. Play and pause starts your music. Hold to keep the title on screen.")
+            Text("Swipe for another picture. Swipe down for the microphone. Click steps forward. Play and pause starts your music. Hold to keep the title on screen.")
                 .font(.system(size: 22, weight: .medium))
                 .foregroundStyle(.white.opacity(0.92))
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .lineLimit(3)
                 .padding(.horizontal, 28)
                 .padding(.vertical, 16)
                 .background(
@@ -169,5 +193,21 @@ struct RootView: View {
         let active = phase == .active
         UIApplication.shared.isIdleTimerDisabled = active
         visuals.renderState.setPaused(!active)
+    }
+}
+
+/// Menu closes the mic panel. When the panel is closed this modifier is absent,
+/// so Menu still leaves the app.
+private struct CloseMicSettingsOnMenu: ViewModifier {
+    var open: Bool
+    var close: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if open {
+            content.onExitCommand(perform: close)
+        } else {
+            content
+        }
     }
 }

@@ -9,6 +9,7 @@ struct RemoteReader: UIViewControllerRepresentable {
     var onSelect: () -> Void
     var onLongPress: () -> Void
     var onPlayPause: () -> Void
+    var capturesFocus: Bool
 
     func makeUIViewController(context: Context) -> RemoteController {
         let controller = RemoteController()
@@ -22,6 +23,12 @@ struct RemoteReader: UIViewControllerRepresentable {
         controller.remote.onSelect = onSelect
         controller.remote.onLongPress = onLongPress
         controller.remote.onPlayPause = onPlayPause
+        if controller.remote.capturesFocus != capturesFocus {
+            controller.remote.capturesFocus = capturesFocus
+            controller.remote.setNeedsFocusUpdate()
+            controller.setNeedsFocusUpdate()
+            controller.updateFocusIfNeeded()
+        }
     }
 
     final class RemoteController: UIViewController {
@@ -52,7 +59,9 @@ struct RemoteReader: UIViewControllerRepresentable {
         private var selectBegan: Date?
         private let holdThreshold: TimeInterval = 0.55
 
-        override var canBecomeFocused: Bool { true }
+        var capturesFocus = true
+
+        override var canBecomeFocused: Bool { capturesFocus }
 
         override init(frame: CGRect) {
             super.init(frame: frame)

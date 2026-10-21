@@ -59,6 +59,7 @@ final class VisualSession: ObservableObject {
     init(beatClock: BeatClock) {
         self.beatClock = beatClock
         micReceiver = MicReceiver()
+        beatClock.setVisualLatency(ms: MicTuning.loadLatency())
     }
 
     @Published private(set) var presetIndex = 0
@@ -67,8 +68,15 @@ final class VisualSession: ObservableObject {
     @Published private(set) var showHint = true
     @Published private(set) var micLive = false
     @Published private(set) var micName = ""
+    @Published var micSource = MicTuning.loadSource()
+    @Published var sensitivity = MicTuning.loadSensitivity()
+    @Published var latencyMs = MicTuning.loadLatency()
+    @Published var showMicSettings = false
+    @Published var showContinuityPicker = false
+    @Published private(set) var continuityStatus = ""
 
     private var micWired = false
+    private var continuity: ContinuityMic?
     private var phoneLocked = false
     private var lastSwitch = Date.distantPast
     private var cycleToken = UUID()
@@ -97,9 +105,82 @@ final class VisualSession: ObservableObject {
                     self?.applyPhoneChoice(choice)
                 }
             }
+            micReceiver.onTuning = { [weak self] ms, sens in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.latencyMs = ms
+                    self.sensitivity = sens
+                    self.beatClock.setVisualLatency(ms: ms)
+                }
+            }
             micReceiver.setShown(index: presetIndex, cycling: true)
             micReceiver.start()
+            if micSource == .continuity {
+                startContinuity()
+            }
         }
+    }
+
+    func openSettings() {
+        showMicSettings = true
+        dismissHint()
+    }
+
+    func closeSettings() {
+        showMicSettings = false
+    }
+
+    func setMicSource(_ source: MicInputSource) {
+        micSource = source
+        micReceiver.setSource(source)
+        if source == .continuity {
+            startContinuity()
+        } else {
+            stopContinuity()
+            continuityStatus = ""
+        }
+    }
+
+    func setSensitivity(_ value: Float) {
+        let clamped = MicTuning.clampSensitivity(value)
+        sensitivity = clamped
+        micReceiver.setSensitivity(clamped)
+    }
+
+    func setLatency(_ ms: Int) {
+        let clamped = MicTuning.clampLatency(ms)
+        latencyMs = clamped
+        micReceiver.setLatency(clamped)
+        beatClock.setVisualLatency(ms: clamped)
+    }
+
+    func beginContinuityPairing() {
+        setMicSource(.continuity)
+        showContinuityPicker = true
+    }
+
+    private func startContinuity() {
+        let mic: ContinuityMic
+        if let continuity {
+            mic = continuity
+        } else {
+            let created = ContinuityMic()
+            created.onFeatures = { [weak self] features in
+                self?.micReceiver.ingestLocal(features)
+            }
+            created.onStatus = { [weak self] text in
+                Task { @MainActor in
+                    self?.continuityStatus = text
+                }
+            }
+            continuity = created
+            mic = created
+        }
+        mic.start()
+    }
+
+    private func stopContinuity() {
+        continuity?.stop()
     }
 
     /// `-1` lets the pictures rotate again. Any other index locks that picture

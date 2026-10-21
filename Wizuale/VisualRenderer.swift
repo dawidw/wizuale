@@ -176,6 +176,13 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
         guard ensureTextures(size) else { return }
 
         step(dt: dt, snapshot: snapshot)
+        let heard = micReceiver.sample(dt: dt)
+        beatClock.noteMic(
+            onset: heard.onset,
+            presence: heard.presence,
+            dt: dt,
+            fallbackBPM: displayed.bpm
+        )
         let musical = beatClock.sample(fallbackBPM: displayed.bpm)
         var uniforms = displayed.makeUniforms(
             resolution: SIMD2(Float(size.x), Float(size.y)),
@@ -191,9 +198,10 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
         )
         uniforms.tempo.x = musical.bpm
         wander.apply(to: &uniforms, slot: slotTo, time: time)
-        let heard = micReceiver.sample(dt: dt)
         uniforms.ear = SIMD4(heard.onset, heard.bass, heard.high, heard.loudness)
         uniforms.link = SIMD4(heard.presence, heard.flux, heard.lowMid, heard.mid)
+        uniforms.hole.w = heard.drop
+        uniforms.grade.y = heard.dropPunch
 
         let writeIndex = 1 - readIndex
         guard let warp = command.makeRenderCommandEncoder(descriptor: Self.pass(textures[writeIndex])) else {

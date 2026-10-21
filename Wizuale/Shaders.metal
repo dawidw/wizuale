@@ -18,10 +18,10 @@ struct FrameUniforms {
     float4 persist;  // decayTau, blurPx, hueShift, chroma
     float4 wave;     // edge (unused), frequency, thickness, radiusOffset
     float4 shape;    // count, radius, softness, intensity
-    float4 grade;    // sparkle, contrast (unused), saturation, vignette
+    float4 grade;    // sparkle, dropPunch, saturation, vignette
     float4 style;    // exposure, baseLevel, emissionGain, pulseAmount
     float4 tempo;    // bpm, modeFrom, modeTo, modeT
-    float4 hole;     // centerHole, centerDark, grain, unused
+    float4 hole;     // centerHole, centerDark, grain, drop (held)
     float4 beat;     // kick, downbeat, beatPhase, barPhase  (0 when no matched tempo)
     float4 music;    // phrasePhase, beatsPerBar, realTempo (1 = matched), unused
     float4 color0;
@@ -137,19 +137,24 @@ float2 advect(float2 p, constant FrameUniforms &u) {
   // Bass and low-mid shove the warp. Loudness speeds the whole preset up.
   float body = max(u.ear.y, u.link.z * 0.85);
   float loud = u.ear.w;
-  float drive = 1.0 + loud * mic * 0.85;
+  // Drop is the phone's held button. It speeds the preset and swirls harder.
+  // The zoom itself is `dropPunch`, a one-shot, so holding the button does not
+  // keep integrating zoom into the feedback buffer.
+  float drop = clamp(u.hole.w, 0.0, 1.0);
+  float slam = clamp(u.grade.y, 0.0, 1.5);
+  float drive = (1.0 + loud * mic * 0.85) * (1.0 + drop * 1.55);
   // Onset carries the kick. Flux only fills in if the onset gate missed it.
   float hit = max(u.ear.x, u.link.y * 0.45);
-  a += (u.flow.y + (body * 1.35 + hit * 0.45) * mic) * dt * drive;
+  a += (u.flow.y + (body * 1.35 + hit * 0.45) * mic + drop * 1.8) * dt * drive;
   a += u.flow.z * dt * drive / (r + 0.28);
-  float warpAmt = u.warp.x + (body * 0.95 + hit * 0.62) * mic;
+  float warpAmt = u.warp.x + (body * 0.95 + hit * 0.62) * mic + drop * 1.05;
   a += sin(r * u.warp.y - u.time * u.warp.z * drive) * warpAmt * dt * drive;
   // `punch` is a zoom rate, multiplied by dt below. It integrates for the
   // length of the hit and then stops, so the frame slams forward and settles.
   // The mic hit replaces the clock while the phone is live, so the two don't stack.
   float clockZoom = clockEnvelope(u) * 2.2;
   float micZoom = hit * 4.0 + body * 0.36;
-  float punch = mix(clockZoom, micZoom, mic);
+  float punch = mix(clockZoom, micZoom, mic) + slam * 8.5;
   float expand = u.flow.x * drive * (1.0 + beat * (1.0 - mic) * 1.4) + punch;
   r = r / max(exp(expand * dt), 0.0001);
   r += sin(a * max(u.center.z, 1.0) + u.time * u.warp.z * drive * 0.65) * u.warp.w * dt * drive;
@@ -577,9 +582,11 @@ fragment float4 warpFragment(
     col = max(col - float3(0.00065) * (u.deltaTime * 60.0), float3(0.0));
     float mic = liveWeight(u);
     float hit = max(u.ear.x, u.link.y * 0.45);
+    float drop = clamp(u.hole.w, 0.0, 1.0);
+    float slam = clamp(u.grade.y, 0.0, 1.5);
     // A short lift of the history on a hit. It fades with the picture, so it cannot run away.
-    col *= 1.0 + mix(clockEnvelope(u) * 0.10, hit * 0.30, mic);
-    float hue = clamp(u.persist.z * u.deltaTime + downbeat(u) * 0.03 * (1.0 - mic) + u.ear.z * mic * 0.055, 0.0, 0.10);
+    col *= 1.0 + mix(clockEnvelope(u) * 0.10, hit * 0.30, mic) + drop * 0.20 + slam * 0.16;
+    float hue = clamp(u.persist.z * u.deltaTime + downbeat(u) * 0.03 * (1.0 - mic) + u.ear.z * mic * 0.055 + drop * 0.08, 0.0, 0.16);
     col = mix(col, col.gbr, hue);
 
     float r = length(p0);
@@ -602,7 +609,7 @@ fragment float4 warpFragment(
     }
     float clockBoost = pulseAmt(u) * 0.85 + downbeat(u) * 0.2;
     float micBoost = hit * 1.65 + u.ear.w * 0.55 + u.link.w * 0.35 + high * 0.35;
-    e *= u.style.z * (1.0 + mix(clockBoost, micBoost, mic));
+    e *= u.style.z * (1.0 + mix(clockBoost, micBoost, mic) + drop * 1.25);
     col += max(e, float3(0.0)) * u.shape.w;
     col += u.baseColor.rgb * u.style.y * u.deltaTime;
     col = clamp(col, float3(0.0), float3(4.0));
@@ -624,7 +631,10 @@ fragment float4 presentFragment(
     float mic = liveWeight(u);
     float hit = max(u.ear.x, u.link.y * 0.45);
     float body = max(u.ear.y, u.link.z * 0.85);
+    float drop = clamp(u.hole.w, 0.0, 1.0);
+    float slam = clamp(u.grade.y, 0.0, 1.5);
     float flash = mix(clockEnvelope(u) * 0.36, hit * 0.88 + body * 0.34, mic);
+    flash += drop * 0.9 + slam * 0.5;
     c *= u.style.x * (1.0 + flash);
     c = pow(max(c, float3(0.0)), float3(1.25));
     c = c / (1.0 + c);

@@ -1,199 +1,13 @@
 import AVFoundation
 import Combine
-import Darwin
 import Foundation
 import Network
 import QuartzCore
 import UIKit
 
-/// Biquad in direct form I. Coefficients are the RBJ cookbook, already divided by a0.
-private struct Biquad {
-    var b0: Float = 0
-    var b1: Float = 0
-    var b2: Float = 0
-    var a1: Float = 0
-    var a2: Float = 0
-    private var x1: Float = 0
-    private var x2: Float = 0
-    private var y1: Float = 0
-    private var y2: Float = 0
-
-    mutating func process(_ x: Float) -> Float {
-        let y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
-        x2 = x1
-        x1 = x
-        y2 = y1
-        y1 = y
-        if abs(y) < 1e-20 { return 0 }
-        return y
-    }
-
-    static func lowpass(cutoff: Double, sampleRate: Double, q: Double) -> Biquad {
-        coefficients(kind: 0, cutoff: cutoff, sampleRate: sampleRate, q: q)
-    }
-
-    static func bandpass(cutoff: Double, sampleRate: Double, q: Double) -> Biquad {
-        coefficients(kind: 1, cutoff: cutoff, sampleRate: sampleRate, q: q)
-    }
-
-    static func highpass(cutoff: Double, sampleRate: Double, q: Double) -> Biquad {
-        coefficients(kind: 2, cutoff: cutoff, sampleRate: sampleRate, q: q)
-    }
-
-    /// kind 0 lowpass, 1 constant-peak bandpass, 2 highpass.
-    private static func coefficients(kind: Int, cutoff: Double, sampleRate: Double, q: Double) -> Biquad {
-        let rate = max(sampleRate, 8_000)
-        let fc = min(max(cutoff, 20), rate * 0.45)
-        let resonance = max(q, 0.2)
-        let w0 = 2 * Double.pi * fc / rate
-        let cosine = Darwin.cos(w0)
-        let sine = Darwin.sin(w0)
-        let alpha = sine / (2 * resonance)
-        let b0: Double
-        let b1: Double
-        let b2: Double
-        if kind == 1 {
-            b0 = alpha
-            b1 = 0
-            b2 = -alpha
-        } else if kind == 2 {
-            b0 = (1 + cosine) / 2
-            b1 = -(1 + cosine)
-            b2 = (1 + cosine) / 2
-        } else {
-            b0 = (1 - cosine) / 2
-            b1 = 1 - cosine
-            b2 = (1 - cosine) / 2
-        }
-        let a0 = 1 + alpha
-        var filter = Biquad()
-        filter.b0 = Float(b0 / a0)
-        filter.b1 = Float(b1 / a0)
-        filter.b2 = Float(b2 / a0)
-        filter.a1 = Float((-2 * cosine) / a0)
-        filter.a2 = Float((1 - alpha) / a0)
-        return filter
-    }
-}
-
-/// Slow attack, slow release. A short kick can rise above the running peak
-/// instead of being pinned at 1, so the TV still hears the transient.
-private struct Normalizer {
-    var peak: Float = 1e-4
-    var floor: Float = 1e-6
-
-    mutating func normalize(_ energy: Float, dt: Float) -> Float {
-        let dtSafe = max(dt, 0.0001)
-        if energy > peak {
-            peak += (energy - peak) * (1 - expf(-dtSafe / 0.45))
-        } else {
-            peak += (energy - peak) * (1 - expf(-dtSafe / 5.5))
-        }
-        peak = max(peak, 1e-8)
-        if energy < floor {
-            floor += (energy - floor) * (1 - expf(-dtSafe / 0.35))
-        } else {
-            floor += (energy - floor) * (1 - expf(-dtSafe / 8))
-        }
-        floor = min(floor, peak * 0.5)
-        let span = max(peak - floor, peak * 0.22, 1e-8)
-        return min(max((energy - floor) / span, 0), 1.8)
-    }
-}
-
-/// Four bands plus a kick. Mutated only on the audio tap.
-private struct BandAnalyzer {
-    private var filters: [Biquad] = []
-    private var builtRate: Double = 0
-    private var gains = [Normalizer(), Normalizer(), Normalizer(), Normalizer()]
-    private var loudGain = Normalizer()
-    private var fluxGain = Normalizer()
-    private var previousEnergy = [Float](repeating: 0, count: 4)
-    private var previousBassPeak: Float = 0
-    private var meanBassFlux: Float = 0
-    private var onset: Float = 0
-    private var refractory: Float = 0
-    private var havePrevious = false
-
-    mutating func consume(_ samples: [Float], sampleRate: Double) -> MicFeatures {
-        let count = samples.count
-        guard count > 0 else { return .zero }
-        let rate = max(sampleRate, 8_000)
-        if filters.count != 4 || abs(rate - builtRate) > 1 {
-            filters = [
-                Biquad.lowpass(cutoff: 110, sampleRate: rate, q: 0.707),
-                Biquad.bandpass(cutoff: 300, sampleRate: rate, q: 0.85),
-                Biquad.bandpass(cutoff: 1400, sampleRate: rate, q: 0.8),
-                Biquad.highpass(cutoff: 5000, sampleRate: rate, q: 0.707)
-            ]
-            builtRate = rate
-            havePrevious = false
-        }
-
-        var energy = [Float](repeating: 0, count: 4)
-        var bassPeak: Float = 0
-        var loudSum: Float = 0
-        for sample in samples {
-            loudSum += sample * sample
-            for band in 0..<4 {
-                let shaped = filters[band].process(sample)
-                energy[band] += shaped * shaped
-                if band == 0 {
-                    bassPeak = max(bassPeak, abs(shaped))
-                }
-            }
-        }
-        let inv = 1 / Float(count)
-        for band in 0..<4 {
-            energy[band] *= inv
-        }
-        let dt = Float(Double(count) / rate)
-
-        var fluxRaw: Float = 0
-        if havePrevious {
-            for band in 0..<4 {
-                fluxRaw += max(0, energy[band] - previousEnergy[band])
-            }
-        } else {
-            previousBassPeak = bassPeak
-        }
-        previousEnergy = energy
-        havePrevious = true
-
-        var shaped = [Float](repeating: 0, count: 4)
-        for band in 0..<4 {
-            shaped[band] = gains[band].normalize(energy[band], dt: dt)
-        }
-        let loudness = loudGain.normalize(loudSum * inv, dt: dt)
-        let flux = fluxGain.normalize(fluxRaw, dt: dt)
-
-        let bassFlux = max(0, bassPeak - previousBassPeak)
-        previousBassPeak = bassPeak
-        meanBassFlux += (bassFlux - meanBassFlux) * 0.06
-        let gate = max(meanBassFlux * 1.7, 0.00008)
-        if bassFlux > gate && shaped[0] > 0.28 && loudness > 0.12 && refractory <= 0 {
-            let over = min(bassFlux / gate, 3)
-            onset = min(1.7, 0.85 + 0.28 * over)
-            refractory = 0.09
-        } else {
-            onset *= expf(-dt / 0.07)
-            refractory = max(0, refractory - dt)
-        }
-
-        return MicFeatures(
-            bass: shaped[0],
-            lowMid: shaped[1],
-            mid: shaped[2],
-            high: shaped[3],
-            loudness: loudness,
-            onset: min(max(onset, 0), 1.7),
-            flux: flux
-        )
-    }
-}
-
 /// Microphone, analysis, and the UDP link to whichever Apple TV is advertising.
 /// `linked` is true only after the TV has answered, not when the socket opens.
+/// The screen stays awake for as long as this is running.
 final class MicCapture: ObservableObject {
     @Published private(set) var running = false
     @Published private(set) var linked = false
@@ -204,10 +18,13 @@ final class MicCapture: ObservableObject {
     @Published private(set) var activePreset = 0
     @Published private(set) var cycling = true
     @Published private(set) var pictureKnown = false
-    @Published var sensitivity: Float = 1 {
+    @Published private(set) var calibrating = false
+    @Published private(set) var calibrateProgress: Double = 0
+    @Published private(set) var calibrateMessage = ""
+    @Published private(set) var dropActive = false
+    @Published var sensitivity: Float = MicTuning.loadSensitivity() {
         didSet {
-            let finite = sensitivity.isFinite ? sensitivity : 1
-            let clamped = min(max(finite, 0.5), 2)
+            let clamped = MicTuning.clampSensitivity(sensitivity)
             if clamped != sensitivity {
                 sensitivity = clamped
                 return
@@ -215,24 +32,47 @@ final class MicCapture: ObservableObject {
             flag.lock()
             heldSensitivity = clamped
             flag.unlock()
+            guard !applyingRemote, clamped != oldValue else { return }
+            MicTuning.saveSensitivity(clamped)
+            scheduleSettings()
+        }
+    }
+    @Published var latencyMs: Int = MicTuning.loadLatency() {
+        didSet {
+            let clamped = MicTuning.clampLatency(latencyMs)
+            if clamped != latencyMs {
+                latencyMs = clamped
+                return
+            }
+            guard !applyingRemote, clamped != oldValue else { return }
+            MicTuning.saveLatency(clamped)
+            scheduleSettings()
         }
     }
 
     private let engine = AVAudioEngine()
     private let network = DispatchQueue(label: "app.wizuale.mic.send")
     private let flag = NSLock()
+    private let calibrateFlag = NSLock()
     private var analyzer = BandAnalyzer()
     private var tapInstalled = false
     private var sequence: UInt16 = 0
     private var commandSequence: UInt16 = 0
-    private var heldSensitivity: Float = 1
+    private var settingsSequence: UInt16 = 0
+    private var boostSequence: UInt16 = 0
+    private var heldSensitivity: Float = MicTuning.loadSensitivity()
+    private var applyingRemote = false
     private var lastUI: CFTimeInterval = 0
     private var browser: NWBrowser?
     private var connection: NWConnection?
     private var connectedName = ""
     private var pendingAudio: Data?
     private var pendingCommands: [Data] = []
+    private var pendingSettings: Data?
+    private var pendingBoost: Data?
     private var lastCommand: Data?
+    private var lastSettings: Data?
+    private var lastBoost: Data?
     private var sending = false
     private var receiving = false
     private var wantsLink = false
@@ -245,10 +85,23 @@ final class MicCapture: ObservableObject {
     private var expectPreset = 0
     private var expectUntil: CFTimeInterval = 0
     private var expectResends = 0
+    private var sensHold: Float = 1
+    private var latHold = 0
+    private var sensHoldUntil: CFTimeInterval = 0
+    private var latHoldUntil: CFTimeInterval = 0
     private var startGeneration = 0
     private var interruption: NSObjectProtocol?
+    private var calibrateOn = false
+    private var calibrateBegan: CFTimeInterval = 0
+    private var calibrateSums = MicNoiseFloor.zero
+    private var calibrateCount = 0
+    private var dropHeld = false
+    private var pressBegan: Date?
+    private var releaseWork: DispatchWorkItem?
+    private var pulseToken = 0
 
     init() {
+        analyzer.apply(floor: MicCalibrationStore.load())
         interruption = NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification,
             object: nil,
@@ -283,6 +136,7 @@ final class MicCapture: ObservableObject {
                     self.beginEngine()
                 } else {
                     self.running = false
+                    self.cancelCalibration()
                     self.status = "Microphone access is off. Enable Wizuale Mic in Settings → Privacy → Microphone."
                 }
             }
@@ -316,8 +170,56 @@ final class MicCapture: ObservableObject {
         }
     }
 
+    /// Records about five seconds of room noise and saves a floor for each band.
+    /// Ask the listener to keep the room quiet while the progress bar moves.
+    func calibrate() {
+        guard !calibrating else { return }
+        calibrateFlag.lock()
+        calibrateOn = true
+        calibrateBegan = 0
+        calibrateSums = .zero
+        calibrateCount = 0
+        calibrateFlag.unlock()
+        calibrating = true
+        calibrateProgress = 0
+        calibrateMessage = "Keep the room quiet."
+        if !running {
+            start()
+        }
+    }
+
+    /// Press holds the Drop. A short tap keeps it going for about three seconds.
+    /// The TV plays the zoom once, then eases the warp and flash back.
+    func setDrop(pressed: Bool) {
+        if pressed {
+            releaseWork?.cancel()
+            releaseWork = nil
+            guard !dropHeld else { return }
+            dropHeld = true
+            pressBegan = Date()
+            dropActive = true
+            beginBoost(1)
+        } else if dropHeld {
+            dropHeld = false
+            let duration = Date().timeIntervalSince(pressBegan ?? Date())
+            if duration < 0.45 {
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self, !self.dropHeld else { return }
+                    self.dropActive = false
+                    self.beginBoost(0)
+                }
+                releaseWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
+            } else {
+                dropActive = false
+                beginBoost(0)
+            }
+        }
+    }
+
     func stop() {
         startGeneration += 1
+        cancelCalibration()
         tearDown(status: "Tap Start. Allow the microphone and local network when asked.")
     }
 
@@ -340,10 +242,12 @@ final class MicCapture: ObservableObject {
             try session.setActive(true)
         } catch {
             status = "The audio session did not start. \(error.localizedDescription)"
+            cancelCalibration()
             return
         }
 
         analyzer = BandAnalyzer()
+        analyzer.apply(floor: MicCalibrationStore.load())
         sequence = 0
         lastUI = 0
         let input = engine.inputNode
@@ -362,6 +266,7 @@ final class MicCapture: ObservableObject {
             engine.stop()
             try? session.setActive(false, options: [.notifyOthersOnDeactivation])
             status = "The microphone did not start. \(error.localizedDescription)"
+            cancelCalibration()
             return
         }
 
@@ -373,8 +278,15 @@ final class MicCapture: ObservableObject {
             status = "Listening. System gain is on, so quiet rooms may be squashed."
         }
         setWantsLink(true)
+        let sens = sensitivity
+        let latency = latencyMs
         network.async { [weak self] in
-            self?.startBrowser()
+            guard let self else { return }
+            if self.lastSettings == nil {
+                self.settingsSequence = 1
+                self.lastSettings = MicWire.encodeSettings(sequence: 1, latencyMs: latency, sensitivity: sens)
+            }
+            self.startBrowser()
         }
     }
 
@@ -407,15 +319,18 @@ final class MicCapture: ObservableObject {
         guard running else { return }
         let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
         guard let raw, AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
+        cancelCalibration()
         tearDown(status: "Audio was interrupted. Tap Start to listen again.")
     }
 
     private func handle(_ buffer: AVAudioPCMBuffer) {
         let rate = buffer.format.sampleRate
         guard rate > 1, buffer.frameLength > 0 else { return }
-        let samples = monoFloats(from: buffer)
+        let samples = MicPCM.monoFloats(from: buffer)
         guard !samples.isEmpty else { return }
         let features = analyzer.consume(samples, sampleRate: rate)
+        let raw = analyzer.lastRaw
+        noteCalibration(raw)
         sequence &+= 1
         if sequence == 0 { sequence = 1 }
         let packet = MicWire.encodeAudio(
@@ -437,56 +352,76 @@ final class MicCapture: ObservableObject {
                 guard let self, self.running else { return }
                 self.level = loud
                 self.bassLevel = bass
+                UIApplication.shared.isIdleTimerDisabled = true
             }
         }
     }
 
-    private func monoFloats(from buffer: AVAudioPCMBuffer) -> [Float] {
-        let frames = Int(buffer.frameLength)
-        guard frames > 0 else { return [] }
-        if let channels = buffer.floatChannelData {
-            let count = Int(buffer.format.channelCount)
-            guard count > 0 else { return [] }
-            var mono = [Float](repeating: 0, count: frames)
-            let scale = 1 / Float(count)
-            for channel in 0..<count {
-                let samples = channels[channel]
-                for frame in 0..<frames {
-                    mono[frame] += samples[frame] * scale
-                }
-            }
-            return mono
+    private func noteCalibration(_ raw: MicBandEnergy) {
+        calibrateFlag.lock()
+        let on = calibrateOn
+        if on {
+            if calibrateBegan == 0 { calibrateBegan = CACurrentMediaTime() }
+            calibrateSums.bass += raw.bass
+            calibrateSums.lowMid += raw.lowMid
+            calibrateSums.mid += raw.mid
+            calibrateSums.high += raw.high
+            calibrateSums.loudness += raw.loudness
+            calibrateCount += 1
         }
-        return convertedMono(from: buffer, frames: frames)
+        let began = calibrateBegan
+        let count = calibrateCount
+        let sums = calibrateSums
+        calibrateFlag.unlock()
+        guard on else { return }
+        let elapsed = CACurrentMediaTime() - began
+        if elapsed >= 5, count > 10 {
+            calibrateFlag.lock()
+            let still = calibrateOn
+            calibrateOn = false
+            calibrateFlag.unlock()
+            guard still else { return }
+            let scale = 1.2 / Float(count)
+            let floor = MicNoiseFloor(
+                bass: sums.bass * scale,
+                lowMid: sums.lowMid * scale,
+                mid: sums.mid * scale,
+                high: sums.high * scale,
+                loudness: sums.loudness * scale
+            )
+            analyzer.apply(floor: floor)
+            MicCalibrationStore.save(floor)
+            calibrateFlag.lock()
+            calibrateOn = false
+            calibrateFlag.unlock()
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.calibrating = false
+                self.calibrateProgress = 1
+                self.calibrateMessage = "Calibration saved. Bass, mids, highs, and level sit above the room."
+            }
+        } else {
+            let progress = min(max(elapsed / 5, 0), 1)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.calibrating else { return }
+                self.calibrateProgress = progress
+                self.calibrateMessage = "Keep the room quiet."
+            }
+        }
     }
 
-    private func convertedMono(from buffer: AVAudioPCMBuffer, frames: Int) -> [Float] {
-        guard
-            let desired = AVAudioFormat(
-                commonFormat: .pcmFormatFloat32,
-                sampleRate: buffer.format.sampleRate,
-                channels: 1,
-                interleaved: false
-            ),
-            let converter = AVAudioConverter(from: buffer.format, to: desired),
-            let converted = AVAudioPCMBuffer(pcmFormat: desired, frameCapacity: AVAudioFrameCount(frames))
-        else { return [] }
-        var fed = false
-        var error: NSError?
-        let input: AVAudioConverterInputBlock = { _, outStatus in
-            if fed {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
-            fed = true
-            outStatus.pointee = .haveData
-            return buffer
+    private func cancelCalibration() {
+        calibrateFlag.lock()
+        let was = calibrateOn
+        calibrateOn = false
+        calibrateFlag.unlock()
+        guard was else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.calibrating = false
+            self.calibrateProgress = 0
+            self.calibrateMessage = ""
         }
-        converter.convert(to: converted, error: &error, withInputFrom: input)
-        guard error == nil, let channels = converted.floatChannelData else { return [] }
-        let got = Int(converted.frameLength)
-        guard got > 0 else { return [] }
-        return Array(UnsafeBufferPointer(start: channels[0], count: got))
     }
 
     private func setWantsLink(_ value: Bool) {
@@ -517,6 +452,63 @@ final class MicCapture: ObservableObject {
         flag.lock()
         defer { flag.unlock() }
         return epoch
+    }
+
+    private func scheduleSettings() {
+        let sens = sensitivity
+        let latency = latencyMs
+        flag.lock()
+        settingsSequence &+= 1
+        if settingsSequence == 0 { settingsSequence = 1 }
+        let seq = settingsSequence
+        flag.unlock()
+        let packet = MicWire.encodeSettings(sequence: seq, latencyMs: latency, sensitivity: sens)
+        network.async { [weak self] in
+            guard let self else { return }
+            self.sensHold = sens
+            self.latHold = latency
+            self.sensHoldUntil = CACurrentMediaTime() + 0.45
+            self.latHoldUntil = self.sensHoldUntil
+            self.pendingSettings = packet
+            self.lastSettings = packet
+            self.pump()
+        }
+    }
+
+    private func beginBoost(_ amount: Float) {
+        pulseToken += 1
+        let token = pulseToken
+        emitBoost(amount)
+        guard amount > 0.5 else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                guard let self, self.pulseToken == token else { return }
+                self.emitBoost(0)
+            }
+            return
+        }
+        func tick() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                guard let self, self.pulseToken == token, self.dropActive else { return }
+                self.emitBoost(1)
+                tick()
+            }
+        }
+        tick()
+    }
+
+    private func emitBoost(_ amount: Float) {
+        flag.lock()
+        boostSequence &+= 1
+        if boostSequence == 0 { boostSequence = 1 }
+        let seq = boostSequence
+        flag.unlock()
+        let packet = MicWire.encodeBoost(sequence: seq, amount: amount)
+        network.async { [weak self] in
+            guard let self else { return }
+            self.pendingBoost = packet
+            self.lastBoost = packet
+            self.pump()
+        }
     }
 
     private func startBrowser() {
@@ -605,6 +597,12 @@ final class MicCapture: ObservableObject {
             if pendingCommands.isEmpty, let lastCommand {
                 pendingCommands.append(lastCommand)
             }
+            if pendingSettings == nil, let lastSettings {
+                pendingSettings = lastSettings
+            }
+            if let lastBoost {
+                pendingBoost = lastBoost
+            }
             pump()
         case .failed(let error):
             confirmed = false
@@ -629,8 +627,11 @@ final class MicCapture: ObservableObject {
         connection.receiveMessage { [weak self] data, _, _, error in
             self?.network.async {
                 guard let self, self.receiving else { return }
-                if let data, let packet = MicWire.decode(data), case .ack(let preset, let cycling) = packet {
-                    self.noteAck(preset: preset, cycling: cycling)
+                if let data, let packet = MicWire.decode(data) {
+                    if case .ack(let preset, let cycling, let latency, let sensitivity) = packet {
+                        self.noteAck(preset: preset, cycling: cycling)
+                        self.noteRemoteTuning(latency: latency, sensitivity: sensitivity)
+                    }
                 }
                 if error != nil {
                     self.confirmed = false
@@ -681,6 +682,32 @@ final class MicCapture: ObservableObject {
         )
     }
 
+    private func noteRemoteTuning(latency: Int?, sensitivity: Float?) {
+        let now = CACurrentMediaTime()
+        let nextSens: Float? = {
+            guard let sensitivity else { return nil }
+            if now < sensHoldUntil && abs(sensitivity - sensHold) >= 0.03 { return nil }
+            return sensitivity
+        }()
+        let nextLat: Int? = {
+            guard let latency else { return nil }
+            if now < latHoldUntil && latency != latHold { return nil }
+            return latency
+        }()
+        guard nextSens != nil || nextLat != nil else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.applyingRemote = true
+            if let nextSens {
+                self.sensitivity = nextSens
+            }
+            if let nextLat {
+                self.latencyMs = nextLat
+            }
+            self.applyingRemote = false
+        }
+    }
+
     private func refreshLink() {
         guard confirmed else { return }
         if CACurrentMediaTime() - lastAck > 1.1 {
@@ -709,6 +736,12 @@ final class MicCapture: ObservableObject {
         let data: Data
         if !pendingCommands.isEmpty {
             data = pendingCommands.removeFirst()
+        } else if let boost = pendingBoost {
+            pendingBoost = nil
+            data = boost
+        } else if let settings = pendingSettings {
+            pendingSettings = nil
+            data = settings
         } else if let audio = pendingAudio {
             pendingAudio = nil
             data = audio
