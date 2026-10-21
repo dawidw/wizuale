@@ -23,7 +23,7 @@ struct FrameUniforms {
     float4 tempo;    // bpm, modeFrom, modeTo, modeT
     float4 hole;     // centerHole, centerDark, grain, drop (held)
     float4 beat;     // kick, downbeat, beatPhase, barPhase  (0 when no matched tempo)
-    float4 music;    // phrasePhase, beatsPerBar, realTempo (1 = matched), unused
+    float4 music;    // phrasePhase, beatsPerBar, realTempo (1 = matched), feedback dim (0.2 on a switch)
     float4 color0;
     float4 color1;
     float4 color2;
@@ -577,16 +577,25 @@ fragment float4 warpFragment(
     col.r = mix(col.r, samplePrev(src + motionDir * ca, prevTex, samp).r, 0.7);
     col.b = mix(col.b, samplePrev(src - motionDir * ca, prevTex, samp).b, 0.7);
 
+    // Preset switch: start from a dimmed copy so the old picture is not added
+    // to the new one. Two frames cover a dropped ping-pong write.
+    if (u.music.w > 0.01) {
+        col *= u.music.w;
+    }
+
     float mic = liveWeight(u);
     float hit = max(u.ear.x, u.link.y * 0.45);
     float drop = clamp(u.hole.w, 0.0, 1.0);
     float slam = clamp(u.grade.y, 0.0, 1.5);
-    // The middle of a kaleidoscope stacks on itself. Once it is already light,
-    // decay it faster so the core cannot sit at a flat white.
+    // The middle of a kaleidoscope stacks on itself. Near-white fades at about
+    // 6–8/s so a blown-out frame falls back within half a second.
     float center = smoothstep(0.78, 0.06, length(p0));
     float lumaIn = dot(max(col, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
     float burn = smoothstep(0.48, 1.25, lumaIn);
-    float keep = exp(-u.deltaTime / max(u.persist.x, 0.05) * (1.0 + burn * (1.15 + center * 2.4)));
+    float white = smoothstep(0.72, 1.05, lumaIn);
+    float baseRate = (1.0 / max(u.persist.x, 0.05)) * (1.0 + burn * (1.15 + center * 2.4));
+    float hotRate = white * (5.5 + center * 2.5);
+    float keep = exp(-u.deltaTime * max(baseRate, hotRate));
     col *= keep;
     col = max(col - float3(0.00105 + burn * 0.0048) * (u.deltaTime * 60.0), float3(0.0));
     // A short lift on a hit. Capped, and almost off once the core is already hot,
@@ -613,18 +622,22 @@ fragment float4 warpFragment(
     float w = smoothstep(0.0, 1.0, u.tempo.w);
     int modeA = int(u.tempo.y + 0.5);
     int modeB = int(u.tempo.z + 0.5);
-    float3 e = emitMode(spun, modeA, u);
-    if (modeA != modeB) {
-        e = mix(e, emitMode(spun, modeB, u), w);
-    }
+    float3 emittedA = emitMode(spun, modeA, u);
+    float3 emittedB = emitMode(spun, modeB, u);
+    // Lerp. A sum of the two strokes would add their brightness during the blend.
+    float3 e = mix(emittedA, emittedB, w);
+    float lumaA = dot(max(emittedA, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
+    float lumaB = dot(max(emittedB, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
+    float lumaE = dot(max(e, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
+    e *= mix(lumaA, lumaB, w) / max(lumaE, 0.0001);
     float clockBoost = pulseAmt(u) * 0.85 + downbeat(u) * 0.2;
     float micBoost = min(hit, 1.6) * 1.15 + min(u.ear.w, 1.6) * 0.4 + min(u.link.w, 1.4) * 0.28 + min(high, 1.4) * 0.28;
     e *= u.style.z * (1.0 + min(mix(clockBoost, micBoost, mic) + drop * 0.7, 1.8));
     float lumaNow = dot(max(col, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
     // Less new light where the frame is already bright, and less again in the
     // center, so additive cores stop filling in to a solid disk.
-    float room = 1.0 / (1.0 + max(lumaNow - 0.42, 0.0) * (1.15 + center * 1.7));
-    float centerGate = mix(1.0, 0.42, center * smoothstep(0.4, 1.0, lumaNow));
+    float room = 1.0 / (1.0 + max(lumaNow - 0.36, 0.0) * (1.45 + center * 2.1));
+    float centerGate = mix(1.0, 0.26, center * smoothstep(0.36, 1.0, lumaNow));
     col += max(e, float3(0.0)) * u.shape.w * room * centerGate;
     col += u.baseColor.rgb * u.style.y * u.deltaTime * room;
     // Shoulder into the history. Dim trails pass through; highlights compress
@@ -638,7 +651,8 @@ fragment float4 warpFragment(
 fragment float4 presentFragment(
     Varyings in [[stage_in]],
     constant FrameUniforms &u [[buffer(0)]],
-    texture2d<float> source [[texture(0)]]
+    texture2d<float> source [[texture(0)]],
+    texture2d<float> meanLuma [[texture(1)]]
 ) {
     constexpr sampler samp(filter::linear, address::clamp_to_edge);
     float3 c = source.sample(samp, in.uv).rgb;
@@ -657,7 +671,15 @@ fragment float4 presentFragment(
     float flash = mix(clockEnvelope(u) * 0.28, min(hit, 1.35) * 0.40 + min(body, 1.35) * 0.15, mic);
     flash += min(drop, 1.0) * 0.34 + min(slam, 1.0) * 0.18;
     flash = min(flash, 0.58);
-    c *= u.style.x * (1.0 + flash);
+    // Hard cap on the average, measured from the feedback this frame.
+    // A multiply keeps black at black. Reinhard below then keeps the highlights.
+    float mean = meanLuma.sample(samp, float2(0.5)).r;
+    float gain = u.style.x * (1.0 + flash);
+    float predicted = max(mean, 0.0) * gain;
+    if (predicted > 0.45) {
+        gain *= 0.45 / predicted;
+    }
+    c *= gain;
     c = pow(max(c, float3(0.0)), float3(1.15));
     // Soft shoulder before the display curve so a hot core keeps its hue.
     float peak = max(c.r, max(c.g, c.b));
@@ -668,4 +690,22 @@ fragment float4 presentFragment(
     float n = hash21(in.position.xy + fract(u.time * 9.0)) - 0.5;
     c += n / 255.0;
     return float4(c, 1.0);
+}
+
+/// One pixel: mean luminance of a coarse grid. The present pass reads it
+/// in the same command buffer, after this write.
+fragment float4 reduceLumaFragment(
+    Varyings in [[stage_in]],
+    texture2d<float> source [[texture(0)]]
+) {
+    constexpr sampler samp(filter::linear, address::clamp_to_edge);
+    float acc = 0.0;
+    for (int y = 0; y < 12; ++y) {
+        for (int x = 0; x < 16; ++x) {
+            float2 uv = (float2(float(x), float(y)) + 0.5) / float2(16.0, 12.0);
+            float3 sampleColor = max(source.sample(samp, uv).rgb, float3(0.0));
+            acc += dot(sampleColor, float3(0.2126, 0.7152, 0.0722));
+        }
+    }
+    return float4(acc / 192.0, 0.0, 0.0, 1.0);
 }

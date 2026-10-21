@@ -75,6 +75,8 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
     private let queue: MTLCommandQueue
     private let warpPipeline: MTLRenderPipelineState
     private let presentPipeline: MTLRenderPipelineState
+    private let lumaPipeline: MTLRenderPipelineState
+    private let lumaTexture: MTLTexture
     private let state: RenderState
     private let beatClock: BeatClock
     private let micReceiver: MicReceiver
@@ -89,6 +91,8 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
     private var slotFrom = 0
     private var slotTo = 0
     private var modeT: Float = 1
+    /// Frames that multiply stored history by 0.2 after a preset change.
+    private var dimFrames = 0
     private var displayed: PresetParams
     private var wander = Wander()
     private var albumWeight: Float = 0
@@ -122,9 +126,10 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
         guard
             let vertex = library.makeFunction(name: "fullscreenVertex"),
             let warp = library.makeFunction(name: "warpFragment"),
-            let present = library.makeFunction(name: "presentFragment")
+            let present = library.makeFunction(name: "presentFragment"),
+            let reduce = library.makeFunction(name: "reduceLumaFragment")
         else {
-            throw RendererError.library("Missing fullscreenVertex, warpFragment, or presentFragment.")
+            throw RendererError.library("Missing fullscreenVertex, warpFragment, presentFragment, or reduceLumaFragment.")
         }
         warpPipeline = try Self.pipeline(
             device: device,
@@ -140,6 +145,26 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
             pixelFormat: .bgra8Unorm,
             label: "Present"
         )
+        lumaPipeline = try Self.pipeline(
+            device: device,
+            vertex: vertex,
+            fragment: reduce,
+            pixelFormat: .rgba16Float,
+            label: "Mean luminance"
+        )
+        let lumaDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba16Float,
+            width: 1,
+            height: 1,
+            mipmapped: false
+        )
+        lumaDescriptor.storageMode = .private
+        lumaDescriptor.usage = [.shaderRead, .renderTarget]
+        guard let luma = device.makeTexture(descriptor: lumaDescriptor) else {
+            throw RendererError.pipeline("Metal could not store the frame's average luminance.")
+        }
+        luma.label = "Mean luminance"
+        lumaTexture = luma
         super.init()
     }
 
@@ -194,7 +219,12 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
             album: album,
             albumWeight: albumWeight,
             beat: SIMD4(musical.kick, musical.downbeat, musical.beatPhase, musical.barPhase),
-            music: SIMD4(musical.phrasePhase, musical.beatsPerBar, musical.hasRealTempo ? 1 : 0, 0)
+            music: SIMD4(
+                musical.phrasePhase,
+                musical.beatsPerBar,
+                musical.hasRealTempo ? 1 : 0,
+                dimFrames > 0 ? 0.2 : 0
+            )
         )
         uniforms.tempo.x = musical.bpm
         wander.apply(to: &uniforms, slot: slotTo, time: time)
@@ -213,10 +243,17 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
         warp.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         warp.endEncoding()
 
+        guard let reduce = command.makeRenderCommandEncoder(descriptor: Self.pass(lumaTexture)) else { return }
+        reduce.setRenderPipelineState(lumaPipeline)
+        reduce.setFragmentTexture(textures[writeIndex], index: 0)
+        reduce.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        reduce.endEncoding()
+
         guard let present = command.makeRenderCommandEncoder(descriptor: presentDescriptor) else { return }
         present.setRenderPipelineState(presentPipeline)
         present.setFragmentBytes(&uniforms, length: MemoryLayout<FrameUniforms>.stride, index: 0)
         present.setFragmentTexture(textures[writeIndex], index: 0)
+        present.setFragmentTexture(lumaTexture, index: 1)
         present.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         present.endEncoding()
 
@@ -226,6 +263,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
             gate.signal()
         }
         committed = true
+        if dimFrames > 0 { dimFrames -= 1 }
         command.commit()
         readIndex = writeIndex
     }
@@ -237,11 +275,12 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
             slotFrom = modeT > 0.5 ? slotTo : slotFrom
             slotTo = target
             modeT = 0
+            dimFrames = 2
         }
         modeT = min(1, modeT + dt / PresetLibrary.blendDuration)
-        // While two pictures are mixing, ease the warp across the same window.
-        // Once the crossfade is done, catch album colors at the old rate.
-        let rate: Float = modeT < 0.999 ? 0.42 : 1.6
+        // The emit mix finishes with blendDuration. Ease the warp on that same
+        // window (about 90% of the way when the mix ends), then the old rate.
+        let rate: Float = modeT < 0.999 ? 1.7 : 1.6
         let blend = 1 - exp(-dt * rate)
         displayed = displayed.lerped(toward: PresetLibrary.all[slotTo].params, by: blend)
         wander.advance(slot: slotTo, time: time, dt: dt)

@@ -16,30 +16,47 @@ struct PresetStrip: View {
                 .foregroundStyle(.white.opacity(0.5))
                 .padding(.horizontal, 28)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    PresetCard(
-                        title: "Auto",
-                        mode: nil,
-                        params: nil,
-                        selected: known && cycling
-                    ) {
-                        onSelect(-1)
-                    }
-                    ForEach(Array(PresetLibrary.all.enumerated()), id: \.offset) { offset, preset in
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
                         PresetCard(
-                            title: preset.name,
-                            mode: preset.mode,
-                            params: preset.params,
-                            selected: known && offset == active && !cycling,
-                            playing: known && offset == active
+                            title: "Auto",
+                            mode: nil,
+                            params: nil,
+                            selected: known && cycling
                         ) {
-                            onSelect(offset)
+                            onSelect(Int(PresetWire.auto))
+                        }
+                        .id(Int(PresetWire.auto))
+                        ForEach(Array(PresetLibrary.all.enumerated()), id: \.offset) { offset, preset in
+                            PresetCard(
+                                title: preset.name,
+                                mode: preset.mode,
+                                params: preset.params,
+                                selected: known && offset == active && !cycling,
+                                playing: known && offset == active
+                            ) {
+                                onSelect(offset)
+                            }
+                            .id(offset)
                         }
                     }
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 2)
                 }
-                .padding(.horizontal, 28)
-                .padding(.vertical, 2)
+                .onAppear {
+                    proxy.scrollTo(active, anchor: .center)
+                }
+                .onChange(of: active) { _, value in
+                    withAnimation(.easeInOut(duration: 0.28)) {
+                        proxy.scrollTo(value, anchor: .center)
+                    }
+                }
+                .onChange(of: cycling) { _, _ in
+                    withAnimation(.easeInOut(duration: 0.28)) {
+                        proxy.scrollTo(active, anchor: .center)
+                    }
+                }
             }
         }
     }

@@ -92,6 +92,10 @@ final class MicCapture: ObservableObject {
     private var expectPreset = 0
     private var expectUntil: CFTimeInterval = 0
     private var expectResends = 0
+    /// Picture the TV was showing when this phone asked for a change.
+    /// An ack that still names it is stale and does not move the highlight.
+    private var stalePreset = 0
+    private var staleCycling = true
     private var sensHold: Float = 1
     private var latHold = 0
     private var sensHoldUntil: CFTimeInterval = 0
@@ -150,27 +154,31 @@ final class MicCapture: ObservableObject {
         }
     }
 
-    /// `-1` restores auto cycling. Any other value locks that preset on the TV.
+    /// `PresetWire.auto` restores auto cycling. Any other value asks the TV to
+    /// lock that index. The highlight moves when the TV's ack comes back.
     func selectPreset(_ choice: Int) {
+        let wire: Int16
         if choice < 0 {
-            cycling = true
+            wire = PresetWire.auto
         } else {
             guard PresetLibrary.all.indices.contains(choice) else { return }
-            cycling = false
-            activePreset = choice
+            wire = Int16(clamping: choice)
         }
-        pictureKnown = true
+        let previous = activePreset
+        let previousCycling = cycling
         flag.lock()
         commandSequence &+= 1
         if commandSequence == 0 { commandSequence = 1 }
         let seq = commandSequence
         flag.unlock()
-        let packet = MicWire.encodeCommand(sequence: seq, preset: Int16(clamping: choice))
+        let packet = MicWire.encodeCommand(sequence: seq, preset: wire)
         network.async { [weak self] in
             guard let self else { return }
             self.expecting = true
-            self.expectCycling = choice < 0
-            self.expectPreset = choice
+            self.expectCycling = wire == PresetWire.auto
+            self.expectPreset = Int(wire)
+            self.stalePreset = previous
+            self.staleCycling = previousCycling
             self.expectUntil = CACurrentMediaTime() + 0.45
             self.expectResends = 0
             self.enqueueCommand(packet)
@@ -665,12 +673,15 @@ final class MicCapture: ObservableObject {
         confirmed = true
         let name = connectedName.isEmpty ? "Apple TV" : connectedName
         let index = Int(preset)
-        let matches = expectCycling ? ackCycling : (!ackCycling && index == expectPreset)
-        if expecting && !matches && CACurrentMediaTime() < expectUntil {
+        guard PresetLibrary.all.indices.contains(index) else { return }
+        let matches = expecting && (expectCycling ? ackCycling : (!ackCycling && index == expectPreset))
+        let stale = expecting && ackCycling == staleCycling && index == stalePreset && !matches
+        if matches {
+            expecting = false
+        } else if stale && CACurrentMediaTime() < expectUntil {
             publish(status: "The picture is following this phone.", tv: name, linked: true)
             return
-        }
-        if expecting && !matches && expectResends < 1 {
+        } else if stale && expectResends < 1 {
             expectResends += 1
             expectUntil = CACurrentMediaTime() + 0.45
             if let lastCommand {
@@ -679,8 +690,10 @@ final class MicCapture: ObservableObject {
             }
             publish(status: "The picture is following this phone.", tv: name, linked: true)
             return
+        } else {
+            // The TV moved on, or the request landed. Its ack is the picture.
+            expecting = false
         }
-        expecting = false
         let picture = PresetLibrary.all.indices.contains(index) ? PresetLibrary.all[index].name : "this picture"
         let detail = ackCycling ? "Auto is on. Showing \(picture)." : "Locked on \(picture)."
         publish(

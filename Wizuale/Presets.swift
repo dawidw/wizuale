@@ -175,8 +175,10 @@ enum PresetLibrary {
     /// A matched tempo waits for the next 8-bar phrase after this, instead of cutting on the timer.
     static let cycleHold: Double = 45
     /// Emit crossfade. Warp parameters ease across this window in the renderer.
-    static let blendDuration: Float = 4.8
+    static let blendDuration: Float = 1.35
 
+    /// Index 0 is the first card after Auto. Auto itself is `PresetWire.auto`.
+    /// The phone and the TV both read this array; do not reorder it.
     static let all: [Preset] = [
         make(.spiral, "Spiral Star", cycles: true, album: 0.52, PresetParams(
             expansion: 0.42, rotation: 0.55, rotationInner: 0.2, kaleidoSpin: 0.08,

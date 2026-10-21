@@ -46,6 +46,13 @@ enum MicPacket: Equatable, Sendable {
     case ack(preset: Int16, cycling: Bool, latencyMs: Int?, sensitivity: Float?)
 }
 
+/// Picture choice on the wire. Both apps use `PresetLibrary.all` in this order.
+/// `auto` is not an entry in that array: the TV keeps cycling and the ack names
+/// whichever picture is actually on screen.
+enum PresetWire {
+    static let auto: Int16 = -1
+}
+
 /// Little-endian datagram both apps share. Magic bytes on the wire are `MIC1`.
 ///
 /// Audio, 40 bytes: magic u32, kind u16 = 1, sequence u16, seven f32 gains, sensitivity f32.

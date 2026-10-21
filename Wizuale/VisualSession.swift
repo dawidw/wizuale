@@ -201,9 +201,10 @@ final class VisualSession: ObservableObject {
     /// `-1` lets the pictures rotate again. Any other index locks that picture
     /// and cancels the phrase timer until the phone asks for auto.
     private func applyPhoneChoice(_ choice: Int) {
-        if choice < 0 {
+        if choice < 0 || choice == Int(PresetWire.auto) {
             phoneLocked = false
             micReceiver.setShown(index: presetIndex, cycling: true)
+            revealOverlay()
             armCycle()
             return
         }
@@ -213,9 +214,9 @@ final class VisualSession: ObservableObject {
         if presetIndex != choice {
             presetIndex = choice
             renderState.setTarget(choice)
-            revealOverlay()
             dismissHint()
         }
+        revealOverlay()
         micReceiver.setShown(index: choice, cycling: false)
     }
 
