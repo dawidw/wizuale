@@ -134,10 +134,9 @@ enum ArtworkPalette {
     /// and the dark background is left alone.
     private static func tame(_ color: SIMD3<Float>) -> SIMD3<Float> {
         var (hue, saturation, value) = hsv(color.x, color.y, color.z)
-        saturation = min(1, max(saturation * 1.65, 0.64))
-        value = min(max(value, 0.34), 0.68)
-        let rgb = hsvToRGB(hue, saturation, value)
-        return SIMD3(min(rgb.x, 0.70), min(rgb.y, 0.70), min(rgb.z, 0.70))
+        saturation = min(1, max(saturation, 0.7))
+        value = min(max(value, 0.6), 0.9)
+        return hsvToRGB(hue, saturation, value)
     }
 
     private static func circularDistance(_ a: Int, _ b: Int, _ count: Int) -> Int {

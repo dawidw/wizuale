@@ -96,6 +96,9 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
     /// Display zoom. Eases toward the phone's value so a drag does not jump.
     private var shownZoom: Float = 1
     private var haveZoom = false
+    /// Smoothed gain-down for present (grade.x). Never above 1.0; see ToneMath.swift.
+    private var smoothOutputGain: Float = 1
+    private var lastFrameDt: Float = 1.0 / 60.0
     private var displayed: PresetParams
     private var wander = Wander()
     private var albumWeight: Float = 0
@@ -161,7 +164,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
             height: 1,
             mipmapped: false
         )
-        lumaDescriptor.storageMode = .private
+        lumaDescriptor.storageMode = .shared
         lumaDescriptor.usage = [.shaderRead, .renderTarget]
         guard let luma = device.makeTexture(descriptor: lumaDescriptor) else {
             throw RendererError.pipeline("Metal could not store the frame's average luminance.")
@@ -235,7 +238,9 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
         uniforms.link = SIMD4(heard.presence, heard.flux, heard.lowMid, heard.mid)
         uniforms.hole.w = heard.drop
         uniforms.grade.y = heard.dropPunch
+        uniforms.grade.x = smoothOutputGain
         uniforms.wave.x = shownZoom
+        lastFrameDt = dt
 
         let writeIndex = 1 - readIndex
         guard let warp = command.makeRenderCommandEncoder(descriptor: Self.pass(textures[writeIndex])) else {
@@ -263,13 +268,26 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
 
         command.present(drawable)
         let gate = self.gate
-        command.addCompletedHandler { _ in
+        let lumaCopy = lumaTexture
+        let frameDt = dt
+        command.addCompletedHandler { [weak self] _ in
+            self?.noteMeanLuma(from: lumaCopy, dt: frameDt)
             gate.signal()
         }
         committed = true
         if dimFrames > 0 { dimFrames -= 1 }
         command.commit()
         readIndex = writeIndex
+    }
+
+    private func noteMeanLuma(from texture: MTLTexture, dt: Float) {
+        var pixel = [Float](repeating: 0, count: 4)
+        let row = pixel.count * MemoryLayout<Float>.stride
+        texture.getBytes(&pixel, bytesPerRow: row, from: MTLRegionMake2D(0, 0, 1, 1), mipmapLevel: 0)
+        let mean = max(pixel[0], 0)
+        let target = min(1, ToneMath.presentMeanTarget / max(mean, 1e-4))
+        let follow = 1 - exp(-dt / ToneMath.outputGainSmoothSeconds)
+        smoothOutputGain = min(1, smoothOutputGain + (target - smoothOutputGain) * follow)
     }
 
     private func step(dt: Float, snapshot: RenderSnapshot) {

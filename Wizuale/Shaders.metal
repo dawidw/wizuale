@@ -178,18 +178,41 @@ float3 samplePrev(float2 uv, texture2d<float> prevTex, sampler samp) {
 
 float3 blurAt(float2 uv, float px, texture2d<float> prevTex, sampler samp, constant FrameUniforms &u) {
   float2 t = float2(px) / max(u.resolution, float2(1.0));
-  float3 c = samplePrev(uv, prevTex, samp) * 0.40;
-  c += samplePrev(uv + float2(t.x, 0.0), prevTex, samp) * 0.15;
-  c += samplePrev(uv - float2(t.x, 0.0), prevTex, samp) * 0.15;
-  c += samplePrev(uv + float2(0.0, t.y), prevTex, samp) * 0.15;
-  c += samplePrev(uv - float2(0.0, t.y), prevTex, samp) * 0.15;
-  return c;
+  float3 center = samplePrev(uv, prevTex, samp);
+  float3 c = center * 0.62;
+  c += samplePrev(uv + float2(t.x, 0.0), prevTex, samp) * 0.095;
+  c += samplePrev(uv - float2(t.x, 0.0), prevTex, samp) * 0.095;
+  c += samplePrev(uv + float2(0.0, t.y), prevTex, samp) * 0.095;
+  c += samplePrev(uv - float2(0.0, t.y), prevTex, samp) * 0.095;
+  return max(c, center * 0.88);
 }
 
 float micEnergy(constant FrameUniforms &u) {
   float mic = liveWeight(u);
   if (mic < 0.001) return 0.0;
   return mic * (u.ear.y * 0.55 + u.link.z * 0.38 + u.link.w * 0.28 + u.ear.z * 0.22);
+}
+
+float luma3(float3 c) {
+  return dot(max(c, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
+}
+
+// Hue-preserving peak cap (no Reinhard grey lift).
+float3 capPeak(float3 c, float cap) {
+  float m = max(c.r, max(c.g, c.b));
+  if (m > cap) c *= cap / m;
+  return max(c, float3(0.0));
+}
+
+float3 boostSat(float3 c, float amount) {
+  float y = luma3(c);
+  return max(mix(float3(y), c, amount), float3(0.0));
+}
+
+float3 capLuma(float3 c, float cap) {
+  float y = luma3(c);
+  if (y > cap) c *= cap / y;
+  return max(c, float3(0.0));
 }
 
 float sampleMicWave(float x, constant FrameUniforms &u) {
@@ -206,7 +229,7 @@ float sampleMicWave(float x, constant FrameUniforms &u) {
   return w;
 }
 
-// Mode numbers match VisualMode in Presets.swift (0…11).
+// Mode numbers match VisualMode in Presets.swift (0…19).
 float3 emitTunnelVision(float2 p, constant FrameUniforms &u) {
   float r = length(p);
   float a = atan2(p.y, p.x);
@@ -214,14 +237,14 @@ float3 emitTunnelVision(float2 p, constant FrameUniforms &u) {
   float k = kick(u);
   float d = downbeat(u);
   float travel = (u.music.z > 0.5) ? (u.beat.z * TAU) : (u.time * 1.4);
-  float rings = pow(0.5 + 0.5 * sin(log(max(r, 0.002)) * u.wave.y - travel), 10.0);
+  float rings = pow(0.5 + 0.5 * sin(log(max(r, 0.002)) * u.wave.y - travel), 24.0);
   float beams = pow(0.5 + 0.5 * cos(a * n), max(u.shape.z, 0.6));
   float streak = pow(0.5 + 0.5 * cos(a * n * 0.5 - r * 8.0 + u.time * 0.6), 18.0);
   float fade = smoothstep(0.85, 0.05, r);
   float3 col = ramp(r * 1.4 + u.time * 0.05 + a * 0.05 + micEnergy(u), u);
-  float m = (rings * 0.85 + streak * 0.95) * fade + beams * exp(-r * 2.2) * 0.22;
-  m += exp(-pow(r / 0.02, 2.0)) * 0.45;
-  return col * m * (1.0 + k * 0.55 + d * 0.3);
+  float m = (rings * 0.85 + streak * 0.95) * fade + beams * exp(-r * 2.2) * 0.12;
+  m += exp(-pow(r / 0.02, 2.0)) * 0.12;
+  return capPeak(col * m * (0.55 + k * 0.35 + d * 0.18), 0.42);
 }
 
 float3 emitPlasmaDrift(float2 p, constant FrameUniforms &u) {
@@ -232,7 +255,7 @@ float3 emitPlasmaDrift(float2 p, constant FrameUniforms &u) {
   field += micEnergy(u) * sin(p.x * 9.0 - u.time * 0.5) * 0.35;
   float ridge = pow(abs(sin(field * 2.15)), 16.0);
   float3 col = ramp(0.5 + 0.5 * sin(field * 0.5) + u.music.x * 0.25, u);
-  return col * ridge * (0.85 + k * 0.55 + d * 0.28);
+  return capPeak(col * ridge * (0.5 + k * 0.35 + d * 0.15), 0.38);
 }
 
 float3 emitSpectrumSpiral(float2 p, constant FrameUniforms &u) {
@@ -250,8 +273,8 @@ float3 emitSpectrumSpiral(float2 p, constant FrameUniforms &u) {
   float strand = exp(-pow(sin(a * n * 2.0 + r * 22.0 - u.time * 0.4) / 0.07, 2.0));
   float core = exp(-pow(r / 0.02, 2.0));
   float3 col = ramp(0.02 + r * 1.7 + d * 0.08 + micEnergy(u), u);
-  float body = ridge * arm * 0.85 + strand * arm * 0.45 + core * 0.45;
-  return col * body * (1.0 + k * 0.75 + d * 0.35);
+  float body = ridge * arm * 0.72 + strand * arm * 0.28 + core * 0.1;
+  return capPeak(col * body * (0.55 + k * 0.45 + d * 0.2), 0.4);
 }
 
 float3 emitKaleidoBass(float2 p, constant FrameUniforms &u) {
@@ -265,7 +288,7 @@ float3 emitKaleidoBass(float2 p, constant FrameUniforms &u) {
   spoke *= smoothstep(0.62, 0.04, q.x);
   float gem = exp(-pow(length(q - float2(0.12, 0.28)) / (0.02 + k * 0.012 + bass * 0.02), 2.0));
   float3 col = ramp(q.x + q.y + u.music.x * 0.35 + bass, u);
-  return col * (arc * (1.05 + k * 0.6) + spoke * 0.7 + gem * (0.45 + d * 0.5));
+  return capPeak(col * (arc * (0.65 + k * 0.4) + spoke * 0.45 + gem * (0.25 + d * 0.28)), 0.42);
 }
 
 float3 emitStarburst(float2 p, constant FrameUniforms &u) {
@@ -289,7 +312,7 @@ float3 emitStarburst(float2 p, constant FrameUniforms &u) {
       acc += ramp(h + u.music.x * 0.22, u) * star * twinkle * (0.7 + k * 0.85 + d * 0.35 + hit * 1.1);
     }
   }
-  return acc * smoothstep(1.05, 0.12, length(p));
+  return capPeak(acc * smoothstep(1.05, 0.12, length(p)), 0.45);
 }
 
 float3 emitWaveformGlow(float2 p, constant FrameUniforms &u) {
@@ -315,7 +338,7 @@ float3 emitWaveformGlow(float2 p, constant FrameUniforms &u) {
     dots += exp(-dot(p - pt, p - pt) * 1200.0);
   }
   float3 col = ramp(0.5 + p.x * 0.3 + u.music.x * 0.2 + micEnergy(u), u);
-  return col * (line * (0.9 + k) + glow * 0.32 + ring * 0.38 * (0.5 + mic) + dots * 0.22 * (0.4 + mic));
+  return capPeak(col * (line * (0.75 + k * 0.5 + d * 0.12) + glow * 0.08 + ring * 0.22 * (0.35 + mic) + dots * 0.14 * (0.3 + mic)), 0.42);
 }
 
 float3 emitLiquidMirror(float2 p, constant FrameUniforms &u) {
@@ -330,10 +353,10 @@ float3 emitLiquidMirror(float2 p, constant FrameUniforms &u) {
   float b3 = exp(-pow((p.y + 0.16 - wob3 + sway * 0.4) / 0.045, 2.0));
   float sheen = pow(0.5 + 0.5 * sin(p.x * 3.0 - p.y * 8.0 + u.time * 0.4), 6.0);
   float3 col = ramp(0.25 + p.y * 0.8 + u.time * 0.03, u);
-  return col * (b1 * 0.42 + b2 * 0.28 + b3 * 0.34) * (0.8 + sheen * 0.35) * (1.0 + k * 0.5);
+  return capPeak(col * (b1 * 0.28 + b2 * 0.18 + b3 * 0.2) * (0.55 + sheen * 0.18) * (0.65 + k * 0.35), 0.35);
 }
 
-float3 emitElectricSheep(float2 p, constant FrameUniforms &u) {
+float3 emitTealDust(float2 p, constant FrameUniforms &u) {
   float3 acc = float3(0.0);
   float scale = max(u.wave.y, 2.0);
   float2 gp = p * scale;
@@ -344,7 +367,7 @@ float3 emitElectricSheep(float2 p, constant FrameUniforms &u) {
     for (int i = -1; i <= 1; i++) {
       float2 cell = id + float2(float(i), float(j));
       float h = hash21(cell);
-      if (h < 0.74 - mic * 0.08) continue;
+      if (h < 0.62 - mic * 0.06) continue;
       float2 motion = float2(
         sin(u.time * 0.15 + h * TAU),
         cos(u.time * 0.12 + h * 11.0)
@@ -354,8 +377,132 @@ float3 emitElectricSheep(float2 p, constant FrameUniforms &u) {
       acc += ramp(h, u) * star * (0.55 + 0.45 * sin(u.time * 0.8 + h * 20.0) + kick(u) * 0.85 + u.ear.z * mic * 0.4);
     }
   }
-  float dust = exp(-pow(length(p) / 0.55, 2.0));
-  return acc * (0.35 + dust);
+  return capPeak(acc * 0.62, 0.42);
+}
+
+float3 emitGreenRays(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float mic = liveWeight(u);
+  float wave = sampleMicWave(p.x, u);
+  if (mic < 0.02) wave += 0.07 * sin(p.x * 9.0 + u.time * 2.2) * clockEnvelope(u);
+  float thick = max(u.wave.z, 0.003);
+  float line = exp(-pow((p.y - wave) / thick, 2.0));
+  float a = atan2(p.y, p.x);
+  float ray = pow(max(cos(a), 0.0), 52.0) * exp(-length(p) * (1.35 - k * 0.25));
+  float streak = exp(-pow((abs(p.y) - abs(p.x) * 0.08) / 0.0045, 2.0)) * smoothstep(0.95, 0.05, length(p));
+  float3 col = ramp(0.22 + micEnergy(u), u);
+  return capPeak(col * (line * (0.85 + k * 0.55) + ray * 0.38 + streak * 0.22), 0.44);
+}
+
+float3 emitOrbGrid(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float mic = liveWeight(u);
+  float r = length(p);
+  float core = exp(-pow(r / (0.14 + k * 0.02 + u.ear.y * mic * 0.03), 2.0));
+  float fuzz = pow(0.5 + 0.5 * sin(atan2(p.y, p.x) * 9.0 + r * 22.0 - u.time * 0.5), 14.0);
+  float3 blue = ramp(0.15 + r * 0.4, u);
+  float3 orb = capPeak(blue * core * fuzz * (0.55 + k * 0.35), 0.48);
+  float2 g = float2(p.x * 1.35 + 0.55, p.y * 0.9);
+  float2 cell = fract(g * 14.0) - 0.5;
+  float2 id = floor(g * 14.0);
+  float h = hash21(id);
+  float wing = smoothstep(0.18, 0.02, abs(p.x)) * smoothstep(0.72, 0.28, abs(p.y));
+  float dot = exp(-dot(cell, cell) * 180.0) * wing * step(0.35, h);
+  float3 red = mix(u.color1.rgb, u.color2.rgb, h);
+  return capPeak(orb + red * dot * (0.42 + k * 0.3), 0.46);
+}
+
+float3 emitNeonComet(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float turn = phraseTurn(u);
+  float3 acc = float3(0.0);
+  for (int i = 0; i < 6; i++) {
+    float fi = float(i) / 6.0;
+    float ang = fi * TAU + turn * 0.35 + sin(u.time * 0.2 + fi * 8.0) * 0.4;
+    float2 dir = float2(cos(ang), sin(ang));
+    float along = dot(p, dir);
+    float across = length(p - dir * along);
+    float head = exp(-pow((along - 0.22 - k * 0.06) / 0.018, 2.0));
+    float tail = exp(-pow(across / 0.0035, 2.0)) * smoothstep(0.42, -0.05, along);
+    acc += ramp(fi + u.music.x * 0.2, u) * (head * 0.35 + tail * 0.55);
+  }
+  return capPeak(acc, 0.43);
+}
+
+float3 emitPulseRings(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float r = length(p);
+  float travel = (u.music.z > 0.5) ? u.beat.z * 4.0 : u.time * 1.1;
+  float ring = pow(0.5 + 0.5 * sin(r * u.wave.y * 2.4 - travel), 28.0);
+  float ring2 = pow(0.5 + 0.5 * sin(r * u.wave.y * 3.6 - travel * 1.3 + 0.8), 32.0);
+  float fade = smoothstep(0.92, 0.04, r);
+  float3 col = ramp(r * 1.2 + u.music.x * 0.15, u);
+  return capPeak(col * (ring + ring2 * 0.65) * fade * (0.5 + k * 0.45), 0.4);
+}
+
+float3 emitStarLattice(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float2 q = float2(p.x * 1.2 + 0.35, p.y * 0.75 + 0.1);
+  float2 cell = fract(q * 10.0) - 0.5;
+  float2 id = floor(q * 10.0);
+  float persp = 1.0 / (0.35 + abs(q.y) * 1.4);
+  float dot = exp(-dot(cell, cell) * (120.0 * persp));
+  float3 col = ramp(hash21(id) + u.time * 0.02, u);
+  float field = dot * smoothstep(1.05, 0.08, length(p));
+  return capPeak(col * field * (0.48 + k * 0.4), 0.4);
+}
+
+float3 emitShockRings(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float mic = liveWeight(u);
+  float bass = max(u.ear.y, u.link.z * 0.85) * mic;
+  float r = length(p);
+  float shock = pow(0.5 + 0.5 * sin(r * 18.0 - u.time * 2.4 - k * 2.5 - bass * 3.0), 26.0);
+  float fade = smoothstep(0.88, 0.02, r);
+  float3 col = ramp(0.1 + bass, u);
+  return capPeak(col * shock * fade * (0.55 + k * 0.55), 0.42);
+}
+
+float3 emitWireWeb(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float turn = phraseTurn(u);
+  float warp = sin(p.x * u.wave.y + turn) + sin(p.y * u.wave.y * 0.9 - turn * 0.7);
+  float grid = pow(abs(sin(warp * 3.2)), 22.0);
+  float diag = pow(abs(sin((p.x + p.y) * u.wave.y * 0.8 + u.time * 0.25)), 24.0);
+  float3 col = ramp(0.35 + u.music.x * 0.25, u);
+  return capPeak(col * (grid * 0.55 + diag * 0.35) * (0.45 + k * 0.4), 0.38);
+}
+
+float3 emitDeepMandala(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float turn = phraseTurn(u);
+  float r = length(p);
+  float a = atan2(p.y, p.x);
+  float n = max(u.shape.x, 6.0);
+  float slice = TAU / n;
+  float aa = abs(safeMod(a + slice * 0.5, slice) - slice * 0.5);
+  float spoke = exp(-pow((aa * max(r, 0.03)) / max(u.wave.z, 0.0025), 2.0));
+  float lace = pow(0.5 + 0.5 * cos(a * n * 2.0 + r * 16.0 - turn), 18.0);
+  float fade = smoothstep(0.9, 0.03, r);
+  float3 col = ramp(a / TAU + r + turn * 0.05, u);
+  return capPeak(col * (spoke * 0.65 + lace * 0.28) * fade * (0.5 + k * 0.45), 0.4);
+}
+
+float3 emitSpectrumHalo(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float mic = liveWeight(u);
+  float r = length(p);
+  float targetR = u.shape.y + u.ear.y * mic * 0.06 + k * 0.02;
+  float rim = exp(-pow((r - targetR) / 0.008, 2.0));
+  float ang = atan2(p.y, p.x);
+  int bins = int(clamp(u.shape.x, 12.0, 32.0));
+  float slice = TAU / float(bins);
+  int idx = int(floor(safeMod(ang + PI, TAU) / slice));
+  float fi = float(idx) / float(bins);
+  float h = mic * mix(u.ear.y, u.ear.z, fi) + (1.0 - mic) * (0.12 + 0.08 * sin(u.time + fi * 9.0));
+  float tick = exp(-pow(safeMod(ang + PI, slice) / (slice * 0.08), 2.0));
+  float3 col = ramp(fi + h, u);
+  return capPeak(col * rim * tick * (0.55 + k * 0.45), 0.44);
 }
 
 float3 emitFractalTunnel(float2 p, constant FrameUniforms &u) {
@@ -372,7 +519,7 @@ float3 emitFractalTunnel(float2 p, constant FrameUniforms &u) {
   float fade = smoothstep(0.95, 0.05, r);
   float mask = (rings * 0.72 + ringsInner * 0.42) * fade + spokes * exp(-r * 1.5) * 0.16;
   float3 col = ramp(z * 0.15 + ang / TAU + u.music.x * 0.2, u);
-  return col * mask * (1.0 + k * 0.5 + d * 0.28);
+  return capPeak(col * mask * (0.55 + k * 0.35 + d * 0.18), 0.4);
 }
 
 float3 emitSpectrumBars(float2 p, constant FrameUniforms &u) {
@@ -396,7 +543,7 @@ float3 emitSpectrumBars(float2 p, constant FrameUniforms &u) {
   float edge = smoothstep(barW * 0.45, barW * 0.32, abs(x - cx));
   float3 col = ramp(fi + u.time * 0.03 + micEnergy(u) * 0.2, u);
   float cap = exp(-pow((p.y - top) / 0.012, 2.0));
-  return col * (inBar * edge + cap * 0.45) * (0.9 + k * 0.5);
+  return capPeak(col * (inBar * edge + cap * 0.28) * (0.65 + k * 0.35), 0.42);
 }
 
 float3 emitVortexPulse(float2 p, constant FrameUniforms &u) {
@@ -412,7 +559,7 @@ float3 emitVortexPulse(float2 p, constant FrameUniforms &u) {
   float fade = smoothstep(0.88, 0.02, r);
   float core = exp(-pow(r / (0.028 + k * 0.01), 2.0));
   float3 col = ramp(0.1 + r * 0.7 + u.music.x * 0.3, u);
-  return col * ((arm * 0.82 + armInner * 0.32) * fade * (1.0 + k * 0.55) + core * (0.4 + d * 0.35));
+  return capPeak(col * ((arm * 0.62 + armInner * 0.22) * fade * (0.55 + k * 0.4) + core * (0.15 + d * 0.12)), 0.4);
 }
 
 float3 emitHueWheel(float2 p, constant FrameUniforms &u) {
@@ -428,22 +575,30 @@ float3 emitHueWheel(float2 p, constant FrameUniforms &u) {
   float k = kick(u);
   float d = downbeat(u);
   float3 col = ramp(u.time * 0.07 + r * 0.5 + float(int(floor(safeMod(a + PI, TAU) / slice))), u);
-  return col * (glow * (0.7 + k * 0.65) + rim * (0.55 + d * 0.85) + hub * (0.35 + k * 0.3));
+  return capPeak(col * (glow * (0.45 + k * 0.4) + rim * (0.35 + d * 0.45) + hub * 0.08), 0.4);
 }
 
 float3 emitMode(float2 p, int mode, constant FrameUniforms &u) {
   if (mode == 0) return emitTunnelVision(p, u);
-  if (mode == 1) return emitPlasmaDrift(p, u);
-  if (mode == 2) return emitSpectrumSpiral(p, u);
-  if (mode == 3) return emitKaleidoBass(p, u);
-  if (mode == 4) return emitStarburst(p, u);
-  if (mode == 5) return emitWaveformGlow(p, u);
-  if (mode == 6) return emitLiquidMirror(p, u);
-  if (mode == 7) return emitElectricSheep(p, u);
-  if (mode == 8) return emitFractalTunnel(p, u);
-  if (mode == 9) return emitSpectrumBars(p, u);
-  if (mode == 10) return emitVortexPulse(p, u);
-  if (mode == 11) return emitHueWheel(p, u);
+  if (mode == 1) return emitTealDust(p, u);
+  if (mode == 2) return emitGreenRays(p, u);
+  if (mode == 3) return emitOrbGrid(p, u);
+  if (mode == 4) return emitWaveformGlow(p, u);
+  if (mode == 5) return emitLiquidMirror(p, u);
+  if (mode == 6) return emitPlasmaDrift(p, u);
+  if (mode == 7) return emitSpectrumSpiral(p, u);
+  if (mode == 8) return emitKaleidoBass(p, u);
+  if (mode == 9) return emitFractalTunnel(p, u);
+  if (mode == 10) return emitSpectrumBars(p, u);
+  if (mode == 11) return emitVortexPulse(p, u);
+  if (mode == 12) return emitHueWheel(p, u);
+  if (mode == 13) return emitNeonComet(p, u);
+  if (mode == 14) return emitPulseRings(p, u);
+  if (mode == 15) return emitStarLattice(p, u);
+  if (mode == 16) return emitShockRings(p, u);
+  if (mode == 17) return emitWireWeb(p, u);
+  if (mode == 18) return emitDeepMandala(p, u);
+  if (mode == 19) return emitSpectrumHalo(p, u);
   return emitPlasmaDrift(p, u);
 }
 
@@ -476,68 +631,38 @@ fragment float4 warpFragment(
         col *= u.music.w;
     }
 
-    float mic = liveWeight(u);
-    float hit = max(u.ear.x, u.link.y * 0.45);
-    float drop = clamp(u.hole.w, 0.0, 1.0);
-    float slam = clamp(u.grade.y, 0.0, 1.5);
-    // The middle of a kaleidoscope stacks on itself. Near-white fades at about
-    // 6–8/s so a blown-out frame falls back within half a second.
     float center = smoothstep(0.78, 0.06, length(p0));
-    float lumaIn = dot(max(col, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
-    float burn = smoothstep(0.48, 1.25, lumaIn);
-    float white = smoothstep(0.72, 1.05, lumaIn);
-    float baseRate = (1.0 / max(u.persist.x, 0.05)) * (1.0 + burn * (1.15 + center * 2.4));
-    float hotRate = white * (5.5 + center * 2.5);
-    float keep = exp(-u.deltaTime * max(baseRate, hotRate));
+    // Linear-space trail decay (~0.90–0.96 retained per 60 Hz frame). persist.x
+    // is seconds-to-half-ish; map preset decayTau into that band.
+    float frameKeep = mix(0.90, 0.96, clamp(u.persist.x * 0.85, 0.0, 1.0));
+    float keep = pow(frameKeep, u.deltaTime * 60.0);
     col *= keep;
-    col = max(col - float3(0.00105 + burn * 0.0048) * (u.deltaTime * 60.0), float3(0.0));
-    // A short lift on a hit. Capped, and almost off once the core is already hot,
-    // so a kick changes the picture instead of pinning it white.
-    float lumaMid = dot(max(col, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
-    float lift = mix(clockEnvelope(u) * 0.08, min(hit, 1.2) * 0.18, mic);
-    lift += min(drop, 1.0) * 0.10 + min(slam, 1.0) * 0.08;
-    lift *= mix(1.0, 0.22, smoothstep(0.62, 1.15, lumaMid) * (0.3 + center * 0.7));
-    col *= 1.0 + min(lift, 0.28);
-    float hue = clamp(u.persist.z * u.deltaTime + downbeat(u) * 0.03 * (1.0 - mic) + u.ear.z * mic * 0.055 + drop * 0.08, 0.0, 0.16);
+    float hue = clamp(u.persist.z * u.deltaTime + downbeat(u) * 0.02 * (1.0 - liveWeight(u)) + u.ear.z * liveWeight(u) * 0.03, 0.0, 0.12);
     col = mix(col, col.gbr, hue);
 
     float r = length(p0);
     float holeMask = 1.0 - smoothstep(0.0, max(u.hole.x, 0.001), r);
     col *= exp(-u.deltaTime * u.hole.y * holeMask * 3.0);
 
-    float n = hash21(in.position.xy + fract(u.time * 17.13)) - 0.5;
-    col += n * u.hole.z;
-    float high = u.ear.z * mic;
-    float glitter = hash21(floor(in.position.xy * 0.35) + floor(u.time * 11.0));
-    float specks = step(0.988, glitter) * high;
-    col += specks * ramp(glitter + u.ear.y, u) * 0.65;
-
     float w = smoothstep(0.0, 1.0, u.tempo.w);
     int modeA = int(u.tempo.y + 0.5);
     int modeB = int(u.tempo.z + 0.5);
     float3 emittedA = emitMode(spun, modeA, u);
     float3 emittedB = emitMode(spun, modeB, u);
-    // Lerp. A sum of the two strokes would add their brightness during the blend.
     float3 e = mix(emittedA, emittedB, w);
-    float lumaA = dot(max(emittedA, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
-    float lumaB = dot(max(emittedB, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
-    float lumaE = dot(max(e, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
-    e *= mix(lumaA, lumaB, w) / max(lumaE, 0.0001);
-    float clockBoost = pulseAmt(u) * 0.85 + downbeat(u) * 0.2;
-    float micBoost = min(hit, 1.6) * 1.15 + min(u.ear.w, 1.6) * 0.4 + min(u.link.w, 1.4) * 0.28 + min(high, 1.4) * 0.28;
-    e *= u.style.z * (1.0 + min(mix(clockBoost, micBoost, mic) + drop * 0.7, 1.8));
-    float lumaNow = dot(max(col, float3(0.0)), float3(0.2126, 0.7152, 0.0722));
-    // Less new light where the frame is already bright, and less again in the
-    // center, so additive cores stop filling in to a solid disk.
-    float room = 1.0 / (1.0 + max(lumaNow - 0.36, 0.0) * (1.45 + center * 2.1));
-    float centerGate = mix(1.0, 0.26, center * smoothstep(0.36, 1.0, lumaNow));
-    col += max(e, float3(0.0)) * u.shape.w * room * centerGate;
-    col += u.baseColor.rgb * u.style.y * u.deltaTime * room;
-    // Shoulder into the history. Dim trails pass through; highlights compress
-    // and cannot be stored as a flat ceiling.
-    float3 over = max(col - float3(0.62), float3(0.0));
-    col = min(col, float3(0.62)) + over / (1.0 + over * (0.8 + center * 1.05));
-    col = clamp(col, float3(0.0), float3(1.35));
+    float mic = liveWeight(u);
+    float hit = max(u.ear.x, u.link.y * 0.45);
+    float clockBoost = pulseAmt(u) * 0.35 + downbeat(u) * 0.08;
+    float micBoost = min(hit, 1.2) * 0.45 + min(u.ear.w, 1.2) * 0.15;
+    float react = min(mix(clockBoost, micBoost, mic), 0.65);
+    e *= u.style.z * (0.55 + react);
+    float stamp = u.shape.w * (0.42 + react * 0.25);
+    float lumaNow = luma3(col);
+    float room = 1.0 / (1.0 + max(lumaNow - 0.22, 0.0) * (2.2 + center * 1.8));
+    stamp *= room * mix(1.0, 0.35, center * smoothstep(0.28, 0.85, lumaNow));
+    float3 layer = capPeak(e * stamp, 0.55);
+    col = max(col, layer);
+    col = capLuma(col, 0.75);
     return float4(col, 1.0);
 }
 
@@ -558,40 +683,23 @@ fragment float4 presentFragment(
     float2 hi = float2(1.0) - smoothstep(float2(1.0), float2(1.012), zuv);
     float3 c = source.sample(samp, clamp(zuv, float2(0.0), float2(1.0))).rgb;
     c *= lo.x * lo.y * hi.x * hi.y;
-    float luma = dot(c, float3(0.2126, 0.7152, 0.0722));
-    c = max(mix(float3(luma), c, max(u.grade.z, 0.0)), float3(0.0));
+    float satAmt = clamp(u.grade.z, 0.8, 1.6);
+    c = boostSat(c, satAmt);
     float v = length((in.uv - 0.5) * float2(1.15, 1.35));
     c *= mix(1.0, smoothstep(0.95, 0.22, v), clamp(u.grade.w, 0.0, 1.0));
-    // Whole-frame lift. The stroke-only pulse was too small to read from a couch.
-    float mic = liveWeight(u);
-    float hit = max(u.ear.x, u.link.y * 0.45);
-    float body = max(u.ear.y, u.link.z * 0.85);
-    float drop = clamp(u.hole.w, 0.0, 1.0);
-    float slam = clamp(u.grade.y, 0.0, 1.5);
-    // Cap the lift. Sensitivity 3× and Drop still zoom and warp, but they
-    // cannot multiply the whole frame into a clipped white.
-    float flash = mix(clockEnvelope(u) * 0.28, min(hit, 1.35) * 0.40 + min(body, 1.35) * 0.15, mic);
-    flash += min(drop, 1.0) * 0.34 + min(slam, 1.0) * 0.18;
-    flash = min(flash, 0.58);
-    // Hard cap on the average, measured from the feedback this frame.
-    // A multiply keeps black at black. Reinhard below then keeps the highlights.
+    // Gain never above 1.0. grade.x carries CPU-smoothed frame gain-down only.
     float mean = meanLuma.sample(samp, float2(0.5)).r;
-    float gain = u.style.x * (1.0 + flash);
-    float predicted = max(mean, 0.0) * gain;
-    if (predicted > 0.45) {
-        gain *= 0.45 / predicted;
+    float presetGain = min(max(u.style.x, 0.0), 1.0);
+    float frameCap = min(max(u.grade.x, 0.0), 1.0);
+    float instant = presetGain * frameCap;
+    if (mean > 1e-4) {
+        float down = min(1.0, 0.25 / mean);
+        instant = min(instant, down);
     }
-    c *= gain;
-    c = pow(max(c, float3(0.0)), float3(1.15));
-    // Soft shoulder before the display curve so a hot core keeps its hue.
-    float peak = max(c.r, max(c.g, c.b));
-    float crush = smoothstep(1.05, 3.2, peak);
-    c = mix(c, c * (0.92 / max(peak, 0.001)), crush);
-    c = c / (1.0 + c);
-    c = pow(clamp(c, 0.0, 1.0), float3(1.0 / 2.2));
-    float n = hash21(in.position.xy + fract(u.time * 9.0)) - 0.5;
-    c += n / 255.0;
-    return float4(c, 1.0);
+    c *= instant;
+    c = capPeak(c, 0.92);
+    // bgra8Unorm drawable: linear in, display gamma once — no extra pow(1/2.2).
+    return float4(clamp(c, 0.0, 1.0), 1.0);
 }
 
 /// One pixel: mean luminance of a coarse grid. The present pass reads it

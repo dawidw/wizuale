@@ -24,6 +24,7 @@
 		C10000000000000000000011 /* BeatClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* BeatClock.swift */; };
 		C10000000000000000000012 /* TempoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* TempoService.swift */; };
 		C10000000000000000000013 /* TempoText.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* TempoText.swift */; };
+		C10000000000000000000014 /* ToneMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* ToneMath.swift */; };
 		F20000000000000000000001 /* MicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* MicApp.swift */; };
 		F20000000000000000000002 /* MicRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000002 /* MicRootView.swift */; };
 		F20000000000000000000003 /* MicCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000003 /* MicCapture.swift */; };
@@ -64,6 +65,7 @@
 		B10000000000000000000011 /* BeatClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatClock.swift; sourceTree = "<group>"; };
 		B10000000000000000000012 /* TempoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempoService.swift; sourceTree = "<group>"; };
 		B10000000000000000000013 /* TempoText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempoText.swift; sourceTree = "<group>"; };
+		B10000000000000000000016 /* ToneMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneMath.swift; sourceTree = "<group>"; };
 		B10000000000000000000014 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		B10000000000000000000015 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
 		E20000000000000000000001 /* MicApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicApp.swift; sourceTree = "<group>"; };
@@ -135,6 +137,7 @@
 				B10000000000000000000009 /* RemoteReader.swift */,
 				B1000000000000000000000A /* FrameUniforms.swift */,
 				B1000000000000000000000B /* Presets.swift */,
+				B10000000000000000000016 /* ToneMath.swift */,
 				B10000000000000000000011 /* BeatClock.swift */,
 				B10000000000000000000012 /* TempoService.swift */,
 				B10000000000000000000013 /* TempoText.swift */,
@@ -297,6 +300,7 @@
 				C10000000000000000000009 /* RemoteReader.swift in Sources */,
 				C1000000000000000000000A /* FrameUniforms.swift in Sources */,
 				C1000000000000000000000B /* Presets.swift in Sources */,
+				C10000000000000000000014 /* ToneMath.swift in Sources */,
 				C10000000000000000000011 /* BeatClock.swift in Sources */,
 				C10000000000000000000012 /* TempoService.swift in Sources */,
 				C10000000000000000000013 /* TempoText.swift in Sources */,

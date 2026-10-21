@@ -8,20 +8,28 @@ The picture does not listen to the audio. Apple Music is protected, and this app
 
 ## Pictures
 
-Twelve classic MilkDrop-style presets play on their own. They morph into the next over about 1.3 seconds: the new stroke crossfades (a mix, not a sum), the previous frame is dimmed so the two pictures do not stack, and the warp eases across the same window instead of cutting. Without a matched tempo they hold for about 45 seconds. With a matched tempo they wait for the next 8-bar phrase after that, so the change lands on the music. Each picture also wanders a little on its own (zoom, spin, warp, hue), retargeting every few seconds. With Wizuale Mic live, bass pushes zoom, mids spin the warp, and treble adds sparkle; waveforms and spectrum bars follow the room.
+Twenty classic MilkDrop-style presets play on their own. They morph into the next over about 1.3 seconds: the new stroke crossfades (a mix, not a sum), the previous frame is dimmed so the two pictures do not stack, and the warp eases across the same window instead of cutting. Without a matched tempo they hold for about 45 seconds. With a matched tempo they wait for the next 8-bar phrase after that, so the change lands on the music. Each picture also wanders a little on its own (zoom, spin, warp, hue), retargeting every few seconds. With Wizuale Mic live, bass pushes zoom, mids spin the warp, and treble adds sparkle; waveforms and spectrum bars follow the room. The tone path keeps a dark base: feedback decays in linear space, present gain never lifts above 1.0, and peaks stay saturated instead of washing to pastel white.
 
-1. **Tunnel Vision** — log-zoom rings and spokes rushing through a neon tunnel
-2. **Plasma Drift** — hue-cycling plasma contours smeared by feedback warp
-3. **Spectrum Spiral** — a bass-driven log spiral with mic-tinted arms
-4. **Kaleido Bass** — mirrored arcs in an eight-fold kaleidoscope that swells with bass
-5. **Starburst** — a particle starfield that flares on kicks
-6. **Waveform Glow** — oscilloscope line, circular scope, and dots driven by the mic
-7. **Liquid Mirror** — flowing silk ribbons with a mirrored sheen
-8. **Electric Sheep** — drifting luminous particles (sheep in the fog)
-9. **Fractal Tunnel** — nested log-radius well rings
-10. **Spectrum Bars** — Winamp-style bars along the bottom from bass to treble
-11. **Vortex Pulse** — a tight swirling spiral keyed to mids
-12. **Hue Wheel** — a twelve-spoke prism wheel with hue spin
+1. **Dotted Tunnel** — teal dot rings zooming to center (classic tunnel)
+2. **Teal Dust** — drifting cyan particle field on black
+3. **Green Rays** — horizontal waveform with green speed-line bursts
+4. **Orb & Grid** — electric-blue core with red dot wings
+5. **Wave Tangle** — nested thin waveform rings around a dim core
+6. **Coral Warp** — saturated coral / cyan / mint fractal ribbons
+7. **Plasma Veins** — sharp plasma filaments, no fog fill
+8. **Spiral Arms** — log-spiral spectrum arms
+9. **Kaleido Mirror** — eight-fold kaleidoscope arcs
+10. **Fractal Well** — nested tunnel rings in a deep well
+11. **Bar Storm** — Winamp-style spectrum bars from bass to treble
+12. **Vortex Filament** — tight swirling spiral filaments
+13. **Prism Wheel** — twelve-spoke hue wheel
+14. **Neon Comet** — streaking comet trails from the center
+15. **Pulse Rings** — thin concentric rings that pulse with tempo
+16. **Star Lattice** — perspective dot grid (tunnel walls)
+17. **Bass Shockwave** — expanding rings on kicks and bass
+18. **Wire Web** — intersecting neon wire grid
+19. **Deep Mandala** — lace mandala spokes in kaleidoscope
+20. **Spectrum Halo** — circular spectrum ring driven by the mic
 
 Each frame is the previous frame, warped (zoom, rotation, swirl, kaleidoscope), faded, and hue-shifted, with a thin new stroke drawn on top. That feedback is what makes the trails.
 
