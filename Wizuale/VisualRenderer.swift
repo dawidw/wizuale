@@ -93,6 +93,9 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
     private var modeT: Float = 1
     /// Frames that multiply stored history by 0.2 after a preset change.
     private var dimFrames = 0
+    /// Display zoom. Eases toward the phone's value so a drag does not jump.
+    private var shownZoom: Float = 1
+    private var haveZoom = false
     private var displayed: PresetParams
     private var wander = Wander()
     private var albumWeight: Float = 0
@@ -232,6 +235,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
         uniforms.link = SIMD4(heard.presence, heard.flux, heard.lowMid, heard.mid)
         uniforms.hole.w = heard.drop
         uniforms.grade.y = heard.dropPunch
+        uniforms.wave.x = shownZoom
 
         let writeIndex = 1 - readIndex
         guard let warp = command.makeRenderCommandEncoder(descriptor: Self.pass(textures[writeIndex])) else {
@@ -276,6 +280,14 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
             slotTo = target
             modeT = 0
             dimFrames = 2
+        }
+        let zoomTarget = min(max(snapshot.zoom, MicTuning.zoomMin), MicTuning.zoomMax)
+        if !haveZoom {
+            shownZoom = zoomTarget
+            haveZoom = true
+        } else {
+            let follow = 1 - exp(-dt / 0.15)
+            shownZoom += (zoomTarget - shownZoom) * follow
         }
         modeT = min(1, modeT + dt / PresetLibrary.blendDuration)
         // The emit mix finishes with blendDuration. Ease the warp on that same

@@ -39,6 +39,7 @@ struct MicRootView: View {
                         meter(title: "Bass", value: mic.bassLevel)
                         sensitivitySlider
                         latencySlider
+                        zoomSlider
                         albumArtToggle
                         calibrateControl
                     }
@@ -140,6 +141,27 @@ struct MicRootView: View {
         }
     }
 
+    private var zoomSlider: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("ZOOM")
+                    .font(.system(size: 13, weight: .semibold))
+                    .tracking(1.6)
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Text(zoomText(mic.zoom))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            Slider(
+                value: $mic.zoom,
+                in: MicTuning.zoomMin...MicTuning.zoomMax,
+                step: 0.05
+            )
+            .tint(.white)
+        }
+    }
+
     private var albumArtToggle: some View {
         Toggle(isOn: $mic.albumArt) {
             Text("ALBUM ART COLORS")
@@ -210,6 +232,17 @@ struct MicRootView: View {
     private func gainText(_ value: Float) -> String {
         if abs(value - value.rounded()) < 0.02 {
             return String(format: "%.0f×", value)
+        }
+        return String(format: "%.2f×", value)
+    }
+
+    private func zoomText(_ value: Float) -> String {
+        if abs(value - value.rounded()) < 0.02 {
+            return String(format: "%.0f×", value)
+        }
+        let tenths = value * 10
+        if abs(tenths - tenths.rounded()) < 0.05 {
+            return String(format: "%.1f×", value)
         }
         return String(format: "%.2f×", value)
     }

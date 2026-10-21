@@ -8,6 +8,7 @@ struct RenderSnapshot: Sendable {
     var album: AlbumColors?
     var wantsAlbum: Bool
     var paused: Bool
+    var zoom: Float
 }
 
 /// Handoff between the SwiftUI session and the Metal draw loop.
@@ -18,6 +19,7 @@ final class RenderState: @unchecked Sendable {
     private var albumArt = true
     private var wantsAlbum = false
     private var paused = false
+    private var zoom = MicTuning.zoomDefault
 
     func snapshot() -> RenderSnapshot {
         lock.lock()
@@ -26,7 +28,8 @@ final class RenderState: @unchecked Sendable {
             targetIndex: targetIndex,
             album: album,
             wantsAlbum: wantsAlbum,
-            paused: paused
+            paused: paused,
+            zoom: zoom
         )
     }
 
@@ -56,6 +59,12 @@ final class RenderState: @unchecked Sendable {
         paused = value
         lock.unlock()
     }
+
+    func setZoom(_ value: Float) {
+        lock.lock()
+        zoom = MicTuning.clampZoom(value)
+        lock.unlock()
+    }
 }
 
 /// Which picture is showing, and the small title card in the corner.
@@ -70,6 +79,7 @@ final class VisualSession: ObservableObject {
         micReceiver = MicReceiver()
         beatClock.setVisualLatency(ms: MicTuning.loadLatency())
         renderState.setAlbumArt(MicTuning.loadAlbumArt())
+        renderState.setZoom(zoom)
     }
 
     @Published private(set) var presetIndex = 0
@@ -81,6 +91,7 @@ final class VisualSession: ObservableObject {
     @Published var micSource = MicTuning.loadSource()
     @Published var sensitivity = MicTuning.loadSensitivity()
     @Published var latencyMs = MicTuning.loadLatency()
+    @Published var zoom = MicTuning.loadZoom()
     @Published var showMicSettings = false
     @Published var showContinuityPicker = false
     @Published private(set) var continuityStatus = ""
@@ -126,6 +137,13 @@ final class VisualSession: ObservableObject {
             micReceiver.onAlbumArt = { [weak self] enabled in
                 Task { @MainActor in
                     self?.renderState.setAlbumArt(enabled)
+                }
+            }
+            micReceiver.onZoom = { [weak self] scale in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.zoom = scale
+                    self.renderState.setZoom(scale)
                 }
             }
             micReceiver.setShown(index: presetIndex, cycling: true)

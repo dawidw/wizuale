@@ -76,6 +76,7 @@ struct RootView: View {
                     source: visuals.micSource,
                     sensitivity: visuals.sensitivity,
                     latencyMs: visuals.latencyMs,
+                    zoom: visuals.zoom,
                     continuityStatus: visuals.continuityStatus,
                     onSource: { visuals.setMicSource($0) },
                     onSensitivity: { visuals.setSensitivity($0) },

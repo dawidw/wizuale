@@ -41,7 +41,7 @@ struct MicBandEnergy: Equatable, Sendable {
 enum MicPacket: Equatable, Sendable {
     case audio(sequence: UInt16, features: MicFeatures, sensitivity: Float)
     case command(sequence: UInt16, preset: Int16)
-    case settings(sequence: UInt16, latencyMs: Int16, sensitivity: Float, albumArt: Bool?)
+    case settings(sequence: UInt16, latencyMs: Int16, sensitivity: Float, albumArt: Bool?, zoom: Float?)
     case boost(sequence: UInt16, amount: Float)
     case ack(preset: Int16, cycling: Bool, latencyMs: Int?, sensitivity: Float?)
 }
@@ -58,6 +58,8 @@ enum PresetWire {
 /// Audio, 40 bytes: magic u32, kind u16 = 1, sequence u16, seven f32 gains, sensitivity f32.
 /// Command, 10 bytes: magic, kind = 2, sequence u16, preset i16.
 /// Settings, 16 bytes: magic, kind = 4, sequence u16, latency i16, album u16, sensitivity f32.
+/// A 20-byte settings packet appends zoom f32 (about 0.5...2). Older TVs still read the
+/// first 16 bytes. A 16-byte packet leaves zoom unset, and the TV uses 1.
 /// Album is 0 when an older packet did not say, 1 for on, 2 for off.
 /// Boost, 12 bytes: magic, kind = 5, sequence u16, amount f32 (0...1).
 /// Ack, 16 bytes: magic, kind = 3, preset i16, cycling u16, latency i16, sensitivity f32.
@@ -78,6 +80,7 @@ enum MicWire {
     static let ackBytes = 10
     static let ackTunedBytes = 16
     static let settingsBytes = 16
+    static let settingsZoomBytes = 20
     static let boostBytes = 12
 
     static func encodeAudio(sequence: UInt16, features: MicFeatures, sensitivity: Float) -> Data {
@@ -105,14 +108,15 @@ enum MicWire {
         return data
     }
 
-    static func encodeSettings(sequence: UInt16, latencyMs: Int, sensitivity: Float, albumArt: Bool) -> Data {
-        var data = Data(capacity: settingsBytes)
+    static func encodeSettings(sequence: UInt16, latencyMs: Int, sensitivity: Float, albumArt: Bool, zoom: Float) -> Data {
+        var data = Data(capacity: settingsZoomBytes)
         write(magic, &data)
         write(kindSettings, &data)
         write(sequence, &data)
         write(Int16(clamping: MicTuning.clampLatency(latencyMs)), &data)
         write(albumArt ? UInt16(1) : UInt16(2), &data)
         write(slider(sensitivity), &data)
+        write(MicTuning.clampZoom(zoom), &data)
         return data
     }
 
@@ -176,11 +180,13 @@ enum MicWire {
             guard let sensitivity = readSlider(data, 12) else { return nil }
             let albumRaw = readUInt16(data, 10)
             let albumArt: Bool? = albumRaw == 1 ? true : (albumRaw == 2 ? false : nil)
+            let zoom: Float? = data.count >= settingsZoomBytes ? readZoom(data, 16) : nil
             return .settings(
                 sequence: readUInt16(data, 6),
                 latencyMs: readInt16(data, 8),
                 sensitivity: sensitivity,
-                albumArt: albumArt
+                albumArt: albumArt,
+                zoom: zoom
             )
         }
         if kind == kindBoost {
@@ -263,6 +269,12 @@ enum MicWire {
         let value = Float(bitPattern: readUInt32(data, offset))
         guard value.isFinite else { return nil }
         return MicTuning.clampSensitivity(value)
+    }
+
+    private static func readZoom(_ data: Data, _ offset: Int) -> Float? {
+        let value = Float(bitPattern: readUInt32(data, offset))
+        guard value.isFinite else { return nil }
+        return MicTuning.clampZoom(value)
     }
 
     private static func readBoost(_ data: Data, _ offset: Int) -> Float? {

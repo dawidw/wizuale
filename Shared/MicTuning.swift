@@ -24,6 +24,7 @@ enum MicTuning {
     static let latencyKey = "wizuale.mic.latencyMs"
     static let sourceKey = "wizuale.mic.source"
     static let albumArtKey = "wizuale.mic.albumArt"
+    static let zoomKey = "wizuale.mic.zoom"
 
     static let sensitivityMin: Float = 0.25
     static let sensitivityMax: Float = 3
@@ -31,6 +32,9 @@ enum MicTuning {
     static let latencyMin = -200
     static let latencyMax = 400
     static let latencyStep = 10
+    static let zoomMin: Float = 0.5
+    static let zoomMax: Float = 2
+    static let zoomDefault: Float = 1
 
     static func clampSensitivity(_ value: Float) -> Float {
         guard value.isFinite else { return sensitivityDefault }
@@ -79,6 +83,20 @@ enum MicTuning {
 
     static func saveAlbumArt(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: albumArtKey)
+    }
+
+    static func clampZoom(_ value: Float) -> Float {
+        guard value.isFinite else { return zoomDefault }
+        return min(max(value, zoomMin), zoomMax)
+    }
+
+    static func loadZoom() -> Float {
+        guard UserDefaults.standard.object(forKey: zoomKey) != nil else { return zoomDefault }
+        return clampZoom(UserDefaults.standard.float(forKey: zoomKey))
+    }
+
+    static func saveZoom(_ value: Float) {
+        UserDefaults.standard.set(clampZoom(value), forKey: zoomKey)
     }
 }
 

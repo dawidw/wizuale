@@ -8,6 +8,7 @@ struct MicSettingsPanel: View {
     var source: MicInputSource
     var sensitivity: Float
     var latencyMs: Int
+    var zoom: Float
     var continuityStatus: String
     var onSource: (MicInputSource) -> Void
     var onSensitivity: (Float) -> Void
@@ -67,6 +68,14 @@ struct MicSettingsPanel: View {
                         .buttonStyle(.card)
                 }
 
+                HStack {
+                    Text("Zoom")
+                        .font(.system(size: 24, weight: .medium))
+                    Spacer()
+                    Text(zoomText(zoom))
+                        .font(.system(size: 24, weight: .semibold))
+                }
+
                 Button("Pair Continuity Microphone") {
                     if AVContinuityDevicePickerViewController.isSupported {
                         onPair()
@@ -101,6 +110,17 @@ struct MicSettingsPanel: View {
     private func sensitivityText(_ value: Float) -> String {
         if abs(value - value.rounded()) < 0.02 {
             return String(format: "%.0f×", value)
+        }
+        return String(format: "%.2f×", value)
+    }
+
+    private func zoomText(_ value: Float) -> String {
+        if abs(value - value.rounded()) < 0.02 {
+            return String(format: "%.0f×", value)
+        }
+        let tenths = value * 10
+        if abs(tenths - tenths.rounded()) < 0.05 {
+            return String(format: "%.1f×", value)
         }
         return String(format: "%.2f×", value)
     }

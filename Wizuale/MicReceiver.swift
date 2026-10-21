@@ -37,6 +37,8 @@ final class MicReceiver: @unchecked Sendable {
     var onTuning: (@Sendable (Int, Float) -> Void)?
     /// Whether album art may tint the picture. Called on the main queue when a settings packet says so.
     var onAlbumArt: (@Sendable (Bool) -> Void)?
+    /// Uniform zoom, about 0.5...2. Called on the main queue when a settings packet says so.
+    var onZoom: (@Sendable (Float) -> Void)?
 
     private struct Stamp {
         var features: MicFeatures
@@ -55,6 +57,7 @@ final class MicReceiver: @unchecked Sendable {
     private var sensitivity: Float
     private var latencyMs: Int
     private var albumArt: Bool
+    private var zoom: Float
     private var source: MicInputSource
     private var localSequence: UInt16 = 0
     private var dropTarget: Float = 0
@@ -85,6 +88,7 @@ final class MicReceiver: @unchecked Sendable {
         sensitivity = MicTuning.loadSensitivity()
         latencyMs = MicTuning.loadLatency()
         albumArt = MicTuning.loadAlbumArt()
+        zoom = MicTuning.loadZoom()
         source = MicTuning.loadSource()
     }
 
@@ -357,8 +361,8 @@ final class MicReceiver: @unchecked Sendable {
                     handler(choice)
                 }
             }
-        case .settings(_, let latency, let sens, let art):
-            adoptSettings(latencyMs: Int(latency), sensitivity: sens, albumArt: art)
+        case .settings(_, let latency, let sens, let art, let zoom):
+            adoptSettings(latencyMs: Int(latency), sensitivity: sens, albumArt: art, zoom: zoom)
             sendAck(force: true)
         case .boost(_, let amount):
             lock.lock()
@@ -385,12 +389,15 @@ final class MicReceiver: @unchecked Sendable {
         }
     }
 
-    private func adoptSettings(latencyMs ms: Int, sensitivity sens: Float, albumArt art: Bool?) {
+    private func adoptSettings(latencyMs ms: Int, sensitivity sens: Float, albumArt art: Bool?, zoom scale: Float?) {
         let clampedMs = MicTuning.clampLatency(ms)
         let clamped = MicTuning.clampSensitivity(sens)
+        let clampedZoom = MicTuning.clampZoom(scale ?? MicTuning.zoomDefault)
         lock.lock()
         latencyMs = clampedMs
         sensitivity = clamped
+        let zoomChanged = abs(clampedZoom - zoom) > 0.001
+        zoom = clampedZoom
         var artChanged = false
         if let art, art != albumArt {
             albumArt = art
@@ -399,15 +406,20 @@ final class MicReceiver: @unchecked Sendable {
         lock.unlock()
         MicTuning.saveLatency(clampedMs)
         MicTuning.saveSensitivity(clamped)
+        MicTuning.saveZoom(clampedZoom)
         if artChanged, let art {
             MicTuning.saveAlbumArt(art)
         }
         let handler = onTuning
         let artHandler = onAlbumArt
+        let zoomHandler = onZoom
         DispatchQueue.main.async {
             handler?(clampedMs, clamped)
             if artChanged, let art {
                 artHandler?(art)
+            }
+            if zoomChanged {
+                zoomHandler?(clampedZoom)
             }
         }
     }

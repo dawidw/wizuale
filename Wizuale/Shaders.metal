@@ -16,7 +16,7 @@ struct FrameUniforms {
     float4 warp;     // amount, frequency, speed, radial
     float4 center;   // centerAmp, goo, folds, kaleidoMix
     float4 persist;  // decayTau, blurPx, hueShift, chroma
-    float4 wave;     // edge (unused), frequency, thickness, radiusOffset
+    float4 wave;     // zoom (1 = fit), frequency, thickness, radiusOffset
     float4 shape;    // count, radius, softness, intensity
     float4 grade;    // sparkle, dropPunch, saturation, vignette
     float4 style;    // exposure, baseLevel, emissionGain, pulseAmount
@@ -655,7 +655,16 @@ fragment float4 presentFragment(
     texture2d<float> meanLuma [[texture(1)]]
 ) {
     constexpr sampler samp(filter::linear, address::clamp_to_edge);
-    float3 c = source.sample(samp, in.uv).rgb;
+    // Display zoom around the center. The feedback warp is unchanged, so this
+    // does not ratchet. Outside the picture fades to black instead of sampling
+    // past the texture.
+    float zoom = u.wave.x;
+    if (zoom < 0.5 || zoom > 2.0) zoom = 1.0;
+    float2 zuv = (in.uv - 0.5) / zoom + 0.5;
+    float2 lo = smoothstep(float2(-0.012), float2(0.0), zuv);
+    float2 hi = float2(1.0) - smoothstep(float2(1.0), float2(1.012), zuv);
+    float3 c = source.sample(samp, clamp(zuv, float2(0.0), float2(1.0))).rgb;
+    c *= lo.x * lo.y * hi.x * hi.y;
     float luma = dot(c, float3(0.2126, 0.7152, 0.0722));
     c = max(mix(float3(luma), c, max(u.grade.z, 0.0)), float3(0.0));
     float v = length((in.uv - 0.5) * float2(1.15, 1.35));

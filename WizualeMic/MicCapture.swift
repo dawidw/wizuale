@@ -56,6 +56,18 @@ final class MicCapture: ObservableObject {
             scheduleSettings()
         }
     }
+    @Published var zoom: Float = MicTuning.loadZoom() {
+        didSet {
+            let clamped = MicTuning.clampZoom(zoom)
+            if clamped != zoom {
+                zoom = clamped
+                return
+            }
+            guard clamped != oldValue else { return }
+            MicTuning.saveZoom(clamped)
+            scheduleSettings()
+        }
+    }
 
     private let engine = AVAudioEngine()
     private let network = DispatchQueue(label: "app.wizuale.mic.send")
@@ -296,12 +308,13 @@ final class MicCapture: ObservableObject {
         let sens = sensitivity
         let latency = latencyMs
         let art = albumArt
+        let scale = zoom
         network.async { [weak self] in
             guard let self else { return }
             if self.lastSettings == nil {
                 self.settingsSequence = 1
                 self.lastSettings = MicWire.encodeSettings(
-                    sequence: 1, latencyMs: latency, sensitivity: sens, albumArt: art
+                    sequence: 1, latencyMs: latency, sensitivity: sens, albumArt: art, zoom: scale
                 )
             }
             self.startBrowser()
@@ -476,12 +489,13 @@ final class MicCapture: ObservableObject {
         let sens = sensitivity
         let latency = latencyMs
         let art = albumArt
+        let scale = zoom
         flag.lock()
         settingsSequence &+= 1
         if settingsSequence == 0 { settingsSequence = 1 }
         let seq = settingsSequence
         flag.unlock()
-        let packet = MicWire.encodeSettings(sequence: seq, latencyMs: latency, sensitivity: sens, albumArt: art)
+        let packet = MicWire.encodeSettings(sequence: seq, latencyMs: latency, sensitivity: sens, albumArt: art, zoom: scale)
         network.async { [weak self] in
             guard let self else { return }
             self.sensHold = sens
