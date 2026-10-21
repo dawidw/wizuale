@@ -136,10 +136,10 @@ float3 emitSpiral(float2 p, constant FrameUniforms &u) {
   float arm = pow(max(cos(a * n * 0.5), 0.0), 6.0);
   float phase = a * n - log(max(r, 0.004)) * u.wave.y + u.time * 0.55;
   float ridge = exp(-pow(sin(phase) / 0.10, 2.0));
-  float thread = exp(-pow(sin(a * n * 2.0 + r * 22.0 - u.time * 0.4) / 0.07, 2.0));
+  float strand = exp(-pow(sin(a * n * 2.0 + r * 22.0 - u.time * 0.4) / 0.07, 2.0));
   float core = exp(-pow(r / 0.02, 2.0));
   float3 col = ramp(0.02 + r * 1.7, u);
-  return col * (ridge * arm * 0.85 + thread * arm * 0.45 + core * 0.55);
+  return col * (ridge * arm * 0.85 + strand * arm * 0.45 + core * 0.55);
 }
 
 float3 emitPetals(float2 p, constant FrameUniforms &u) {
