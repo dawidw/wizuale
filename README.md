@@ -1,5 +1,7 @@
 # Wizuale
 
+Tempo data by [GetSongBPM](https://getsongbpm.com).
+
 Full-screen generative pictures for Apple TV. Put a record on — Apple Music on the TV, or music you start from this app — and the screen becomes a MilkDrop-style visualizer instead of the screensaver.
 
 The picture does not listen to the audio. Apple Music is protected, and this app never opens the stream. Motion comes from time and a gentle built-in pulse. If Apple Music permission is on, the title and cover show briefly in the corner, and the cover's colors tint the picture.
