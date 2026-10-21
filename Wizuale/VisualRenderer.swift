@@ -27,6 +27,45 @@ enum RendererError: LocalizedError {
     }
 }
 
+/// Slow wander on top of a preset. Targets ease in, so a frame never jumps.
+/// The offset is applied to the uniforms only and is not stored back into the preset.
+private struct Wander {
+    var aim = SIMD4<Float>(0, 0, 0, 0)
+    var value = SIMD4<Float>(0, 0, 0, 0)
+    var remaining: Float = 0
+    var slot = -1
+
+    mutating func advance(slot: Int, time: Float, dt: Float) {
+        if slot != self.slot {
+            self.slot = slot
+            remaining = 0
+        }
+        if remaining <= 0 {
+            remaining = 3.4
+            let seed = time * 0.23 + Float(slot) * 2.17
+            aim = SIMD4(
+                sin(seed * 1.7) * 0.014,
+                sin(seed * 1.1 + 0.8) * 0.036,
+                sin(seed * 1.9 + 1.4) * 0.048,
+                sin(seed * 0.85 + 2.2) * 0.01
+            )
+        }
+        remaining -= dt
+        let follow = 1 - exp(-dt * 0.65)
+        value += (aim - value) * follow
+    }
+
+    /// flow.x expansion, flow.y rotation, warp.x amount, persist.z hue.
+    func apply(to uniforms: inout FrameUniforms, slot: Int, time: Float) {
+        let bob = sin(time * 0.19 + Float(slot) * 1.3)
+        uniforms.flow.x += value.x + bob * 0.004
+        uniforms.flow.y += value.y + bob * 0.008
+        uniforms.warp.x += value.z
+        uniforms.warp.z += sin(time * 0.09 + Float(slot) * 0.7) * 0.035
+        uniforms.persist.z += value.w
+    }
+}
+
 /// Ping-pong feedback. One frame samples the previous picture through the warp,
 /// then the screen samples that result. A single in-flight frame matches the
 /// two textures: the completion handler is not on the main thread, so waiting
@@ -46,10 +85,11 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
 
     private var time: Float = 0
     private var lastTick: CFTimeInterval = 0
-    private var modeFrom = 0
-    private var modeTo = 0
+    private var slotFrom = 0
+    private var slotTo = 0
     private var modeT: Float = 1
     private var displayed: PresetParams
+    private var wander = Wander()
     private var albumWeight: Float = 0
     private var album: AlbumColors?
 
@@ -66,10 +106,10 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
         self.beatClock = beatClock
 
         let snapshot = state.snapshot()
-        let index = min(max(snapshot.targetIndex, 0), max(PresetLibrary.all.count - 1, 0))
-        modeFrom = index
-        modeTo = index
-        displayed = PresetLibrary.all[index].params
+        let slot = min(max(snapshot.targetIndex, 0), max(PresetLibrary.all.count - 1, 0))
+        slotFrom = slot
+        slotTo = slot
+        displayed = PresetLibrary.all[slot].params
 
         let library: MTLLibrary
         do {
@@ -139,8 +179,8 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
             resolution: SIMD2(Float(size.x), Float(size.y)),
             time: time,
             deltaTime: dt,
-            modeFrom: modeFrom,
-            modeTo: modeTo,
+            modeFrom: PresetLibrary.mode(at: slotFrom),
+            modeTo: PresetLibrary.mode(at: slotTo),
             modeT: modeT,
             album: album,
             albumWeight: albumWeight,
@@ -148,6 +188,7 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
             music: SIMD4(musical.phrasePhase, musical.beatsPerBar, musical.hasRealTempo ? 1 : 0, 0)
         )
         uniforms.tempo.x = musical.bpm
+        wander.apply(to: &uniforms, slot: slotTo, time: time)
 
         let writeIndex = 1 - readIndex
         guard let warp = command.makeRenderCommandEncoder(descriptor: Self.pass(textures[writeIndex])) else {
@@ -179,14 +220,18 @@ final class VisualRenderer: NSObject, MTKViewDelegate {
     private func step(dt: Float, snapshot: RenderSnapshot) {
         let lastIndex = max(PresetLibrary.all.count - 1, 0)
         let target = min(max(snapshot.targetIndex, 0), lastIndex)
-        if target != modeTo {
-            modeFrom = modeT > 0.5 ? modeTo : modeFrom
-            modeTo = target
+        if target != slotTo {
+            slotFrom = modeT > 0.5 ? slotTo : slotFrom
+            slotTo = target
             modeT = 0
         }
         modeT = min(1, modeT + dt / PresetLibrary.blendDuration)
-        let blend = 1 - exp(-dt * 1.5)
-        displayed = displayed.lerped(toward: PresetLibrary.all[modeTo].params, by: blend)
+        // While two pictures are mixing, ease the warp across the same window.
+        // Once the crossfade is done, catch album colors at the old rate.
+        let rate: Float = modeT < 0.999 ? 0.42 : 1.6
+        let blend = 1 - exp(-dt * rate)
+        displayed = displayed.lerped(toward: PresetLibrary.all[slotTo].params, by: blend)
+        wander.advance(slot: slotTo, time: time, dt: dt)
         time += dt
 
         if snapshot.wantsAlbum, let incoming = snapshot.album {

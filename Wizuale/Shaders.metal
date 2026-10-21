@@ -83,6 +83,12 @@ float downbeat(constant FrameUniforms &u) {
   return u.beat.y * step(0.5, u.music.z);
 }
 
+// Phrase angle when a tempo matched, otherwise a slow clock so the picture still moves.
+float phraseTurn(constant FrameUniforms &u) {
+  if (u.music.z > 0.5) return u.music.x * TAU;
+  return u.time * 0.22;
+}
+
 float2 toP(float2 uv, constant FrameUniforms &u) {
   float aspect = u.resolution.x / max(u.resolution.y, 1.0);
   return float2((uv.x - 0.5) * aspect, (0.5 - uv.y));
@@ -323,8 +329,174 @@ float3 emitDrift(float2 p, constant FrameUniforms &u) {
   return acc * (0.35 + dust);
 }
 
+// Oscilloscope rose plus a ribbon. Feedback rotation turns them into a spirograph.
+float3 emitScope(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float d = downbeat(u);
+  float turn = phraseTurn(u);
+  float r = length(p);
+  float ang = atan2(p.y, p.x);
+  float lobes = 5.0 + 2.0 * sin(turn);
+  float radius = 0.30 + 0.10 * sin(ang * lobes + u.time * 0.85) + k * 0.028;
+  float rose = exp(-pow((r - radius) / 0.0075, 2.0));
+  float ribbonY = sin(p.x * (7.0 + 1.5 * sin(turn)) + u.time * 1.1) * (0.11 + k * 0.035);
+  float ribbon = exp(-pow((p.y - ribbonY) / 0.008, 2.0));
+  float3 col = ramp(0.08 + ang / TAU + u.music.x * 0.2, u);
+  float3 line = mix(col, u.color1.rgb, 0.35);
+  return line * rose * (0.95 + d * 0.45) + col * ribbon * 0.55 * (1.0 + k * 0.35);
+}
+
+// One motif, mirrored on both axes. The preset's kaleidoscope repeats it again.
+float3 emitMirror(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float d = downbeat(u);
+  float turn = phraseTurn(u);
+  float2 q = float2(abs(p.x), abs(p.y));
+  float arc = exp(-pow((length(q - float2(0.20, 0.06)) - 0.14) / 0.007, 2.0));
+  float spoke = exp(-pow((q.y - 0.02 * sin(q.x * 10.0 + turn)) / 0.006, 2.0));
+  spoke *= smoothstep(0.62, 0.04, q.x);
+  float gem = exp(-pow(length(q - float2(0.12, 0.28)) / (0.02 + k * 0.012), 2.0));
+  float3 col = ramp(q.x + q.y + u.music.x * 0.35, u);
+  return col * (arc * (1.05 + k * 0.6) + spoke * 0.7 + gem * (0.45 + d * 0.5));
+}
+
+// Contours of a plasma field. The field itself is not filled, so trails stay thin.
+float3 emitPlasma(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float d = downbeat(u);
+  float turn = phraseTurn(u);
+  float field = sin(p.x * 5.4 + turn) + sin(p.y * 4.5 - u.time * 0.32) + sin((p.x + p.y) * 3.3 + turn * 0.45);
+  float ridge = pow(abs(sin(field * 2.15)), 16.0);
+  float3 col = ramp(0.5 + 0.5 * sin(field * 0.5) + u.music.x * 0.25, u);
+  return col * ridge * (0.85 + k * 0.55 + d * 0.28);
+}
+
+float3 emitWarpStars(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float d = downbeat(u);
+  float turn = phraseTurn(u);
+  float3 acc = float3(0.0);
+  float2 gp = p * 13.0;
+  float2 cellId = floor(gp);
+  float2 cellFract = fract(gp) - 0.5;
+  for (int gy = -1; gy <= 1; gy++) {
+    for (int gx = -1; gx <= 1; gx++) {
+      float2 cell = cellId + float2(float(gx), float(gy));
+      float h = hash21(cell);
+      if (h < 0.52) continue;
+      float twinkle = 0.45 + 0.55 * sin(u.time * (0.55 + h) + turn + h * 19.0);
+      float2 glide = 0.18 * float2(sin(u.time * 0.09 + h * 6.2), cos(u.time * 0.07 + h * 3.7));
+      float2 delta = cellFract - float2(float(gx), float(gy)) - glide;
+      float star = exp(-dot(delta, delta) * 42.0);
+      acc += ramp(h + u.music.x * 0.22, u) * star * twinkle * (0.7 + k * 0.85 + d * 0.35);
+    }
+  }
+  return acc * smoothstep(1.05, 0.12, length(p));
+}
+
+// Two octaves of log-radius rings, so zooming reads as a nested well.
+float3 emitWell(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float d = downbeat(u);
+  float turn = phraseTurn(u);
+  float r = max(length(p), 0.002);
+  float z = log(r);
+  float ang = atan2(p.y, p.x);
+  float travel = u.time * 0.65 + turn;
+  float rings = pow(0.5 + 0.5 * sin(z * 9.0 - travel), 14.0);
+  float ringsInner = pow(0.5 + 0.5 * sin(z * 18.0 - travel * 1.35 + 0.7), 18.0);
+  float spokes = pow(0.5 + 0.5 * cos(ang * 8.0 + turn * 0.5), 12.0);
+  float fade = smoothstep(0.95, 0.05, r);
+  float mask = (rings * 0.72 + ringsInner * 0.42) * fade + spokes * exp(-r * 1.5) * 0.16;
+  float3 col = ramp(z * 0.15 + ang / TAU + u.music.x * 0.2, u);
+  return col * mask * (1.0 + k * 0.5 + d * 0.28);
+}
+
+// Soft blobs. A long decay and a slow spin smear them into color bleeds.
+float3 emitBleed(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float d = downbeat(u);
+  float turn = phraseTurn(u);
+  float3 acc = float3(0.0);
+  for (int band = 0; band < 3; band++) {
+    float fi = float(band);
+    float ang = turn * 0.35 + fi * 2.094 + u.time * 0.11;
+    float2 origin = 0.20 * float2(cos(ang), sin(ang * 0.85));
+    float rad = 0.15 + 0.035 * sin(u.time * 0.28 + fi + turn) + k * 0.03;
+    float blob = exp(-dot(p - origin, p - origin) / max(rad * rad, 0.008));
+    acc += ramp(fi * 0.33 + u.music.x * 0.4, u) * blob;
+  }
+  return acc * (0.26 + d * 0.07);
+}
+
+float3 emitVortex(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float d = downbeat(u);
+  float turn = phraseTurn(u);
+  float r = length(p);
+  float ang = atan2(p.y, p.x);
+  float twist = 3.1 + 0.55 * sin(turn);
+  float spiral = ang - log(max(r, 0.004)) * twist + u.time * 0.45;
+  float arm = exp(-pow(sin(spiral * 4.0) / 0.10, 2.0));
+  float armInner = exp(-pow(sin(spiral * 4.0 + 1.7) / 0.15, 2.0));
+  float fade = smoothstep(0.88, 0.02, r);
+  float core = exp(-pow(r / (0.028 + k * 0.01), 2.0));
+  float3 col = ramp(0.1 + r * 0.7 + u.music.x * 0.3, u);
+  return col * ((arm * 0.82 + armInner * 0.32) * fade * (1.0 + k * 0.55) + core * (0.4 + d * 0.35));
+}
+
+float3 emitMesh(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float d = downbeat(u);
+  float turn = phraseTurn(u);
+  float2 warped = p;
+  warped.x += sin(p.y * 7.0 + turn) * (0.04 + k * 0.02);
+  warped.y += sin(p.x * 6.0 - u.time * 0.35) * (0.032 + d * 0.014);
+  float vertical = pow(abs(sin(warped.x * 16.0)), 26.0);
+  float horizontal = pow(abs(sin(warped.y * 12.0)), 26.0);
+  float grid = max(vertical, horizontal);
+  float3 col = ramp(0.2 + p.x * 0.25 + u.music.x * 0.3, u);
+  return col * grid * (0.82 + k * 0.45);
+}
+
+float3 emitWater(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float d = downbeat(u);
+  float turn = phraseTurn(u);
+  float2 origin = 0.11 * float2(sin(turn), cos(turn * 0.8));
+  float r = length(p - origin);
+  float inner = pow(0.5 + 0.5 * sin(r * 26.0 - u.time * 1.7 + turn), 20.0);
+  float outer = pow(0.5 + 0.5 * sin(r * 15.0 - u.time * 1.1 + 1.1), 18.0);
+  float fade = smoothstep(0.98, 0.06, r);
+  float3 col = ramp(0.35 + r * 0.55 + u.music.x * 0.2, u);
+  return col * (inner * 0.9 + outer * 0.4) * fade * (1.0 + k * 0.6 + d * 0.25);
+}
+
+float3 emitFlame(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float d = downbeat(u);
+  float turn = phraseTurn(u);
+  float3 acc = float3(0.0);
+  for (int band = 0; band < 4; band++) {
+    float fi = float(band);
+    float sway = sin(p.y * (3.2 + fi * 0.4) - u.time * (0.55 + fi * 0.08) + turn) * (0.055 + k * 0.02);
+    float x = p.x - (fi - 1.5) * 0.15 - sway;
+    float width = 0.04 + 0.02 * sin(u.time * 0.45 + fi + turn) + k * 0.012;
+    float tongue = exp(-pow(x / max(width, 0.012), 2.0));
+    float rise = smoothstep(-0.48, 0.02, p.y) * smoothstep(0.58, -0.02, p.y);
+    float3 col = mix(u.color0.rgb, u.color1.rgb, smoothstep(-0.25, 0.28, p.y));
+    col = mix(col, u.color2.rgb, smoothstep(0.12, 0.5, p.y));
+    acc += col * tongue * rise * (0.5 + d * 0.22);
+  }
+  float wick = exp(-pow(p.x / 0.028, 2.0)) * exp(-pow((p.y + 0.38) / 0.07, 2.0));
+  acc += u.color2.rgb * wick * (0.4 + k * 0.45);
+  return acc * 0.48;
+}
+
 // Mode numbers match VisualMode in Presets.swift:
-// 0 spiral, 1 petals, 2 ember, 3 tunnel, 4 silk, 5 wheel, 6 aurora, 7 bloom, 8 border, 9 drift.
+// 0 spiral, 1 petals, 2 ember, 3 tunnel, 4 silk, 5 wheel, 6 aurora, 7 bloom, 8 border, 9 drift,
+// 10 scope, 11 mirror, 12 plasma, 13 warp stars, 14 fractal well, 15 color bleed,
+// 16 vortex, 17 mesh, 18 water, 19 flame.
 float3 emitMode(float2 p, int mode, constant FrameUniforms &u) {
   if (mode == 0) return emitSpiral(p, u);
   if (mode == 1) return emitPetals(p, u);
@@ -335,6 +507,17 @@ float3 emitMode(float2 p, int mode, constant FrameUniforms &u) {
   if (mode == 6) return emitAurora(p, u);
   if (mode == 7) return emitBloom(p, u);
   if (mode == 8) return emitBorder(p, u);
+  if (mode == 9) return emitDrift(p, u);
+  if (mode == 10) return emitScope(p, u);
+  if (mode == 11) return emitMirror(p, u);
+  if (mode == 12) return emitPlasma(p, u);
+  if (mode == 13) return emitWarpStars(p, u);
+  if (mode == 14) return emitWell(p, u);
+  if (mode == 15) return emitBleed(p, u);
+  if (mode == 16) return emitVortex(p, u);
+  if (mode == 17) return emitMesh(p, u);
+  if (mode == 18) return emitWater(p, u);
+  if (mode == 19) return emitFlame(p, u);
   return emitDrift(p, u);
 }
 
