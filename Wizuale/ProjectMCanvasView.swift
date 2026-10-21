@@ -59,7 +59,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         view.addSubview(glView)
 
         EAGLContext.setCurrent(ctx)
-        projectM.create(in: ctx, size: view.bounds.size)
+        projectM.create(in: ctx, size: pixelSize)
         if !projectM.isReady {
             onFailure?("libprojectM did not start. Run scripts/build-projectm-tvos.sh on a Mac.")
         }
@@ -68,7 +68,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         EAGLContext.setCurrent(context)
-        projectM.resize(view.bounds.size)
+        projectM.resize(pixelSize)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -99,8 +99,15 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         displayLink = nil
     }
 
+    private var pixelSize: CGSize {
+        let scale = view.window?.screen.scale ?? UIScreen.main.scale
+        return CGSize(width: view.bounds.width * scale, height: view.bounds.height * scale)
+    }
+
+    /// enableSetNeedsDisplay is false, so setNeedsDisplay() would be ignored; draw explicitly.
     @objc private func tick() {
-        glView.setNeedsDisplay()
+        guard !paused else { return }
+        glView.display()
     }
 
     func glkView(_ view: GLKView, drawIn rect: CGRect) {

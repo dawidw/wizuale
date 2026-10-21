@@ -83,6 +83,10 @@ LIB_DEVICE="$(build_one appletvos os arm64)"
 echo "==> Building for appletvsimulator"
 LIB_SIM="$(build_one appletvsimulator simulator arm64)"
 
+# Generated headers (export/version) live in the build tree, not the source tree.
+for gen in "$BUILD_ROOT"/appletvos-arm64/src/api/include/projectM-4/*.h; do
+  [ -f "$gen" ] && cp "$gen" "$HEADERS_DST/projectM-4/"
+done
 STAGE="$BUILD_ROOT/xcframework-stage"
 rm -rf "$STAGE" "$OUT"
 mkdir -p "$STAGE/device" "$STAGE/simulator/lib" "$STAGE/simulator/Headers"

@@ -1,5 +1,7 @@
 import Foundation
 import UIKit
+import OpenGLES
+import Darwin
 
 /// Thin Swift wrapper around libprojectM 4.x. No tone mapping or post-processing.
 final class ProjectMController {
@@ -11,7 +13,23 @@ final class ProjectMController {
     func create(in context: EAGLContext, size: CGSize) {
         guard handle == nil else { return }
         EAGLContext.setCurrent(context)
-        guard let created = projectm_create() else { return }
+        // Apple has no EGL/glXGetProcAddress, so resolve GL symbols from the
+        // already-loaded OpenGLES framework via dlsym(RTLD_DEFAULT, ...).
+        // tvOS uses EAGL, which projectM's resolver can't probe (it expects CGL/EGL).
+        // Our dlsym loader works with the current EAGL context, so skip the strict gate.
+        setenv("PROJECTM_GLRESOLVER_STRICT_CONTEXT_GATE", "0", 1)
+        projectm_set_log_level(PROJECTM_LOG_LEVEL_INFO, false)
+        projectm_set_log_callback({ msg, level, _ in
+            if let msg { NSLog("[projectM %d] %@", Int(level.rawValue), String(cString: msg)) }
+        }, false, nil)
+        let loader: projectm_load_proc = { name, _ in
+            guard let name else { return nil }
+            return dlsym(UnsafeMutableRawPointer(bitPattern: -2), name)
+        }
+        guard let created = projectm_create_with_opengl_load_proc(loader, nil) ?? projectm_create() else {
+            NSLog("[Wizuale] projectm_create failed; GL_VERSION=%@", String(cString: glGetString(GLenum(GL_VERSION))))
+            return
+        }
         handle = created
         projectm_set_window_size(created, size_t(size.width), size_t(size.height))
         projectm_set_soft_cut_duration(created, MilkPresetCatalog.softCutSeconds)
@@ -46,9 +64,12 @@ final class ProjectMController {
         projectm_set_beat_sensitivity(handle, MicTuning.clampSensitivity(value))
     }
 
+    /// GLKView draws into its own framebuffer (not 0), so render into whatever is bound.
     func render() {
         guard let handle else { return }
-        projectm_opengl_render_frame(handle)
+        var fbo: GLint = 0
+        glGetIntegerv(GLenum(GL_FRAMEBUFFER_BINDING), &fbo)
+        projectm_opengl_render_frame_fbo(handle, UInt32(fbo))
     }
 
     func addPCM(samples: [Int16], gain: Float) {
