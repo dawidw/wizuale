@@ -104,7 +104,7 @@ struct MicRootView: View {
             }
             Slider(
                 value: $mic.sensitivity,
-                in: Double(MicTuning.sensitivityMin)...Double(MicTuning.sensitivityMax),
+                in: MicTuning.sensitivityMin...MicTuning.sensitivityMax,
                 step: 0.05
             )
             .tint(.white)

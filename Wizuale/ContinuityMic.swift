@@ -101,7 +101,7 @@ final class ContinuityMic: NSObject {
         }
     }
 
-    private func beginEngine(preferred: AVAudioSession.PortDescription) {
+    private func beginEngine(preferred: AVAudioSessionPortDescription) {
         if tapInstalled { return }
         let session = AVAudioSession.sharedInstance()
         do {

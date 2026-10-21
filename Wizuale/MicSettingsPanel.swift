@@ -49,26 +49,22 @@ struct MicSettingsPanel: View {
                         Text(sensitivityText(sensitivity))
                             .font(.system(size: 24, weight: .semibold))
                     }
-                    Slider(
-                        value: Binding(
-                            get: { Double(sensitivity) },
-                            set: { onSensitivity(Float($0)) }
-                        ),
-                        in: Double(MicTuning.sensitivityMin)...Double(MicTuning.sensitivityMax),
-                        step: 0.05
-                    )
+                    HStack(spacing: 16) {
+                        Button("−") { onSensitivity(max(MicTuning.sensitivityMin, sensitivity - 0.25)) }
+                            .buttonStyle(.card)
+                        Button("+") { onSensitivity(min(MicTuning.sensitivityMax, sensitivity + 0.25)) }
+                            .buttonStyle(.card)
+                    }
                 }
 
-                Stepper(
-                    value: Binding(
-                        get: { latencyMs },
-                        set: { onLatency($0) }
-                    ),
-                    in: MicTuning.latencyMin...MicTuning.latencyMax,
-                    step: MicTuning.latencyStep
-                ) {
+                HStack(spacing: 16) {
                     Text("Latency \(latencyLabel(latencyMs))")
                         .font(.system(size: 24, weight: .medium))
+                    Spacer()
+                    Button("−") { onLatency(max(MicTuning.latencyMin, latencyMs - MicTuning.latencyStep)) }
+                        .buttonStyle(.card)
+                    Button("+") { onLatency(min(MicTuning.latencyMax, latencyMs + MicTuning.latencyStep)) }
+                        .buttonStyle(.card)
                 }
 
                 Button("Pair Continuity Microphone") {
