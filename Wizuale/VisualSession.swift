@@ -246,7 +246,7 @@ final class VisualSession: ObservableObject {
         step(-1)
     }
 
-    /// Click moves forward through every picture, including the quieter ones.
+    /// Click moves forward through every picture.
     func advance() {
         step(1)
     }
@@ -287,7 +287,7 @@ final class VisualSession: ObservableObject {
         }
     }
 
-    /// MilkDrop pictures change on their own. Aurora and the other quiet ones wait.
+    /// Classic presets rotate on their own when Auto is on.
     /// With a matched tempo the change waits for the next 8-bar phrase after the hold.
     private func armCycle() {
         guard !phoneLocked else { return }

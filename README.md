@@ -8,26 +8,20 @@ The picture does not listen to the audio. Apple Music is protected, and this app
 
 ## Pictures
 
-Sixteen MilkDrop presets play on their own. They morph into the next over about 1.3 seconds: the new stroke crossfades (a mix, not a sum), the previous frame is dimmed so the two pictures do not stack, and the warp eases across the same window instead of cutting. Without a matched tempo they hold for about 45 seconds. With a matched tempo they wait for the next 8-bar phrase after that, so the change lands on the music. Each picture also wanders a little on its own (zoom, spin, warp, hue), retargeting every few seconds.
+Twelve classic MilkDrop-style presets play on their own. They morph into the next over about 1.3 seconds: the new stroke crossfades (a mix, not a sum), the previous frame is dimmed so the two pictures do not stack, and the warp eases across the same window instead of cutting. Without a matched tempo they hold for about 45 seconds. With a matched tempo they wait for the next 8-bar phrase after that, so the change lands on the music. Each picture also wanders a little on its own (zoom, spin, warp, hue), retargeting every few seconds. With Wizuale Mic live, bass pushes zoom, mids spin the warp, and treble adds sparkle; waveforms and spectrum bars follow the room.
 
-1. **Spiral Star** — eight neon arms, pink, gold, and teal, over a dark warp
-2. **Petal Veil** — a green spiral of glowing petals with fine contour lines
-3. **Ember Ring** — a dark field and a soft orange-red ring with trails
-4. **Neon Tunnel** — four-fold rings rushing outward
-5. **Liquid Silk** — slow ribbons
-6. **Prism Wheel** — a twelve-spoke wheel
-7. **Scope Trace** — a rose-curve oscilloscope the feedback turns into a spirograph
-8. **Mirror Hall** — mirrored arcs repeated in a six-fold kaleidoscope
-9. **Plasma Veil** — thin contour lines of a plasma field
-10. **Warp Stars** — a starfield stretched by a fast zoom
-11. **Fractal Well** — nested log-zoom rings
-12. **Color Bleed** — soft color smears with a long trail and a slow spin
-13. **Vortex Eye** — a tight swirling spiral
-14. **Mesh Tide** — an undulating grid of thin lines
-15. **Water Glass** — ripples moving out from a drifting center
-16. **Flame Lift** — rising flame tongues
-
-Four quieter pictures stay until you swipe away: **Aurora**, **Soft Bloom**, **Night Border**, and **Slow Drift**. They sit between Prism Wheel and Scope Trace in the swipe order, and the automatic rotation skips them.
+1. **Tunnel Vision** — log-zoom rings and spokes rushing through a neon tunnel
+2. **Plasma Drift** — hue-cycling plasma contours smeared by feedback warp
+3. **Spectrum Spiral** — a bass-driven log spiral with mic-tinted arms
+4. **Kaleido Bass** — mirrored arcs in an eight-fold kaleidoscope that swells with bass
+5. **Starburst** — a particle starfield that flares on kicks
+6. **Waveform Glow** — oscilloscope line, circular scope, and dots driven by the mic
+7. **Liquid Mirror** — flowing silk ribbons with a mirrored sheen
+8. **Electric Sheep** — drifting luminous particles (sheep in the fog)
+9. **Fractal Tunnel** — nested log-radius well rings
+10. **Spectrum Bars** — Winamp-style bars along the bottom from bass to treble
+11. **Vortex Pulse** — a tight swirling spiral keyed to mids
+12. **Hue Wheel** — a twelve-spoke prism wheel with hue spin
 
 Each frame is the previous frame, warped (zoom, rotation, swirl, kaleidoscope), faded, and hue-shifted, with a thin new stroke drawn on top. That feedback is what makes the trails.
 

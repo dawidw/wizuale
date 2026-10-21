@@ -130,7 +130,17 @@ private struct PresetArtwork: View {
             arrow.addLine(to: CGPoint(x: mid.x + 14, y: mid.y))
             arrow.addLine(to: CGPoint(x: mid.x + 4, y: mid.y + 10))
             context.stroke(arrow, with: .color(c2), lineWidth: 2)
-        case .spiral:
+        case .tunnelVision:
+            for step in 0..<5 {
+                let inset = CGFloat(step) * 8 + 6
+                let rect = bounds.insetBy(dx: inset, dy: inset * 0.72)
+                context.stroke(Path(roundedRect: rect, cornerRadius: 8), with: .color(step % 2 == 0 ? c0 : c2), lineWidth: 1.5)
+            }
+        case .plasmaDrift:
+            context.fill(Path(ellipseIn: CGRect(x: w * 0.12, y: h * 0.18, width: 46, height: 46)), with: .color(c0.opacity(0.8)))
+            context.fill(Path(ellipseIn: CGRect(x: w * 0.38, y: h * 0.28, width: 42, height: 42)), with: .color(c1.opacity(0.75)))
+            context.fill(Path(ellipseIn: CGRect(x: w * 0.24, y: h * 0.08, width: 36, height: 36)), with: .color(c2.opacity(0.7)))
+        case .spectrumSpiral:
             var path = Path()
             path.move(to: mid)
             for step in 1...48 {
@@ -140,65 +150,7 @@ private struct PresetArtwork: View {
                 path.addLine(to: CGPoint(x: mid.x + cos(ang) * rad, y: mid.y + sin(ang) * rad))
             }
             context.stroke(path, with: .color(c0), lineWidth: 2)
-        case .petals:
-            for step in 0..<7 {
-                let ang = CGFloat(step) / 7 * .pi * 2
-                var petal = Path(ellipseIn: CGRect(x: -7, y: -22, width: 14, height: 28))
-                let form = CGAffineTransform(translationX: mid.x, y: mid.y).rotated(by: ang)
-                petal = petal.applying(form)
-                context.fill(petal, with: .color((step % 2 == 0 ? c0 : c1).opacity(0.9)))
-            }
-        case .ember:
-            ring(&context, mid, min(w, h) * 0.30, c1, 5)
-            ring(&context, mid, min(w, h) * 0.16, c0, 2)
-        case .tunnel:
-            for step in 0..<5 {
-                let inset = CGFloat(step) * 8 + 6
-                let rect = bounds.insetBy(dx: inset, dy: inset * 0.72)
-                context.stroke(Path(roundedRect: rect, cornerRadius: 8), with: .color(step % 2 == 0 ? c0 : c2), lineWidth: 1.5)
-            }
-        case .silk:
-            wave(&context, bounds, color: c0, amp: 10, phase: 0, width: 3)
-            wave(&context, bounds, color: c1, amp: 7, phase: 1.4, width: 2)
-        case .wheel:
-            for step in 0..<8 {
-                let ang = CGFloat(step) / 8 * .pi * 2
-                var spoke = Path()
-                spoke.move(to: mid)
-                spoke.addLine(to: CGPoint(x: mid.x + cos(ang) * w * 0.42, y: mid.y + sin(ang) * h * 0.42))
-                context.stroke(spoke, with: .color(step % 2 == 0 ? c0 : c1), lineWidth: 2)
-            }
-        case .aurora:
-            band(&context, bounds, y: h * 0.35, color: c2, height: 14)
-            band(&context, bounds, y: h * 0.55, color: c0, height: 10)
-            band(&context, bounds, y: h * 0.72, color: c1, height: 8)
-        case .bloom:
-            context.fill(Path(ellipseIn: CGRect(x: w * 0.28, y: h * 0.22, width: w * 0.44, height: h * 0.5)), with: .color(c0.opacity(0.85)))
-            context.fill(Path(ellipseIn: CGRect(x: w * 0.42, y: h * 0.34, width: w * 0.28, height: h * 0.32)), with: .color(c1))
-        case .border:
-            context.stroke(
-                Path(roundedRect: bounds.insetBy(dx: 8, dy: 8), cornerRadius: 10),
-                with: .color(c0),
-                lineWidth: 6
-            )
-        case .drift:
-            for step in 0..<4 {
-                var line = Path()
-                let y = h * (0.22 + CGFloat(step) * 0.18)
-                line.move(to: CGPoint(x: 8, y: y))
-                line.addLine(to: CGPoint(x: w - 8, y: y - 8))
-                context.stroke(line, with: .color(step % 2 == 0 ? c2 : c0), lineWidth: 1.5)
-            }
-        case .scope:
-            var path = Path()
-            for step in 0...40 {
-                let t = CGFloat(step) / 40
-                let x = 8 + t * (w - 16)
-                let y = mid.y + sin(t * .pi * 4) * 16 + cos(t * .pi * 2) * 6
-                if step == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
-            }
-            context.stroke(path, with: .color(c0), lineWidth: 2)
-        case .mirror:
+        case .kaleidoBass:
             var left = Path()
             left.move(to: CGPoint(x: 10, y: h - 10))
             left.addLine(to: CGPoint(x: mid.x - 4, y: h - 10))
@@ -207,30 +159,44 @@ private struct PresetArtwork: View {
             var right = left.applying(CGAffineTransform(scaleX: -1, y: 1).translatedBy(x: -w, y: 0))
             context.fill(left, with: .color(c0.opacity(0.9)))
             context.fill(right, with: .color(c1.opacity(0.9)))
-        case .plasma:
-            context.fill(Path(ellipseIn: CGRect(x: w * 0.12, y: h * 0.18, width: 46, height: 46)), with: .color(c0.opacity(0.8)))
-            context.fill(Path(ellipseIn: CGRect(x: w * 0.38, y: h * 0.28, width: 42, height: 42)), with: .color(c1.opacity(0.75)))
-            context.fill(Path(ellipseIn: CGRect(x: w * 0.24, y: h * 0.08, width: 36, height: 36)), with: .color(c2.opacity(0.7)))
-        case .warpStars:
+        case .starburst:
             for step in 0..<12 {
                 let ang = CGFloat(step) / 12 * .pi * 2
                 let rad = CGFloat(18 + (step % 3) * 12)
                 let dot = CGRect(x: mid.x + cos(ang) * rad - 2, y: mid.y + sin(ang) * rad * 0.72 - 2, width: 4, height: 4)
                 context.fill(Path(ellipseIn: dot), with: .color(step % 2 == 0 ? c2 : c0))
             }
-        case .well:
+        case .waveformGlow:
+            var path = Path()
+            for step in 0...40 {
+                let t = CGFloat(step) / 40
+                let x = 8 + t * (w - 16)
+                let y = mid.y + sin(t * .pi * 5) * 14 + cos(t * .pi * 2.5) * 5
+                if step == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
+            }
+            context.stroke(path, with: .color(c0), lineWidth: 2)
+            ring(&context, mid, min(w, h) * 0.22, c1, 1.5)
+        case .liquidMirror:
+            wave(&context, bounds, color: c0, amp: 10, phase: 0, width: 3)
+            wave(&context, bounds, color: c1, amp: 7, phase: 1.4, width: 2)
+        case .electricSheep:
+            for step in 0..<10 {
+                let ang = CGFloat(step) / 10 * .pi * 2
+                let rad = CGFloat(12 + (step % 4) * 8)
+                let dot = CGRect(x: mid.x + cos(ang) * rad - 2, y: mid.y + sin(ang) * rad - 2, width: 4, height: 4)
+                context.fill(Path(ellipseIn: dot), with: .color(step % 2 == 0 ? c1 : c2))
+            }
+        case .fractalTunnel:
             for step in 0..<5 {
                 ring(&context, mid, CGFloat(8 + step * 7), step % 2 == 0 ? c0 : c1, 1.5)
             }
-        case .bleed:
-            for step in 0..<4 {
-                var smear = Path()
-                let y = 16 + CGFloat(step) * 14
-                smear.move(to: CGPoint(x: 12, y: y))
-                smear.addLine(to: CGPoint(x: w - 10, y: y + CGFloat(step) * 2))
-                context.stroke(smear, with: .color(step % 2 == 0 ? c0 : c1), lineWidth: 6)
+        case .spectrumBars:
+            for step in 0..<8 {
+                let x = 12 + CGFloat(step) * (w - 24) / 7
+                let barH = 12 + CGFloat((step * 3) % 7) * 5
+                context.fill(Path(CGRect(x: x, y: h - 10 - barH, width: 8, height: barH)), with: .color(step % 2 == 0 ? c0 : c1))
             }
-        case .vortex:
+        case .vortexPulse:
             var path = Path()
             for step in 0...56 {
                 let t = CGFloat(step) / 56
@@ -240,31 +206,13 @@ private struct PresetArtwork: View {
                 if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
             }
             context.stroke(path, with: .color(c1), lineWidth: 2)
-        case .mesh:
-            for step in 0..<5 {
-                let x = 14 + CGFloat(step) * 22
-                var vertical = Path()
-                vertical.move(to: CGPoint(x: x, y: 8))
-                vertical.addLine(to: CGPoint(x: x + 6, y: h - 8))
-                context.stroke(vertical, with: .color(c0.opacity(0.85)), lineWidth: 1)
-                var horizontal = Path()
-                let y = 12 + CGFloat(step) * 12
-                horizontal.move(to: CGPoint(x: 8, y: y))
-                horizontal.addLine(to: CGPoint(x: w - 8, y: y + 4))
-                context.stroke(horizontal, with: .color(c2.opacity(0.8)), lineWidth: 1)
-            }
-        case .water:
-            wave(&context, bounds, color: c0, amp: 5, phase: 0.4, width: 2)
-            wave(&context, bounds, color: c2, amp: 6, phase: 1.8, width: 2)
-            wave(&context, bounds, color: c1, amp: 4, phase: 3.1, width: 1.5)
-        case .flame:
-            for step in 0..<3 {
-                let x = w * (0.32 + CGFloat(step) * 0.16)
-                var flame = Path()
-                flame.move(to: CGPoint(x: x, y: h - 8))
-                flame.addQuadCurve(to: CGPoint(x: x, y: 12), control: CGPoint(x: x + 18, y: h * 0.45))
-                flame.addQuadCurve(to: CGPoint(x: x, y: h - 8), control: CGPoint(x: x - 14, y: h * 0.5))
-                context.fill(flame, with: .color((step == 1 ? c1 : c0).opacity(0.9)))
+        case .hueWheel:
+            for step in 0..<8 {
+                let ang = CGFloat(step) / 8 * .pi * 2
+                var spoke = Path()
+                spoke.move(to: mid)
+                spoke.addLine(to: CGPoint(x: mid.x + cos(ang) * w * 0.42, y: mid.y + sin(ang) * h * 0.42))
+                context.stroke(spoke, with: .color(step % 2 == 0 ? c0 : c1), lineWidth: 2)
             }
         }
     }
