@@ -3,7 +3,9 @@ import MusicKit
 import UIKit
 
 /// Reads the system Music queue. The app never opens the audio stream:
-/// Apple Music is DRM, and the picture only needs the title and the cover.
+/// Apple Music is DRM. The picture uses the title, the cover, and — when
+/// GetSongBPM has the song — the tempo. Playback position comes from
+/// `SystemMusicPlayer.playbackTime`, not from the audio.
 @MainActor
 final class MusicSession: ObservableObject {
     enum Access: Equatable {
@@ -21,11 +23,27 @@ final class MusicSession: ObservableObject {
     @Published private(set) var albumColors: AlbumColors?
     @Published private(set) var statusMessage: String?
     @Published private(set) var trackID = ""
+    /// "116 BPM · 4/4 · Fm" when GetSongBPM matched this song. Empty otherwise.
+    @Published private(set) var tempoDetail = ""
+    /// True only while a GetSongBPM match is driving the picture.
+    @Published private(set) var showsTempoCredit = false
+
+    let beatClock: BeatClock
 
     private var pollTask: Task<Void, Never>?
     private var artworkGeneration = 0
     private var lastTrackKey = ""
+    private var requestedIdentity = ""
+    private var appliedIdentity = ""
+    private var lookupInFlightIdentity = ""
+    private var lookupGeneration = 0
+    private var retryIdentity = ""
+    private var retryAfter = Date.distantPast
     private var lastToggle = Date.distantPast
+
+    init(beatClock: BeatClock) {
+        self.beatClock = beatClock
+    }
 
     func start() async {
         switch await MusicAuthorization.request() {
@@ -48,7 +66,8 @@ final class MusicSession: ObservableObject {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
-                try? await Task.sleep(nanoseconds: 700_000_000)
+                // Often enough that a seek corrects the beat clock within a quarter second.
+                try? await Task.sleep(nanoseconds: 250_000_000)
             }
         }
     }
@@ -82,7 +101,12 @@ final class MusicSession: ObservableObject {
     private func refresh() async {
         guard access == .authorized else { return }
         let player = SystemMusicPlayer.shared
-        isPlaying = player.state.playbackStatus == .playing
+        let playing = player.state.playbackStatus == .playing
+        isPlaying = playing
+        // NaN means MusicKit has no finite time yet. The clock keeps extrapolating.
+        let rawTime = player.playbackTime
+        let playTime: TimeInterval? = (rawTime.isFinite && rawTime >= 0) ? rawTime : nil
+        beatClock.notePlayback(time: playTime, playing: playing)
 
         guard let entry = player.queue.currentEntry else { return }
         let itemTitle = entry.title
@@ -91,14 +115,62 @@ final class MusicSession: ObservableObject {
         let key = "\(itemTitle)|\(itemArtist)|\(artURL?.absoluteString ?? "")"
         title = itemTitle
         artist = itemArtist
+
+        considerLookup(title: itemTitle, artist: itemArtist)
+
         guard key != lastTrackKey else { return }
         lastTrackKey = key
         trackID = key
         if let artURL {
-            await loadArtwork(from: artURL, key: key)
+            let artworkKey = key
+            Task { await self.loadArtwork(from: artURL, key: artworkKey) }
         } else {
             artwork = nil
             albumColors = nil
+        }
+    }
+
+    /// One lookup per song. A network failure retries after a short pause;
+    /// a definitive miss does not. A newer song cancels an older result.
+    private func considerLookup(title: String, artist: String) {
+        let identity = "\(title)\n\(artist)"
+        let sameRequest = identity == requestedIdentity
+        if sameRequest, identity == appliedIdentity { return }
+        if sameRequest, identity == lookupInFlightIdentity { return }
+        if sameRequest, identity == retryIdentity, Date() < retryAfter { return }
+
+        requestedIdentity = identity
+        lookupInFlightIdentity = identity
+        lookupGeneration += 1
+        let generation = lookupGeneration
+        beatClock.setRealTempo(nil)
+        tempoDetail = ""
+        showsTempoCredit = false
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            appliedIdentity = identity
+            lookupInFlightIdentity = ""
+            return
+        }
+        Task { @MainActor [weak self] in
+            let outcome = await TempoService.shared.lookup(title: title, artist: artist)
+            self?.applyTempo(outcome, generation: generation, identity: identity)
+        }
+    }
+
+    private func applyTempo(_ outcome: TempoOutcome, generation: Int, identity: String) {
+        guard generation == lookupGeneration else { return }
+        lookupInFlightIdentity = ""
+        switch outcome {
+        case .matched(let tempo):
+            appliedIdentity = identity
+            beatClock.setRealTempo(tempo)
+            tempoDetail = tempo.detail
+            showsTempoCredit = true
+        case .noMatch:
+            appliedIdentity = identity
+        case .unavailable:
+            retryIdentity = identity
+            retryAfter = Date().addingTimeInterval(8)
         }
     }
 

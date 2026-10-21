@@ -3,9 +3,15 @@ import UIKit
 
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var visuals = VisualSession()
-    @StateObject private var music = MusicSession()
+    @StateObject private var visuals: VisualSession
+    @StateObject private var music: MusicSession
     @State private var failure: String?
+
+    init() {
+        let clock = BeatClock()
+        _visuals = StateObject(wrappedValue: VisualSession(beatClock: clock))
+        _music = StateObject(wrappedValue: MusicSession(beatClock: clock))
+    }
 
     var body: some View {
         ZStack {
@@ -20,6 +26,7 @@ struct RootView: View {
             } else {
                 MetalCanvasView(
                     state: visuals.renderState,
+                    beatClock: visuals.beatClock,
                     paused: scenePhase != .active,
                     failure: $failure
                 )
@@ -34,8 +41,14 @@ struct RootView: View {
                 statusMessage: music.statusMessage,
                 pinned: visuals.overlayPinned,
                 isPlaying: music.isPlaying,
-                visible: visuals.overlayVisible
+                visible: visuals.overlayVisible,
+                tempoDetail: music.tempoDetail,
+                showsTempoCredit: music.showsTempoCredit
             )
+
+            if music.showsTempoCredit && !visuals.overlayVisible {
+                tempoCredit
+            }
 
             if visuals.showHint {
                 hint
@@ -81,6 +94,22 @@ struct RootView: View {
         .task {
             await music.start()
         }
+    }
+
+    /// Stays up after the title card fades. GetSongBPM requires a visible credit while their data is used.
+    private var tempoCredit: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                Text("Tempo data by GetSongBPM")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .padding(.trailing, 56)
+                    .padding(.bottom, 36)
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     private var hint: some View {

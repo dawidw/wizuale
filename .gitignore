@@ -6,3 +6,6 @@ xcuserdata/
 *.xcscmblueprint
 .idea/
 agent-tools/
+
+# GetSongBPM key. Copy Config/Secrets.xcconfig.example and fill it in locally.
+Config/Secrets.xcconfig

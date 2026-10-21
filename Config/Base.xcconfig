@@ -1,0 +1,2 @@
+// Local API key. The secrets file is optional so a fresh checkout still builds.
+#include? "Secrets.xcconfig"

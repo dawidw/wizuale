@@ -24,8 +24,10 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>GetSongBPMAPIKey</key>
+	<string>$(GETSONGBPM_API_KEY)</string>
 	<key>NSAppleMusicUsageDescription</key>
-	<string>Wizuale reads the album you're playing so the picture can borrow its colors. It never listens to the audio.</string>
+	<string>Wizuale reads the album you're playing so the picture can borrow its colors and look up the song's tempo. It never listens to the audio.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

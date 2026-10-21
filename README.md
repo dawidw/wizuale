@@ -4,11 +4,11 @@ Tempo data by [GetSongBPM](https://getsongbpm.com).
 
 Full-screen generative pictures for Apple TV. Put a record on — Apple Music on the TV, or music you start from this app — and the screen becomes a MilkDrop-style visualizer instead of the screensaver.
 
-The picture does not listen to the audio. Apple Music is protected, and this app never opens the stream. Motion comes from time and a gentle built-in pulse. If Apple Music permission is on, the title and cover show briefly in the corner, and the cover's colors tint the picture.
+The picture does not listen to the audio. Apple Music is protected, and this app never opens the stream. When a GetSongBPM key is set and the song is in their database, the picture locks to that tempo. Without a key, or when the song is not listed, motion falls back to time and a gentle built-in pulse. If Apple Music permission is on, the title and cover show briefly in the corner, and the cover's colors tint the picture.
 
 ## Pictures
 
-Six MilkDrop presets play on their own, about 45 seconds each, and blend into the next over a few seconds:
+Six MilkDrop presets play on their own and blend into the next over a few seconds. Without a matched tempo they hold for about 45 seconds. With a matched tempo they wait for the next 8-bar phrase after that, so the change lands on the music:
 
 1. **Spiral Star** — eight neon arms, pink, gold, and teal, over a dark warp
 2. **Petal Veil** — a green spiral of glowing petals with fine contour lines
@@ -34,6 +34,28 @@ Each frame is the previous frame, warped (zoom, rotation, swirl, kaleidoscope), 
 The title card fades after a few seconds, and again when the song changes. The hint at the top disappears after the first press.
 
 The Apple TV screensaver stays off while the app is in front.
+
+## Tempo
+
+Wizuale sends the current title and artist to [GetSongBPM](https://getsongbpm.com) and, on a match, locks the picture to that BPM. Each beat gives a short zoom and a brighter stroke. The downbeat is a little stronger. Time signature and key are used when the database has them (the bar length follows the time signature; the phrase is 8 bars, which is 32 beats in 4/4).
+
+The downbeat is aligned to the start of the track. GetSongBPM does not provide a beat-grid offset, so a song with a long silent intro can sit a little early or late.
+
+Put your API key in a file that is not committed:
+
+```
+cp Config/Secrets.xcconfig.example Config/Secrets.xcconfig
+```
+
+`Config/Secrets.xcconfig` is gitignored. The setting name is `GETSONGBPM_API_KEY`:
+
+```
+GETSONGBPM_API_KEY = your_key_here
+```
+
+The tvOS target reads that through `Config/Base.xcconfig`. The build copies it into the app as the Info.plist value `GetSongBPMAPIKey`. Leave the setting empty, keep the placeholder `YOUR_KEY_HERE`, or skip the file, and Wizuale keeps the built-in pulse for every song.
+
+Lookups are cached on device (a match for 30 days, a miss for 3 days). A network failure is not cached; the same song is tried again after a few seconds. While a match is in use, the corner card shows the BPM and the credit line "Tempo data by GetSongBPM" stays on screen.
 
 ## Open the project
 
@@ -69,7 +91,7 @@ The simulator can show the pictures. It has no Apple Music library, so the title
 
 ## What you will see with music
 
-With permission granted, the app reads the system Music player every moment or so: title, artist, and cover. It does not replace a queue that is already playing. Play/Pause starts your recently played songs only when the queue is stopped, and falls back to the library if recent songs are empty.
+With permission granted, the app reads the system Music player several times a second: title, artist, cover, and playback position. It does not replace a queue that is already playing. Play/Pause starts your recently played songs only when the queue is stopped, and falls back to the library if recent songs are empty. A matched tempo is described under the artist, for example "116 BPM · 4/4 · Fm".
 
 AirPlay from an iPhone often does not appear in that system player. When it doesn't, the picture keeps its own colors and the card says nothing is playing. That is a limit of MusicKit, not a missing permission.
 
@@ -80,14 +102,14 @@ If you deny access, the pictures still run. They use the colors designed for eac
 1. Add a case to `VisualMode` in `Wizuale/Presets.swift`. The raw number is the mode the shader switches on, so keep it in sync.
 2. Write a small `emit…` function in `Wizuale/Shaders.metal` and call it from `emitMode`.
 3. Append a `Preset` in `PresetLibrary.all`.
-4. Set `cyclesAutomatically` if it should join the 45 second rotation. Leave it off and the picture waits until someone swipes.
+4. Set `cyclesAutomatically` if it should join the rotation (about 45 seconds, or the next 8-bar phrase when a tempo is matched). Leave it off and the picture waits until someone swipes.
 
 Paint thin bright strokes. A shape that fills the screen stacks on itself until the frame clips white. `decayTau` around 0.5–1.5 seconds is the useful range: lower fades faster, higher leaves longer trails. Warp amounts are in screen-units per second, so a dropped frame does not change the look.
 
-The shader comment at the top of `Shaders.metal` names the uniform fields.
+The shader comment at the top of `Shaders.metal` names the uniform fields. `beat` and `music` carry the phase-aligned clock. They stay at zero when no tempo was matched, and the old pulse is what you see.
 
 ## What was not run here
 
-This project was prepared on a machine without Xcode, so it has not been compiled, signed, or launched on an Apple TV. The pictures were tuned by running the same warp math in a WebGL preview, not by running the Metal binary. MusicKit, the Siri Remote, album-color extraction, and the idle-timer lock are written to the current tvOS 17 APIs and have not been exercised on hardware.
+This project was prepared on a machine without Xcode, so it has not been compiled, signed, or launched on an Apple TV. The pictures were tuned by running the same warp math in a WebGL preview, not by running the Metal binary. MusicKit, the Siri Remote, album-color extraction, the idle-timer lock, and the GetSongBPM lookup are written to the current tvOS 17 APIs and have not been exercised on hardware. `SystemMusicPlayer.playbackTime` is the documented playhead (it can be NaN when MusicKit has no finite time). The beat clock assumes normal speed between those samples.
 
 On a Mac, open the project and run it on your Apple TV. If the shader fails to compile, Xcode's issue navigator will point at `Shaders.metal`. If the uniform struct ever disagrees with Swift, the screen shows that message instead of a scrambled picture.

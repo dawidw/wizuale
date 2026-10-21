@@ -22,6 +22,8 @@ struct FrameUniforms {
     float4 style;    // exposure, baseLevel, emissionGain, pulseAmount
     float4 tempo;    // bpm, modeFrom, modeTo, modeT
     float4 hole;     // centerHole, centerDark, grain, unused
+    float4 beat;     // kick, downbeat, beatPhase, barPhase  (0 when no matched tempo)
+    float4 music;    // phrasePhase, beatsPerBar, realTempo (1 = matched), unused
     float4 color0;
     float4 color1;
     float4 color2;
@@ -64,8 +66,21 @@ float3 ramp(float t, constant FrameUniforms &u) {
 }
 
 float pulseAmt(constant FrameUniforms &u) {
+  // Matched tempo: the CPU clock is already phase-aligned to playback time.
+  // Otherwise keep the original narrow pulse so an unmatched song looks the same.
+  if (u.music.z > 0.5) {
+    return u.beat.x * u.style.w;
+  }
   float beat = u.time * u.tempo.x * (TAU / 60.0);
   return pow(max(sin(beat), 0.0), 12.0) * u.style.w;
+}
+
+float kick(constant FrameUniforms &u) {
+  return u.beat.x * step(0.5, u.music.z);
+}
+
+float downbeat(constant FrameUniforms &u) {
+  return u.beat.y * step(0.5, u.music.z);
 }
 
 float2 toP(float2 uv, constant FrameUniforms &u) {
@@ -98,7 +113,10 @@ float2 advect(float2 p, constant FrameUniforms &u) {
   a += u.flow.y * dt;
   a += u.flow.z * dt / (r + 0.28);
   a += sin(r * u.warp.y - u.time * u.warp.z) * u.warp.x * dt;
-  float expand = u.flow.x * (1.0 + beat * 1.4);
+  // `punch` is a brief zoom rate on the beat. It is multiplied by dt below,
+  // so it adds a few percent of zoom per beat and does not ratchet.
+  float punch = kick(u) * 0.65 + downbeat(u) * 0.35;
+  float expand = u.flow.x * (1.0 + beat * 1.4) + punch;
   r = r / max(exp(expand * dt), 0.0001);
   r += sin(a * max(u.center.z, 1.0) + u.time * u.warp.z * 0.65) * u.warp.w * dt;
   float2 q = float2(cos(a), sin(a)) * r;
@@ -133,22 +151,28 @@ float3 emitSpiral(float2 p, constant FrameUniforms &u) {
   float r = length(p);
   float a = atan2(p.y, p.x);
   float n = max(u.shape.x, 1.0);
+  float k = kick(u);
+  float d = downbeat(u);
   float arm = pow(max(cos(a * n * 0.5), 0.0), 6.0);
-  float phase = a * n - log(max(r, 0.004)) * u.wave.y + u.time * 0.55;
+  float phase = a * n - log(max(r, 0.004)) * u.wave.y + u.time * 0.55 + k * 0.55;
   float ridge = exp(-pow(sin(phase) / 0.10, 2.0));
   float strand = exp(-pow(sin(a * n * 2.0 + r * 22.0 - u.time * 0.4) / 0.07, 2.0));
   float core = exp(-pow(r / 0.02, 2.0));
-  float3 col = ramp(0.02 + r * 1.7, u);
-  return col * (ridge * arm * 0.85 + strand * arm * 0.45 + core * 0.55);
+  float halo = exp(-pow((r - 0.20) / (0.028 + k * 0.05), 2.0)) * k;
+  float3 col = ramp(0.02 + r * 1.7 + d * 0.08, u);
+  float body = ridge * arm * 0.85 + strand * arm * 0.45 + core * 0.55 + halo * 0.5;
+  return col * body * (1.0 + k * 0.75 + d * 0.35);
 }
 
 float3 emitPetals(float2 p, constant FrameUniforms &u) {
   float r = length(p);
   float a = atan2(p.y, p.x);
   float n = max(u.shape.x, 1.0);
+  float k = kick(u);
+  float d = downbeat(u);
   float petal = pow(max(0.0, cos(a * n)), max(u.shape.z, 0.5));
   float breathe = 0.02 * sin(u.time * 0.7 + a * 2.0);
-  float radius = u.shape.y + u.wave.w + petal * 0.20 + breathe;
+  float radius = u.shape.y + u.wave.w + petal * 0.20 + breathe + k * 0.02;
   float thick = max(u.wave.z, 0.0025);
   float contour = exp(-pow((r - radius) / thick, 2.0));
   float body = exp(-pow((r - radius) / (thick * 9.0), 2.0)) * (0.25 + 0.75 * petal);
@@ -156,15 +180,17 @@ float3 emitPetals(float2 p, constant FrameUniforms &u) {
   float core = exp(-pow(r / 0.07, 2.0));
   float3 col = ramp(petal * 0.65 + r * 0.4 + u.time * 0.02, u);
   float3 lineCol = mix(u.color1.rgb, float3(1.0, 0.96, 0.45), 0.62);
-  return col * body * 0.16 + lineCol * contour * 1.45 + col * inner * 0.22 + col * core * 0.2;
+  return (col * body * 0.16 + lineCol * contour * 1.45 * (1.0 + k * 0.9) + col * inner * 0.22 + col * core * 0.2) * (1.0 + d * 0.25);
 }
 
 float3 emitEmber(float2 p, constant FrameUniforms &u) {
   float r = length(p);
   float a = atan2(p.y, p.x);
+  float k = kick(u);
+  float d = downbeat(u);
   float lobe = 0.5 + 0.5 * sin(a * max(u.shape.x, 2.0) + u.time * 0.45);
   float wob = 0.05 * sin(a * u.wave.y - u.time * 0.8) + 0.025 * sin(a * u.wave.y * 2.3 + u.time * 1.3);
-  float radius = u.shape.y + wob + lobe * 0.045 + u.wave.w;
+  float radius = u.shape.y + wob + lobe * 0.045 + u.wave.w + k * 0.03;
   float thick = max(u.wave.z, 0.006);
   float ring = exp(-pow((r - radius) / thick, 2.0));
   float glow = exp(-pow((r - u.shape.y) / (thick * 6.5), 2.0)) * (0.28 + 0.85 * lobe);
@@ -172,37 +198,44 @@ float3 emitEmber(float2 p, constant FrameUniforms &u) {
   float2 cell = floor(p * 78.0);
   float2 f = fract(p * 78.0) - 0.5;
   float h = hash21(cell + floor(u.time * 6.0));
-  float spark = step(0.972, h) * exp(-dot(f, f) * 16.0);
+  float spark = step(0.972 - d * 0.045, h) * exp(-dot(f, f) * 16.0);
   spark *= smoothstep(0.55, 0.12, abs(r - u.shape.y));
   float3 col = mix(u.color0.rgb, u.color1.rgb, lobe);
   col = mix(col, u.color2.rgb, smoothstep(0.12, 0.42, r));
-  return col * (ring * 0.7 + glow * 0.22 + core) + float3(1.0, 0.92, 0.75) * spark * (0.35 + u.grade.x);
+  float body = col * (ring * 0.7 * (1.0 + k * 0.8) + glow * 0.22 * (1.0 + k * 0.55) + core);
+  return (body + float3(1.0, 0.92, 0.75) * spark * (0.35 + u.grade.x)) * (1.0 + d * 0.15);
 }
 
 float3 emitTunnel(float2 p, constant FrameUniforms &u) {
   float r = length(p);
   float a = atan2(p.y, p.x);
   float n = max(u.shape.x, 1.0);
-  float rings = pow(0.5 + 0.5 * sin(log(max(r, 0.002)) * u.wave.y - u.time * 1.4), 10.0);
+  float k = kick(u);
+  float d = downbeat(u);
+  // One ring cycle per beat when the tempo is real. sin(phase * TAU) wraps cleanly.
+  float travel = (u.music.z > 0.5) ? (u.beat.z * TAU) : (u.time * 1.4);
+  float rings = pow(0.5 + 0.5 * sin(log(max(r, 0.002)) * u.wave.y - travel), 10.0);
   float beams = pow(0.5 + 0.5 * cos(a * n), max(u.shape.z, 0.6));
   float streak = pow(0.5 + 0.5 * cos(a * n * 0.5 - r * 8.0 + u.time * 0.6), 18.0);
   float fade = smoothstep(0.85, 0.05, r);
   float3 col = ramp(r * 1.4 + u.time * 0.05 + a * 0.05, u);
   float m = (rings * 0.85 + streak * 0.95) * fade + beams * exp(-r * 2.2) * 0.22;
   m += exp(-pow(r / 0.02, 2.0)) * 0.45;
-  return col * m;
+  return col * m * (1.0 + k * 0.55 + d * 0.3);
 }
 
 float3 emitSilk(float2 p, constant FrameUniforms &u) {
+  float k = kick(u);
+  float sway = (u.music.z > 0.5) ? sin(u.beat.z * TAU) * 0.018 : 0.0;
   float wob = sin(p.x * u.wave.y + u.time * 0.32) * 0.10;
   float wob2 = sin(p.x * u.wave.y * 0.62 - u.time * 0.21 + 1.7) * 0.14;
   float wob3 = sin(p.x * u.wave.y * 1.3 + u.time * 0.17) * 0.05;
-  float b1 = exp(-pow((p.y - wob) / 0.055, 2.0));
-  float b2 = exp(-pow((p.y - 0.20 - wob2) / 0.08, 2.0));
-  float b3 = exp(-pow((p.y + 0.16 - wob3) / 0.045, 2.0));
+  float b1 = exp(-pow((p.y - wob - sway) / 0.055, 2.0));
+  float b2 = exp(-pow((p.y - 0.20 - wob2 - sway * 0.6) / 0.08, 2.0));
+  float b3 = exp(-pow((p.y + 0.16 - wob3 + sway * 0.4) / 0.045, 2.0));
   float sheen = pow(0.5 + 0.5 * sin(p.x * 3.0 - p.y * 8.0 + u.time * 0.4), 6.0);
   float3 col = ramp(0.25 + p.y * 0.8 + u.time * 0.03, u);
-  return col * (b1 * 0.42 + b2 * 0.28 + b3 * 0.34) * (0.8 + sheen * 0.35);
+  return col * (b1 * 0.42 + b2 * 0.28 + b3 * 0.34) * (0.8 + sheen * 0.35) * (1.0 + k * 0.5);
 }
 
 float3 emitWheel(float2 p, constant FrameUniforms &u) {
@@ -215,8 +248,10 @@ float3 emitWheel(float2 p, constant FrameUniforms &u) {
   float rim = exp(-pow((r - u.shape.y) / 0.012, 2.0));
   float hub = exp(-pow(r / 0.05, 2.0));
   float glow = spoke * smoothstep(u.shape.y + 0.08, 0.0, r);
+  float k = kick(u);
+  float d = downbeat(u);
   float3 col = ramp(u.time * 0.07 + r * 0.5 + float(int(floor(safeMod(a + PI, TAU) / slice))), u);
-  return col * (glow * 0.7 + rim * 0.55 + hub * 0.35);
+  return col * (glow * (0.7 + k * 0.65) + rim * (0.55 + d * 0.85) + hub * (0.35 + k * 0.3));
 }
 
 float3 emitAurora(float2 p, constant FrameUniforms &u) {
@@ -226,10 +261,12 @@ float3 emitAurora(float2 p, constant FrameUniforms &u) {
   float b1 = exp(-pow((p.y - y1) / 0.16, 2.0));
   float b2 = exp(-pow((p.y - y2) / 0.11, 2.0));
   float b3 = exp(-pow((p.y - y3) / 0.13, 2.0));
+  float k = kick(u);
+  float d = downbeat(u);
   float3 c1 = u.color0.rgb * b1;
   float3 c2 = u.color1.rgb * b2;
   float3 c3 = u.color2.rgb * b3;
-  return (c1 * 0.32 + c2 * 0.24 + c3 * 0.28);
+  return (c1 * 0.32 + c2 * 0.24 + c3 * 0.28) * (1.0 + k * 0.6 + d * 0.25);
 }
 
 float3 emitBloom(float2 p, constant FrameUniforms &u) {
@@ -240,24 +277,26 @@ float3 emitBloom(float2 p, constant FrameUniforms &u) {
       sin(u.time * (0.13 + fi * 0.017) + fi * 1.7) * (0.28 + fi * 0.04),
       cos(u.time * (0.11 + fi * 0.02) + fi * 2.2) * (0.16 + fi * 0.03)
     );
-    float rad = 0.10 + 0.035 * sin(u.time * 0.4 + fi);
+    float rad = (0.10 + 0.035 * sin(u.time * 0.4 + fi)) * (1.0 + kick(u) * 0.28);
     float blob = exp(-dot(p - c, p - c) / max(rad * rad, 0.004));
     acc += ramp(fi * 0.17 + u.time * 0.02, u) * blob;
   }
-  return acc * 0.34;
+  return acc * 0.34 * (1.0 + kick(u) * 0.5 + downbeat(u) * 0.2);
 }
 
 float3 emitBorder(float2 p, constant FrameUniforms &u) {
   float a = atan2(p.y, p.x);
+  float k = kick(u);
+  float d = downbeat(u);
   float wobble = 0.035 * sin(a * u.wave.y + u.time * 0.55) + 0.018 * sin(a * u.wave.y * 2.2 - u.time * 0.4);
-  float2 scale = float2(0.78, 0.42) * (1.0 + wobble);
+  float2 scale = float2(0.78, 0.42) * (1.0 + wobble) * (1.0 + k * 0.045);
   float er = length(p / scale);
   float thick = 0.045;
   float line = exp(-pow((er - 1.0) / thick, 2.0));
   float glow = exp(-pow((er - 1.0) / (thick * 3.2), 2.0));
   float rim = smoothstep(0.72, 0.98, er);
   float3 col = ramp(a / TAU + u.time * 0.04 + er * 0.15, u);
-  return col * (line * 1.05 + glow * 0.32) * rim;
+  return col * (line * (1.05 + k * 0.75) + glow * (0.32 + d * 0.4)) * rim;
 }
 
 float3 emitDrift(float2 p, constant FrameUniforms &u) {
@@ -277,7 +316,7 @@ float3 emitDrift(float2 p, constant FrameUniforms &u) {
       ) * 0.32;
       float2 d = f - float2(float(i), float(j)) - motion;
       float star = exp(-dot(d, d) * 28.0);
-      acc += ramp(h, u) * star * (0.55 + 0.45 * sin(u.time * 0.8 + h * 20.0));
+      acc += ramp(h, u) * star * (0.55 + 0.45 * sin(u.time * 0.8 + h * 20.0) + kick(u) * 0.85);
     }
   }
   float dust = exp(-pow(length(p) / 0.55, 2.0));
@@ -325,7 +364,7 @@ fragment float4 warpFragment(
     float keep = exp(-u.deltaTime / max(u.persist.x, 0.05));
     col *= keep;
     col = max(col - float3(0.00065) * (u.deltaTime * 60.0), float3(0.0));
-    float hue = clamp(u.persist.z * u.deltaTime, 0.0, 0.05);
+    float hue = clamp(u.persist.z * u.deltaTime + downbeat(u) * 0.03, 0.0, 0.08);
     col = mix(col, col.gbr, hue);
 
     float r = length(p0);
@@ -342,7 +381,7 @@ fragment float4 warpFragment(
     if (modeA != modeB) {
         e = mix(e, emitMode(spun, modeB, u), w);
     }
-    e *= u.style.z * (1.0 + pulseAmt(u) * 0.85);
+    e *= u.style.z * (1.0 + pulseAmt(u) * 0.85 + downbeat(u) * 0.2);
     col += max(e, float3(0.0)) * u.shape.w;
     col += u.baseColor.rgb * u.style.y * u.deltaTime;
     col = clamp(col, float3(0.0), float3(4.0));

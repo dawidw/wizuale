@@ -113,7 +113,9 @@ struct PresetParams: Equatable {
         modeTo: Int,
         modeT: Float,
         album: AlbumColors?,
-        albumWeight: Float
+        albumWeight: Float,
+        beat: SIMD4<Float> = SIMD4<Float>(0, 0, 0, 0),
+        music: SIMD4<Float> = SIMD4<Float>(0, 0, 0, 0)
     ) -> FrameUniforms {
         let influence = albumInfluence * albumWeight
         let mixed0 = mix(color0, album?.first ?? color0, influence)
@@ -134,6 +136,8 @@ struct PresetParams: Equatable {
             style: SIMD4(exposure, baseLevel, emissionGain, pulseAmount),
             tempo: SIMD4(bpm, Float(modeFrom), Float(modeTo), modeT),
             hole: SIMD4(centerHole, centerDark, grain, 0),
+            beat: beat,
+            music: music,
             color0: v4(mixed0),
             color1: v4(mixed1),
             color2: v4(mixed2),
@@ -153,7 +157,8 @@ struct Preset: Identifiable, Equatable {
 }
 
 enum PresetLibrary {
-    /// How long a self-cycling preset holds before the next one eases in.
+    /// How long a self-cycling preset holds before it may advance.
+    /// A matched tempo waits for the next 8-bar phrase after this, instead of cutting on the timer.
     static let cycleHold: Double = 45
     static let blendDuration: Float = 3.2
 
