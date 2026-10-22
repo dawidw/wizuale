@@ -9,16 +9,16 @@ struct PresetStrip: View {
     var onSelect: (Int) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("PRESETS")
-                .font(.system(size: 13, weight: .semibold))
-                .tracking(1.6)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(1.4)
                 .foregroundStyle(.white.opacity(0.5))
-                .padding(.horizontal, 28)
+                .padding(.horizontal, 22)
 
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         PresetCard(title: "Auto", selected: known && cycling) {
                             onSelect(Int(PresetWire.auto))
                         }
@@ -35,7 +35,7 @@ struct PresetStrip: View {
                             .id(preset.id)
                         }
                     }
-                    .padding(.horizontal, 28)
+                    .padding(.horizontal, 22)
                     .padding(.vertical, 2)
                 }
                 .onAppear {
@@ -65,8 +65,8 @@ private struct PresetCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+            VStack(alignment: .leading, spacing: 5) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [Color(red: 0.08, green: 0.1, blue: 0.16), Color(red: 0.02, green: 0.02, blue: 0.04)],
@@ -74,26 +74,26 @@ private struct PresetCard: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 116, height: 72)
+                    .frame(width: 92, height: 58)
                     .overlay {
                         if let thumbnail {
                             Image(uiImage: thumbnail)
                                 .resizable()
                                 .scaledToFill()
-                                .frame(width: 116, height: 72)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .frame(width: 92, height: 58)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         }
                     }
                     .overlay {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(ring, lineWidth: selected ? 2.5 : 1.5)
                     }
                 Text(title)
-                    .font(.system(size: 12, weight: selected ? .semibold : .medium))
+                    .font(.system(size: 10.5, weight: selected ? .semibold : .medium))
                     .foregroundStyle(.white.opacity(selected || playing ? 0.95 : 0.62))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                    .frame(width: 116, height: 32, alignment: .topLeading)
+                    .frame(width: 92, height: 28, alignment: .topLeading)
             }
         }
         .buttonStyle(.plain)
