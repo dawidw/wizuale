@@ -6,6 +6,7 @@ import SwiftUI
 struct MetalCanvasView: UIViewRepresentable {
     var state: RenderState
     var beatClock: BeatClock
+    var micReceiver: MicReceiver
     var paused: Bool
     @Binding var failure: String?
 
@@ -32,7 +33,7 @@ struct MetalCanvasView: UIViewRepresentable {
         }
         view.device = device
         do {
-            let renderer = try VisualRenderer(device: device, state: state, beatClock: beatClock)
+            let renderer = try VisualRenderer(device: device, state: state, beatClock: beatClock, micReceiver: micReceiver)
             context.coordinator.renderer = renderer
             view.delegate = renderer
         } catch {

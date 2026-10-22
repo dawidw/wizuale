@@ -20,7 +20,6 @@ final class MusicSession: ObservableObject {
     @Published private(set) var artist = ""
     @Published private(set) var isPlaying = false
     @Published private(set) var artwork: UIImage?
-    @Published private(set) var albumColors: AlbumColors?
     @Published private(set) var statusMessage: String?
     @Published private(set) var trackID = ""
     /// "116 BPM · 4/4 · Fm" when GetSongBPM matched this song. Empty otherwise.
@@ -126,7 +125,6 @@ final class MusicSession: ObservableObject {
             Task { await self.loadArtwork(from: artURL, key: artworkKey) }
         } else {
             artwork = nil
-            albumColors = nil
         }
     }
 
@@ -185,7 +183,6 @@ final class MusicSession: ObservableObject {
             }
             guard let image = UIImage(data: data) else { return }
             artwork = image
-            albumColors = ArtworkPalette.extract(from: image)
         } catch {
             // Keep the previous cover on screen until a newer download wins.
         }

@@ -170,8 +170,8 @@ enum TempoText {
         let phrasePhase = phrase - floor(phrase)
         let whole = Int(floor(beats))
         let isDownbeat = whole % max(beatsPerBar, 1) == 0
-        let kick = envelope(phase: beatPhase, width: 0.22)
-        let downbeat = isDownbeat ? envelope(phase: beatPhase, width: 0.34) : 0
+        let kick = envelope(phase: beatPhase, width: 0.30)
+        let downbeat = isDownbeat ? envelope(phase: beatPhase, width: 0.42) : 0
         return MusicalFrame(
             kick: kick,
             downbeat: downbeat,

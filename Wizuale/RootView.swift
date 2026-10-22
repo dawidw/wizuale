@@ -1,3 +1,4 @@
+import AVKit
 import SwiftUI
 import UIKit
 
@@ -24,9 +25,9 @@ struct RootView: View {
                     .multilineTextAlignment(.center)
                     .padding(80)
             } else {
-                MetalCanvasView(
-                    state: visuals.renderState,
-                    beatClock: visuals.beatClock,
+                ProjectMCanvasView(
+                    renderState: visuals.projectMState,
+                    audioHub: visuals.audioHub,
                     paused: scenePhase != .active,
                     failure: $failure
                 )
@@ -34,7 +35,7 @@ struct RootView: View {
             }
 
             NowPlayingOverlay(
-                presetName: visuals.currentPreset.name,
+                presetName: visuals.currentPresetName,
                 title: music.title,
                 artist: music.artist,
                 artwork: music.artwork,
@@ -50,6 +51,10 @@ struct RootView: View {
                 tempoCredit
             }
 
+            if visuals.micLive {
+                micMark
+            }
+
             if visuals.showHint {
                 hint
             }
@@ -59,10 +64,25 @@ struct RootView: View {
                 onRight: { visuals.next() },
                 onSelect: { visuals.advance() },
                 onLongPress: { visuals.togglePin() },
-                onPlayPause: { music.togglePlayback() }
+                onPlayPause: { music.togglePlayback() },
+                capturesFocus: !visuals.showMicSettings
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
+
+            if visuals.showMicSettings {
+                MicSettingsPanel(
+                    source: visuals.micSource,
+                    sensitivity: visuals.sensitivity,
+                    latencyMs: visuals.latencyMs,
+                    continuityStatus: visuals.continuityStatus,
+                    onSource: { visuals.setMicSource($0) },
+                    onSensitivity: { visuals.setSensitivity($0) },
+                    onLatency: { visuals.setLatency($0) },
+                    onPair: { visuals.beginContinuityPairing() },
+                    onClose: { visuals.closeSettings() }
+                )
+            }
         }
         .preferredColorScheme(.dark)
         .onMoveCommand { direction in
@@ -71,10 +91,18 @@ struct RootView: View {
                 visuals.previous()
             case .right:
                 visuals.next()
+            case .down:
+                if !visuals.showMicSettings {
+                    visuals.openSettings()
+                }
             default:
                 break
             }
         }
+        .modifier(CloseMicSettingsOnMenu(open: visuals.showMicSettings) {
+            visuals.closeSettings()
+        })
+        .continuityDevicePicker(isPresented: $visuals.showContinuityPicker) { _ in }
         .onPlayPauseCommand {
             music.togglePlayback()
         }
@@ -85,15 +113,35 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             applyIdleTimer(phase)
         }
-        .onChange(of: music.albumColors) { _, colors in
-            visuals.renderState.setAlbum(colors)
-        }
         .onChange(of: music.trackID) { _, _ in
             visuals.revealOverlay()
         }
         .task {
             await music.start()
         }
+    }
+
+    private var micMark: some View {
+        VStack {
+            HStack {
+                Spacer()
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(Color(red: 0.45, green: 0.95, blue: 0.62))
+                        .frame(width: 12, height: 12)
+                    Text(visuals.micName.isEmpty ? "Mic" : visuals.micName)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.72))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(.black.opacity(0.35)))
+                .padding(.trailing, 48)
+                .padding(.top, 36)
+            }
+            Spacer()
+        }
+        .allowsHitTesting(false)
     }
 
     /// Stays up after the title card fades. GetSongBPM requires a visible credit while their data is used.
@@ -114,11 +162,11 @@ struct RootView: View {
 
     private var hint: some View {
         VStack {
-            Text("Swipe for another picture. Click steps forward. Play and pause starts your music. Hold to keep the title on screen.")
+            Text("Swipe for another picture. Swipe down for the microphone. Click steps forward. Play and pause starts your music. Hold to keep the title on screen.")
                 .font(.system(size: 22, weight: .medium))
                 .foregroundStyle(.white.opacity(0.92))
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .lineLimit(3)
                 .padding(.horizontal, 28)
                 .padding(.vertical, 16)
                 .background(
@@ -140,6 +188,22 @@ struct RootView: View {
     private func applyIdleTimer(_ phase: ScenePhase) {
         let active = phase == .active
         UIApplication.shared.isIdleTimerDisabled = active
-        visuals.renderState.setPaused(!active)
+        visuals.projectMState.setPaused(!active)
+    }
+}
+
+/// Menu closes the mic panel. When the panel is closed this modifier is absent,
+/// so Menu still leaves the app.
+private struct CloseMicSettingsOnMenu: ViewModifier {
+    var open: Bool
+    var close: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if open {
+            content.onExitCommand(perform: close)
+        } else {
+            content
+        }
     }
 }
