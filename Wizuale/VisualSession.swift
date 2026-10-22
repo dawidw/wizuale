@@ -68,6 +68,7 @@ final class VisualSession: ObservableObject {
                     self.latencyMs = ms
                     self.sensitivity = sens
                     self.beatClock.setVisualLatency(ms: ms)
+                    self.audioHub.setLatency(ms)
                     self.projectMState.setBeatSensitivity(sens)
                     self.audioHub.setBeatSensitivity(sens)
                 }
@@ -124,6 +125,7 @@ final class VisualSession: ObservableObject {
         let clamped = MicTuning.clampLatency(ms)
         latencyMs = clamped
         micReceiver.setLatency(clamped)
+        audioHub.setLatency(clamped)
         beatClock.setVisualLatency(ms: clamped)
     }
 

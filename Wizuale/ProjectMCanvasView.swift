@@ -129,7 +129,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
             projectM.loadPreset(index: snap.targetIndex, smooth: lastIndex >= 0)
             lastIndex = snap.targetIndex
         }
-        audioHub.feed(projectM: projectM)
+        audioHub.feed { projectM.addPCM(floats: $0) }
         glClearColor(0, 0, 0, 1)
         glClear(UInt32(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT))
         projectM.render()

@@ -370,8 +370,13 @@ final class MicReceiver: @unchecked Sendable {
             adoptSettings(latencyMs: Int(latency), sensitivity: sens)
             sendAck(force: true)
         case .pcm(_, let rate, let samples):
-            let handler = onPCM
-            handler?(rate, samples)
+            // Only when the TV's mic source is the phone, so "Off" really stops it.
+            lock.lock()
+            let accept = source == .phone
+            lock.unlock()
+            if accept {
+                onPCM?(rate, samples)
+            }
         case .cycle(_, let auto, let seconds):
             let handler = onCycle
             if let handler {

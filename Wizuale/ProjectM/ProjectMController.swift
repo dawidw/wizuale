@@ -72,21 +72,10 @@ final class ProjectMController {
         projectm_opengl_render_frame_fbo(handle, UInt32(fbo))
     }
 
-    func addPCM(samples: [Int16], gain: Float) {
-        guard let handle, !samples.isEmpty else { return }
-        if abs(gain - 1) < 0.001 {
-            samples.withUnsafeBufferPointer { ptr in
-                guard let base = ptr.baseAddress else { return }
-                projectm_pcm_add_int16(handle, base, UInt32(ptr.count), PROJECTM_MONO)
-            }
-            return
-        }
-        var scaled = [Float]()
-        scaled.reserveCapacity(samples.count)
-        for sample in samples {
-            scaled.append(Float(sample) / 32767 * gain)
-        }
-        scaled.withUnsafeBufferPointer { ptr in
+    /// Mono floats in -1...1 (already paced and levelled by ProjectMAudioHub).
+    func addPCM(floats: [Float]) {
+        guard let handle, !floats.isEmpty else { return }
+        floats.withUnsafeBufferPointer { ptr in
             guard let base = ptr.baseAddress else { return }
             projectm_pcm_add_float(handle, base, UInt32(ptr.count), PROJECTM_MONO)
         }
