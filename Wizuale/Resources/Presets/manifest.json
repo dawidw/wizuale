@@ -1,104 +1,242 @@
 {
-  "source": "presets-cream-of-the-crop",
-  "count": 20,
+  "source": "presets-cream-of-the-crop + Study of Space originals",
+  "count": 40,
   "presets": [
     {
       "id": 0,
       "name": "$$$ Royal - Mashup (177)",
-      "file": "files/$$$ Royal - Mashup (177).milk"
+      "file": "files/$$$ Royal - Mashup (177).milk",
+      "thumb": "thumbs/$$$ Royal - Mashup (177).jpg"
     },
     {
       "id": 1,
       "name": "EoS and PieturP - AlienSpaceshipIinvasion_phats_particle edit",
-      "file": "files/EoS and PieturP - AlienSpaceshipIinvasion_phats_particle edit.milk"
+      "file": "files/EoS and PieturP - AlienSpaceshipIinvasion_phats_particle edit.milk",
+      "thumb": "thumbs/EoS and PieturP - AlienSpaceshipIinvasion_phats_particle edit.jpg"
     },
     {
       "id": 2,
       "name": "EoS and PieturP - Starfield",
-      "file": "files/EoS and PieturP - Starfield.milk"
+      "file": "files/EoS and PieturP - Starfield.milk",
+      "thumb": "thumbs/EoS and PieturP - Starfield.jpg"
     },
     {
       "id": 3,
       "name": "Geiss - Game of Life 2 (Jelly)",
-      "file": "files/Geiss - Game of Life 2 (Jelly).milk"
+      "file": "files/Geiss - Game of Life 2 (Jelly).milk",
+      "thumb": "thumbs/Geiss - Game of Life 2 (Jelly).jpg"
     },
     {
       "id": 4,
       "name": "LuxXx - MoltenWheel i --- Isosceles edit9",
-      "file": "files/LuxXx - MoltenWheel i --- Isosceles edit9.milk"
+      "file": "files/LuxXx - MoltenWheel i --- Isosceles edit9.milk",
+      "thumb": "thumbs/LuxXx - MoltenWheel i --- Isosceles edit9.jpg"
     },
     {
       "id": 5,
+      "name": "Study of Space - Block Letters",
+      "file": "files/Study of Space - Block Letters.milk",
+      "thumb": "thumbs/Study of Space - Block Letters.jpg"
+    },
+    {
+      "id": 6,
+      "name": "Study of Space - Dream",
+      "file": "files/Study of Space - Dream.milk",
+      "thumb": "thumbs/Study of Space - Dream.jpg"
+    },
+    {
+      "id": 7,
+      "name": "Study of Space - Election Constructivism",
+      "file": "files/Study of Space - Election Constructivism.milk",
+      "thumb": "thumbs/Study of Space - Election Constructivism.jpg"
+    },
+    {
+      "id": 8,
+      "name": "Study of Space - Fangor Rings",
+      "file": "files/Study of Space - Fangor Rings.milk",
+      "thumb": "thumbs/Study of Space - Fangor Rings.jpg"
+    },
+    {
+      "id": 9,
+      "name": "Study of Space - Halftone",
+      "file": "files/Study of Space - Halftone.milk",
+      "thumb": "thumbs/Study of Space - Halftone.jpg"
+    },
+    {
+      "id": 10,
+      "name": "Study of Space - Moire",
+      "file": "files/Study of Space - Moire.milk",
+      "thumb": "thumbs/Study of Space - Moire.jpg"
+    },
+    {
+      "id": 11,
+      "name": "Study of Space - Neon Multiply and Rotate",
+      "file": "files/Study of Space - Neon Multiply and Rotate.milk",
+      "thumb": "thumbs/Study of Space - Neon Multiply and Rotate.jpg"
+    },
+    {
+      "id": 12,
+      "name": "Study of Space - Oscillogram",
+      "file": "files/Study of Space - Oscillogram.milk",
+      "thumb": "thumbs/Study of Space - Oscillogram.jpg"
+    },
+    {
+      "id": 13,
+      "name": "Study of Space - Outlined Stains",
+      "file": "files/Study of Space - Outlined Stains.milk",
+      "thumb": "thumbs/Study of Space - Outlined Stains.jpg"
+    },
+    {
+      "id": 14,
+      "name": "Study of Space - Rhythm Bars",
+      "file": "files/Study of Space - Rhythm Bars.milk",
+      "thumb": "thumbs/Study of Space - Rhythm Bars.jpg"
+    },
+    {
+      "id": 15,
+      "name": "Study of Space - Soft Ring",
+      "file": "files/Study of Space - Soft Ring.milk",
+      "thumb": "thumbs/Study of Space - Soft Ring.jpg"
+    },
+    {
+      "id": 16,
+      "name": "Study of Space - Soft Squares Orchid",
+      "file": "files/Study of Space - Soft Squares Orchid.milk",
+      "thumb": "thumbs/Study of Space - Soft Squares Orchid.jpg"
+    },
+    {
+      "id": 17,
+      "name": "Study of Space - Soft Squares Sunset",
+      "file": "files/Study of Space - Soft Squares Sunset.milk",
+      "thumb": "thumbs/Study of Space - Soft Squares Sunset.jpg"
+    },
+    {
+      "id": 18,
+      "name": "Study of Space - Spatial Planes",
+      "file": "files/Study of Space - Spatial Planes.milk",
+      "thumb": "thumbs/Study of Space - Spatial Planes.jpg"
+    },
+    {
+      "id": 19,
+      "name": "Study of Space - Split Rings",
+      "file": "files/Study of Space - Split Rings.milk",
+      "thumb": "thumbs/Study of Space - Split Rings.jpg"
+    },
+    {
+      "id": 20,
+      "name": "Study of Space - Stripes Baron",
+      "file": "files/Study of Space - Stripes Baron.milk",
+      "thumb": "thumbs/Study of Space - Stripes Baron.jpg"
+    },
+    {
+      "id": 21,
+      "name": "Study of Space - Stripes and Disc",
+      "file": "files/Study of Space - Stripes and Disc.milk",
+      "thumb": "thumbs/Study of Space - Stripes and Disc.jpg"
+    },
+    {
+      "id": 22,
+      "name": "Study of Space - Sunburst and Rings",
+      "file": "files/Study of Space - Sunburst and Rings.milk",
+      "thumb": "thumbs/Study of Space - Sunburst and Rings.jpg"
+    },
+    {
+      "id": 23,
+      "name": "Study of Space - Unism",
+      "file": "files/Study of Space - Unism.milk",
+      "thumb": "thumbs/Study of Space - Unism.jpg"
+    },
+    {
+      "id": 24,
+      "name": "Study of Space - Wavy Stripes",
+      "file": "files/Study of Space - Wavy Stripes.milk",
+      "thumb": "thumbs/Study of Space - Wavy Stripes.jpg"
+    },
+    {
+      "id": 25,
       "name": "Tag - Cradle of Life(remix of yin 315)",
       "file": "files/Tag - Cradle of Life(remix of yin 315).milk"
     },
     {
-      "id": 6,
+      "id": 26,
       "name": "TonyMilkdrop - Nuclear [Flexi - help out + alien complex]",
-      "file": "files/TonyMilkdrop - Nuclear [Flexi - help out + alien complex].milk"
+      "file": "files/TonyMilkdrop - Nuclear [Flexi - help out + alien complex].milk",
+      "thumb": "thumbs/TonyMilkdrop - Nuclear [Flexi - help out + alien complex].jpg"
     },
     {
-      "id": 7,
+      "id": 27,
       "name": "Tripgnosis - Ring of Embers 2 --- Isosceles edit1",
-      "file": "files/Tripgnosis - Ring of Embers 2 --- Isosceles edit1.milk"
+      "file": "files/Tripgnosis - Ring of Embers 2 --- Isosceles edit1.milk",
+      "thumb": "thumbs/Tripgnosis - Ring of Embers 2 --- Isosceles edit1.jpg"
     },
     {
-      "id": 8,
+      "id": 28,
       "name": "amandio c - the green machine 4 - radial nature sludge ngastraiq tendwrill miraqle pig diaptre",
-      "file": "files/amandio c - the green machine 4 - radial nature sludge ngastraiq tendwrill miraqle pig diaptre.milk"
+      "file": "files/amandio c - the green machine 4 - radial nature sludge ngastraiq tendwrill miraqle pig diaptre.milk",
+      "thumb": "thumbs/amandio c - the green machine 4 - radial nature sludge ngastraiq tendwrill miraqle pig diaptre.jpg"
     },
     {
-      "id": 9,
+      "id": 29,
       "name": "fleekus flokus - beat exp",
-      "file": "files/fleekus flokus - beat exp.milk"
+      "file": "files/fleekus flokus - beat exp.milk",
+      "thumb": "thumbs/fleekus flokus - beat exp.jpg"
     },
     {
-      "id": 10,
+      "id": 30,
       "name": "hard flat snot plane ytian vartime nuggeth celestially large canary",
-      "file": "files/hard flat snot plane ytian vartime nuggeth celestially large canary.milk"
+      "file": "files/hard flat snot plane ytian vartime nuggeth celestially large canary.milk",
+      "thumb": "thumbs/hard flat snot plane ytian vartime nuggeth celestially large canary.jpg"
     },
     {
-      "id": 11,
+      "id": 31,
       "name": "martin - flexi - laser dome [bipolar focus intent] - alienth",
-      "file": "files/martin - flexi - laser dome [bipolar focus intent] - alienth.milk"
+      "file": "files/martin - flexi - laser dome [bipolar focus intent] - alienth.milk",
+      "thumb": "thumbs/martin - flexi - laser dome [bipolar focus intent] - alienth.jpg"
     },
     {
-      "id": 12,
+      "id": 32,
       "name": "martin - into the fireworks",
-      "file": "files/martin - into the fireworks.milk"
+      "file": "files/martin - into the fireworks.milk",
+      "thumb": "thumbs/martin - into the fireworks.jpg"
     },
     {
-      "id": 13,
+      "id": 33,
       "name": "suksma - angstrom eunuchleft",
-      "file": "files/suksma - angstrom eunuchleft.milk"
+      "file": "files/suksma - angstrom eunuchleft.milk",
+      "thumb": "thumbs/suksma - angstrom eunuchleft.jpg"
     },
     {
-      "id": 14,
+      "id": 34,
       "name": "suksma - assheadish lice",
-      "file": "files/suksma - assheadish lice.milk"
+      "file": "files/suksma - assheadish lice.milk",
+      "thumb": "thumbs/suksma - assheadish lice.jpg"
     },
     {
-      "id": 15,
+      "id": 35,
       "name": "suksma - chernobyl pie for dessert",
-      "file": "files/suksma - chernobyl pie for dessert.milk"
+      "file": "files/suksma - chernobyl pie for dessert.milk",
+      "thumb": "thumbs/suksma - chernobyl pie for dessert.jpg"
     },
     {
-      "id": 16,
+      "id": 36,
       "name": "suksma - moving the bowels of bureaucracy onto the masses",
-      "file": "files/suksma - moving the bowels of bureaucracy onto the masses.milk"
+      "file": "files/suksma - moving the bowels of bureaucracy onto the masses.milk",
+      "thumb": "thumbs/suksma - moving the bowels of bureaucracy onto the masses.jpg"
     },
     {
-      "id": 17,
+      "id": 37,
       "name": "suksma - tetraxectsual aeliaen kkuhltz --- Isosceles edit01",
-      "file": "files/suksma - tetraxectsual aeliaen kkuhltz --- Isosceles edit01.milk"
+      "file": "files/suksma - tetraxectsual aeliaen kkuhltz --- Isosceles edit01.milk",
+      "thumb": "thumbs/suksma - tetraxectsual aeliaen kkuhltz --- Isosceles edit01.jpg"
     },
     {
-      "id": 18,
+      "id": 38,
       "name": "widest swing dealing with things as if i am alive",
-      "file": "files/widest swing dealing with things as if i am alive.milk"
+      "file": "files/widest swing dealing with things as if i am alive.milk",
+      "thumb": "thumbs/widest swing dealing with things as if i am alive.jpg"
     },
     {
-      "id": 19,
+      "id": 39,
       "name": "yin - 315 - Ocean of Light (yo im peakin yo EoS-Phat)",
       "file": "files/yin - 315 - Ocean of Light (yo im peakin yo EoS-Phat).milk"
     }

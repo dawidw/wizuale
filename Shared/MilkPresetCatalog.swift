@@ -7,6 +7,8 @@ struct MilkPreset: Equatable, Identifiable, Sendable, Codable {
     var name: String
     /// Path relative to the `Presets` folder in the bundle (e.g. `files/foo.milk`).
     var file: String
+    /// Optional thumbnail path relative to the `Presets` folder (e.g. `thumbs/foo.jpg`).
+    var thumb: String?
 
     var displayName: String { name }
 }
@@ -47,6 +49,16 @@ enum MilkPresetCatalog {
         }
         let path = root.appendingPathComponent(preset.file).path
         return FileManager.default.fileExists(atPath: path) ? path : nil
+    }
+
+    /// Absolute URL of the preset's bundled thumbnail, or nil when it is missing.
+    static func thumbnailURL(for preset: MilkPreset, in bundle: Bundle = .main) -> URL? {
+        guard let thumb = preset.thumb,
+              let root = bundle.resourceURL?.appendingPathComponent("Presets", isDirectory: true) else {
+            return nil
+        }
+        let url = root.appendingPathComponent(thumb)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     static func textureSearchPaths(in bundle: Bundle = .main) -> [String] {
