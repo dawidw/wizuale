@@ -1,6 +1,6 @@
 {
   "source": "presets-cream-of-the-crop",
-  "count": 100,
+  "count": 20,
   "presets": [
     {
       "id": 0,
@@ -9,496 +9,96 @@
     },
     {
       "id": 1,
-      "name": "31",
-      "file": "files/31.milk"
-    },
-    {
-      "id": 2,
-      "name": "3dRaGoNs & Rovastar - StarGate rEmIx (Jelly)",
-      "file": "files/3dRaGoNs & Rovastar - StarGate rEmIx (Jelly).milk"
-    },
-    {
-      "id": 3,
-      "name": "429",
-      "file": "files/429.milk"
-    },
-    {
-      "id": 4,
-      "name": "Adam Eatit Mashup FX 2 martin - disco mix + Lodus + Geiss + Ludicrous speed + Baked Ft another AdamFX M9",
-      "file": "files/Adam Eatit Mashup FX 2 martin - disco mix + Lodus + Geiss + Ludicrous speed + Baked Ft another AdamFX M9.milk"
-    },
-    {
-      "id": 5,
-      "name": "AdamFX 2 Geiss - Mash-Up - Angelic Spike Living Stained Glass Chapters",
-      "file": "files/AdamFX 2 Geiss - Mash-Up - Angelic Spike Living Stained Glass Chapters.milk"
-    },
-    {
-      "id": 6,
-      "name": "BlastOffTek + Flexi + Geiss +fiShbRain - Dying [Mix by Megalomagreg]",
-      "file": "files/BlastOffTek + Flexi + Geiss +fiShbRain - Dying [Mix by Megalomagreg].milk"
-    },
-    {
-      "id": 7,
-      "name": "EoS - glowsticks v2 05 and proton lights (+Krash's beat code) lsd tracers low response mirror",
-      "file": "files/EoS - glowsticks v2 05 and proton lights (+Krash's beat code) lsd tracers low response mirror.milk"
-    },
-    {
-      "id": 8,
-      "name": "EoS - matrix cube H (the eyes are watching you)",
-      "file": "files/EoS - matrix cube H (the eyes are watching you).milk"
-    },
-    {
-      "id": 9,
-      "name": "EoS - more waveforms",
-      "file": "files/EoS - more waveforms.milk"
-    },
-    {
-      "id": 10,
-      "name": "EoS - sectorLoc B_phat_ugly remix 01 EoS7p nz+ crab lardvae",
-      "file": "files/EoS - sectorLoc B_phat_ugly remix 01 EoS7p nz+ crab lardvae.milk"
-    },
-    {
-      "id": 11,
       "name": "EoS and PieturP - AlienSpaceshipIinvasion_phats_particle edit",
       "file": "files/EoS and PieturP - AlienSpaceshipIinvasion_phats_particle edit.milk"
     },
     {
-      "id": 12,
+      "id": 2,
       "name": "EoS and PieturP - Starfield",
       "file": "files/EoS and PieturP - Starfield.milk"
     },
     {
-      "id": 13,
-      "name": "Esotic & Rozzer - Hippie Hypnotizer",
-      "file": "files/Esotic & Rozzer - Hippie Hypnotizer.milk"
-    },
-    {
-      "id": 14,
-      "name": "Fast transition to black - levels effect === Goody's Lightning (ps 2-0) --- Isosceles edit",
-      "file": "files/Fast transition to black - levels effect === Goody's Lightning (ps 2-0) --- Isosceles edit.milk"
-    },
-    {
-      "id": 15,
-      "name": "Flexi - a stream of consciousness [ad absurdum] - having a will is about naive as 'having' nz+ w6 shadows of what once wasn't",
-      "file": "files/Flexi - a stream of consciousness [ad absurdum] - having a will is about naive as 'having' nz+ w6 shadows of what once wasn't.milk"
-    },
-    {
-      "id": 16,
-      "name": "Flexi - emergencey 2 --- Isosceles edit1",
-      "file": "files/Flexi - emergencey 2 --- Isosceles edit1.milk"
-    },
-    {
-      "id": 17,
-      "name": "Flexi - fractal descent gnesse pitstash io",
-      "file": "files/Flexi - fractal descent gnesse pitstash io.milk"
-    },
-    {
-      "id": 18,
-      "name": "Flexi - space voyage [shifter's parchment warp shader]",
-      "file": "files/Flexi - space voyage [shifter's parchment warp shader].milk"
-    },
-    {
-      "id": 19,
-      "name": "Flexi - wolfram's rule 90 [rise of the log attack]",
-      "file": "files/Flexi - wolfram's rule 90 [rise of the log attack].milk"
-    },
-    {
-      "id": 20,
+      "id": 3,
       "name": "Geiss - Game of Life 2 (Jelly)",
       "file": "files/Geiss - Game of Life 2 (Jelly).milk"
     },
     {
-      "id": 21,
-      "name": "Halfbreak - Epilepic Timeless",
-      "file": "files/Halfbreak - Epilepic Timeless.milk"
-    },
-    {
-      "id": 22,
-      "name": "LuxXx - Bleedingblood I",
-      "file": "files/LuxXx - Bleedingblood I.milk"
-    },
-    {
-      "id": 23,
-      "name": "LuxXx - Entering The Verse 1",
-      "file": "files/LuxXx - Entering The Verse 1.milk"
-    },
-    {
-      "id": 24,
-      "name": "LuxXx - Fuck Your Code ii",
-      "file": "files/LuxXx - Fuck Your Code ii.milk"
-    },
-    {
-      "id": 25,
+      "id": 4,
       "name": "LuxXx - MoltenWheel i --- Isosceles edit9",
       "file": "files/LuxXx - MoltenWheel i --- Isosceles edit9.milk"
     },
     {
-      "id": 26,
-      "name": "LuxXx - i have a bad mario ball",
-      "file": "files/LuxXx - i have a bad mario ball.milk"
-    },
-    {
-      "id": 27,
-      "name": "New Creation Sensation -  AdamFx,Flexi,Amandio c n Martin - Star to Another World ft Hexocollie  n Shadow Harlequin n Geiss D",
-      "file": "files/New Creation Sensation -  AdamFx,Flexi,Amandio c n Martin - Star to Another World ft Hexocollie  n Shadow Harlequin n Geiss D.milk"
-    },
-    {
-      "id": 28,
-      "name": "ORB - Flashbang positive",
-      "file": "files/ORB - Flashbang positive.milk"
-    },
-    {
-      "id": 29,
-      "name": "Rarian Rakista - Pyraid Power 2",
-      "file": "files/Rarian Rakista - Pyraid Power 2.milk"
-    },
-    {
-      "id": 30,
-      "name": "Serge + cope - the drain",
-      "file": "files/Serge + cope - the drain.milk"
-    },
-    {
-      "id": 31,
-      "name": "Slow transition to black - gas effect + zoom in + orange filter === Tripgnosis - FlameOrb --- Isosceles edit",
-      "file": "files/Slow transition to black - gas effect + zoom in + orange filter === Tripgnosis - FlameOrb --- Isosceles edit.milk"
-    },
-    {
-      "id": 32,
-      "name": "Slow transition to black - gas effect + zoom in === Tripgnosis - FlameOrb --- Isosceles edit",
-      "file": "files/Slow transition to black - gas effect + zoom in === Tripgnosis - FlameOrb --- Isosceles edit.milk"
-    },
-    {
-      "id": 33,
-      "name": "Slow transition to black - gas effect + zoom out === amandio c - magnetosphere --- Isosceles edit",
-      "file": "files/Slow transition to black - gas effect + zoom out === amandio c - magnetosphere --- Isosceles edit.milk"
-    },
-    {
-      "id": 34,
-      "name": "Stahlregen + Amandio C - Rototranslate difference layers 2 + on dotes2 hadron higgs hilbert whore",
-      "file": "files/Stahlregen + Amandio C - Rototranslate difference layers 2 + on dotes2 hadron higgs hilbert whore.milk"
-    },
-    {
-      "id": 35,
-      "name": "Stahlregen - Dots (Pixels - Blocky)",
-      "file": "files/Stahlregen - Dots (Pixels - Blocky).milk"
-    },
-    {
-      "id": 36,
+      "id": 5,
       "name": "Tag - Cradle of Life(remix of yin 315)",
       "file": "files/Tag - Cradle of Life(remix of yin 315).milk"
     },
     {
-      "id": 37,
+      "id": 6,
       "name": "TonyMilkdrop - Nuclear [Flexi - help out + alien complex]",
       "file": "files/TonyMilkdrop - Nuclear [Flexi - help out + alien complex].milk"
     },
     {
-      "id": 38,
-      "name": "TonyMilkdrop - Rhythm Of My Life --- Isosceles edit",
-      "file": "files/TonyMilkdrop - Rhythm Of My Life --- Isosceles edit.milk"
-    },
-    {
-      "id": 39,
+      "id": 7,
       "name": "Tripgnosis - Ring of Embers 2 --- Isosceles edit1",
       "file": "files/Tripgnosis - Ring of Embers 2 --- Isosceles edit1.milk"
     },
     {
-      "id": 40,
-      "name": "Unchained-liquardoblitz [shifter's esc shader]",
-      "file": "files/Unchained-liquardoblitz [shifter's esc shader].milk"
-    },
-    {
-      "id": 41,
-      "name": "Zylot - Paint Spill (Music Reactive Paint Mix) nz+ throtthel deadly death danger",
-      "file": "files/Zylot - Paint Spill (Music Reactive Paint Mix) nz+ throtthel deadly death danger.milk"
-    },
-    {
-      "id": 42,
-      "name": "accruing simon genitoll boothf",
-      "file": "files/accruing simon genitoll boothf.milk"
-    },
-    {
-      "id": 43,
-      "name": "amandio c - living boxes 3",
-      "file": "files/amandio c - living boxes 3.milk"
-    },
-    {
-      "id": 44,
-      "name": "amandio c - prime forms keylontiq pseudoskienke qomplet svorthles",
-      "file": "files/amandio c - prime forms keylontiq pseudoskienke qomplet svorthles.milk"
-    },
-    {
-      "id": 45,
-      "name": "amandio c - the green machine 4 - radial nature sludge cpe neg",
-      "file": "files/amandio c - the green machine 4 - radial nature sludge cpe neg.milk"
-    },
-    {
-      "id": 46,
+      "id": 8,
       "name": "amandio c - the green machine 4 - radial nature sludge ngastraiq tendwrill miraqle pig diaptre",
       "file": "files/amandio c - the green machine 4 - radial nature sludge ngastraiq tendwrill miraqle pig diaptre.milk"
     },
     {
-      "id": 47,
-      "name": "dumpling antler melon sage - flexi is cooler than all of us combined into slurry roam kill money governm",
-      "file": "files/dumpling antler melon sage - flexi is cooler than all of us combined into slurry roam kill money governm.milk"
-    },
-    {
-      "id": 48,
-      "name": "fiShbRaiN + Geiss - the adventures of prismo jenkins - water mix",
-      "file": "files/fiShbRaiN + Geiss - the adventures of prismo jenkins - water mix.milk"
-    },
-    {
-      "id": 49,
+      "id": 9,
       "name": "fleekus flokus - beat exp",
       "file": "files/fleekus flokus - beat exp.milk"
     },
     {
-      "id": 50,
-      "name": "flexi - blame gravity",
-      "file": "files/flexi - blame gravity.milk"
-    },
-    {
-      "id": 51,
-      "name": "flexi - grind my glitch up [140]",
-      "file": "files/flexi - grind my glitch up [140].milk"
-    },
-    {
-      "id": 52,
-      "name": "flexi - grind my glitch up [245]",
-      "file": "files/flexi - grind my glitch up [245].milk"
-    },
-    {
-      "id": 53,
-      "name": "flexi - grind my glitch up [247]",
-      "file": "files/flexi - grind my glitch up [247].milk"
-    },
-    {
-      "id": 54,
-      "name": "flexi - grind my glitch up [342]",
-      "file": "files/flexi - grind my glitch up [342].milk"
-    },
-    {
-      "id": 55,
-      "name": "gwadeloag - phusillyty nz+ laundromathemartyrx wag beggar gerund lobejective",
-      "file": "files/gwadeloag - phusillyty nz+ laundromathemartyrx wag beggar gerund lobejective.milk"
-    },
-    {
-      "id": 56,
+      "id": 10,
       "name": "hard flat snot plane ytian vartime nuggeth celestially large canary",
       "file": "files/hard flat snot plane ytian vartime nuggeth celestially large canary.milk"
     },
     {
-      "id": 57,
-      "name": "i am only here to die slowly in pain read plenitude by juliet schor",
-      "file": "files/i am only here to die slowly in pain read plenitude by juliet schor.milk"
-    },
-    {
-      "id": 58,
-      "name": "martin & geiss - maniac roulette",
-      "file": "files/martin & geiss - maniac roulette.milk"
-    },
-    {
-      "id": 59,
-      "name": "martin + flexi - lock and release bipolar 01",
-      "file": "files/martin + flexi - lock and release bipolar 01.milk"
-    },
-    {
-      "id": 60,
-      "name": "martin + stahlregen - martin in da mash 10",
-      "file": "files/martin + stahlregen - martin in da mash 10.milk"
-    },
-    {
-      "id": 61,
-      "name": "martin - city lights v2 c",
-      "file": "files/martin - city lights v2 c.milk"
-    },
-    {
-      "id": 62,
+      "id": 11,
       "name": "martin - flexi - laser dome [bipolar focus intent] - alienth",
       "file": "files/martin - flexi - laser dome [bipolar focus intent] - alienth.milk"
     },
     {
-      "id": 63,
-      "name": "martin - gentle happiness",
-      "file": "files/martin - gentle happiness.milk"
-    },
-    {
-      "id": 64,
+      "id": 12,
       "name": "martin - into the fireworks",
       "file": "files/martin - into the fireworks.milk"
     },
     {
-      "id": 65,
-      "name": "martin - pixies party filth edition",
-      "file": "files/martin - pixies party filth edition.milk"
-    },
-    {
-      "id": 66,
-      "name": "placebo heal drift backfire nz+ bastarchasm",
-      "file": "files/placebo heal drift backfire nz+ bastarchasm.milk"
-    },
-    {
-      "id": 67,
-      "name": "rationalizing insanity using only mainstream religion - i did it all for the sex, drugs, music, and satan",
-      "file": "files/rationalizing insanity using only mainstream religion - i did it all for the sex, drugs, music, and satan.milk"
-    },
-    {
-      "id": 68,
-      "name": "repressed americans - bustardizo",
-      "file": "files/repressed americans - bustardizo.milk"
-    },
-    {
-      "id": 69,
-      "name": "repressed americans - gamer",
-      "file": "files/repressed americans - gamer.milk"
-    },
-    {
-      "id": 70,
-      "name": "rovastar - Trippy Sperm",
-      "file": "files/rovastar - Trippy Sperm.milk"
-    },
-    {
-      "id": 71,
-      "name": "shifter + Flexi - liquid circuitry from the pataoblivion everything for eternity, god damn it, i did it again",
-      "file": "files/shifter + Flexi - liquid circuitry from the pataoblivion everything for eternity, god damn it, i did it again.milk"
-    },
-    {
-      "id": 72,
-      "name": "skipper skipper kiss me hard - thank god for martin nitorami - there is no free will, there is no cause, there is no effect",
-      "file": "files/skipper skipper kiss me hard - thank god for martin nitorami - there is no free will, there is no cause, there is no effect.milk"
-    },
-    {
-      "id": 73,
-      "name": "sofbingro' nz+ complete psychological eagle offering",
-      "file": "files/sofbingro' nz+ complete psychological eagle offering.milk"
-    },
-    {
-      "id": 74,
-      "name": "suksma + flexi geiss rovastar roosta demonld shifter - dr horicon willn't ignore - flx chr roam",
-      "file": "files/suksma + flexi geiss rovastar roosta demonld shifter - dr horicon willn't ignore - flx chr roam.milk"
-    },
-    {
-      "id": 75,
-      "name": "suksma + rovaster eos phat gastly geiss stahlgren - copper mine shaft fall",
-      "file": "files/suksma + rovaster eos phat gastly geiss stahlgren - copper mine shaft fall.milk"
-    },
-    {
-      "id": 76,
+      "id": 13,
       "name": "suksma - angstrom eunuchleft",
       "file": "files/suksma - angstrom eunuchleft.milk"
     },
     {
-      "id": 77,
+      "id": 14,
       "name": "suksma - assheadish lice",
       "file": "files/suksma - assheadish lice.milk"
     },
     {
-      "id": 78,
+      "id": 15,
       "name": "suksma - chernobyl pie for dessert",
       "file": "files/suksma - chernobyl pie for dessert.milk"
     },
     {
-      "id": 79,
-      "name": "suksma - daryl feels my hellish lonliness - i am awkwardly embarrassing to myself",
-      "file": "files/suksma - daryl feels my hellish lonliness - i am awkwardly embarrassing to myself.milk"
-    },
-    {
-      "id": 80,
-      "name": "suksma - dinner - ratios that make you feel hopeless - flx spr col",
-      "file": "files/suksma - dinner - ratios that make you feel hopeless - flx spr col.milk"
-    },
-    {
-      "id": 81,
-      "name": "suksma - diploautomatic autoimmunity vs passivematic aggpressive - troll",
-      "file": "files/suksma - diploautomatic autoimmunity vs passivematic aggpressive - troll.milk"
-    },
-    {
-      "id": 82,
-      "name": "suksma - disney's lard kaetchre",
-      "file": "files/suksma - disney's lard kaetchre.milk"
-    },
-    {
-      "id": 83,
-      "name": "suksma - dotes hostile undertake - bbs modicum atreatise on personal loss2 - fed,shf shaders2 roam3",
-      "file": "files/suksma - dotes hostile undertake - bbs modicum atreatise on personal loss2 - fed,shf shaders2 roam3.milk"
-    },
-    {
-      "id": 84,
-      "name": "suksma - dotes hostile undertake - fake rivals real(1)",
-      "file": "files/suksma - dotes hostile undertake - fake rivals real(1).milk"
-    },
-    {
-      "id": 85,
-      "name": "suksma - eternally occulted - crash course in apathy",
-      "file": "files/suksma - eternally occulted - crash course in apathy.milk"
-    },
-    {
-      "id": 86,
-      "name": "suksma - gss,sth - hogwoman style - starin' at sports carscryin' - schnig - flacc dork=whale (!important)",
-      "file": "files/suksma - gss,sth - hogwoman style - starin' at sports carscryin' - schnig - flacc dork=whale (!important).milk"
-    },
-    {
-      "id": 87,
+      "id": 16,
       "name": "suksma - moving the bowels of bureaucracy onto the masses",
       "file": "files/suksma - moving the bowels of bureaucracy onto the masses.milk"
     },
     {
-      "id": 88,
-      "name": "suksma - my health fades and the universe laughs - pus",
-      "file": "files/suksma - my health fades and the universe laughs - pus.milk"
-    },
-    {
-      "id": 89,
-      "name": "suksma - n19 opt - a happy innocent time that is gone, corrupted by time - long2",
-      "file": "files/suksma - n19 opt - a happy innocent time that is gone, corrupted by time - long2.milk"
-    },
-    {
-      "id": 90,
-      "name": "suksma - phatal wheels raze archivingtillion souls",
-      "file": "files/suksma - phatal wheels raze archivingtillion souls.milk"
-    },
-    {
-      "id": 91,
-      "name": "suksma - staining aethers of lovegrudge barfpain --- Isosceles edit1",
-      "file": "files/suksma - staining aethers of lovegrudge barfpain --- Isosceles edit1.milk"
-    },
-    {
-      "id": 92,
-      "name": "suksma - sun pod gambit couch",
-      "file": "files/suksma - sun pod gambit couch.milk"
-    },
-    {
-      "id": 93,
+      "id": 17,
       "name": "suksma - tetraxectsual aeliaen kkuhltz --- Isosceles edit01",
       "file": "files/suksma - tetraxectsual aeliaen kkuhltz --- Isosceles edit01.milk"
     },
     {
-      "id": 94,
-      "name": "suksma - this pain was saved for you - roams stephen hill hos --- Isosceles edit",
-      "file": "files/suksma - this pain was saved for you - roams stephen hill hos --- Isosceles edit.milk"
-    },
-    {
-      "id": 95,
-      "name": "suksma - when people ask you questions, slay them rnz --- Isosceles edit",
-      "file": "files/suksma - when people ask you questions, slay them rnz --- Isosceles edit.milk"
-    },
-    {
-      "id": 96,
-      "name": "undulate harque - zing",
-      "file": "files/undulate harque - zing.milk"
-    },
-    {
-      "id": 97,
-      "name": "various - whirygig03 - flx rigidigeridoolittle' - reconsidering life in terms of loving how bizarre it is - 1-ret",
-      "file": "files/various - whirygig03 - flx rigidigeridoolittle' - reconsidering life in terms of loving how bizarre it is - 1-ret.milk"
-    },
-    {
-      "id": 98,
+      "id": 18,
       "name": "widest swing dealing with things as if i am alive",
       "file": "files/widest swing dealing with things as if i am alive.milk"
     },
     {
-      "id": 99,
+      "id": 19,
       "name": "yin - 315 - Ocean of Light (yo im peakin yo EoS-Phat)",
       "file": "files/yin - 315 - Ocean of Light (yo im peakin yo EoS-Phat).milk"
     }

@@ -10,7 +10,7 @@ DEST="$ROOT/Wizuale/Resources/Presets"
 FILES="$DEST/files"
 TEX="$DEST/textures"
 MANIFEST="$DEST/manifest.json"
-COUNT=100
+COUNT=20
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
