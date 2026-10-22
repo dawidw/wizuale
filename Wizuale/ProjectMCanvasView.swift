@@ -6,11 +6,12 @@ import UIKit
 struct ProjectMCanvasView: UIViewControllerRepresentable {
     var renderState: ProjectMRenderState
     var audioHub: ProjectMAudioHub
+    var micReceiver: MicReceiver
     var paused: Bool
     @Binding var failure: String?
 
     func makeUIViewController(context: Context) -> ProjectMViewController {
-        let controller = ProjectMViewController(renderState: renderState, audioHub: audioHub)
+        let controller = ProjectMViewController(renderState: renderState, audioHub: audioHub, micReceiver: micReceiver)
         controller.onFailure = { message in
             DispatchQueue.main.async { failure = message }
         }
@@ -25,6 +26,8 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
 final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private let renderState: ProjectMRenderState
     private let audioHub: ProjectMAudioHub
+    private let micReceiver: MicReceiver
+    private var lastFrameTime: CFTimeInterval = 0
     private let projectM = ProjectMController()
     private var glView: GLKView!
     private var context: EAGLContext!
@@ -34,9 +37,10 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     var paused = false
     var onFailure: ((String) -> Void)?
 
-    init(renderState: ProjectMRenderState, audioHub: ProjectMAudioHub) {
+    init(renderState: ProjectMRenderState, audioHub: ProjectMAudioHub, micReceiver: MicReceiver) {
         self.renderState = renderState
         self.audioHub = audioHub
+        self.micReceiver = micReceiver
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -107,6 +111,12 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     /// enableSetNeedsDisplay is false, so setNeedsDisplay() would be ignored; draw explicitly.
     @objc private func tick() {
         guard !paused else { return }
+        // The Metal renderer used to call sample() every frame; projectM does not.
+        // sample() is what reports mic liveness (the green "Mic" chip) to VisualSession.
+        let now = CACurrentMediaTime()
+        let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : 1.0 / 60.0
+        lastFrameTime = now
+        _ = micReceiver.sample(dt: dt)
         glView.display()
     }
 

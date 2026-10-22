@@ -28,6 +28,7 @@ struct RootView: View {
                 ProjectMCanvasView(
                     renderState: visuals.projectMState,
                     audioHub: visuals.audioHub,
+                    micReceiver: visuals.micReceiver,
                     paused: scenePhase != .active,
                     failure: $failure
                 )
