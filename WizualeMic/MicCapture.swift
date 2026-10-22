@@ -815,11 +815,13 @@ final class MicCapture: ObservableObject {
         } else if let settings = pendingSettings {
             pendingSettings = nil
             data = settings
-        } else if !pendingPCM.isEmpty {
-            data = pendingPCM.removeFirst()
         } else if let audio = pendingAudio {
+            // Beat features first: they are tiny and drive the TV's mic link and reactivity.
+            // PCM used to win here and starved them, so the TV never saw the phone as a mic.
             pendingAudio = nil
             data = audio
+        } else if !pendingPCM.isEmpty {
+            data = pendingPCM.removeFirst()
         } else {
             return
         }
