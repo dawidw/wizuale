@@ -20,7 +20,7 @@ Outputs:
 Then fetch presets:
 
 ```bash
-./scripts/fetch-presets.sh --count 100
+./scripts/fetch-presets.sh
 ```
 
 ## Xcode linkage (wired in `project.yml` and `Wizuale.xcodeproj`)

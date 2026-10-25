@@ -10,9 +10,9 @@ The picture does not read Apple Music's audio stream. When a GetSongBPM key is s
 
 The tvOS app renders bundled **Milkdrop presets** through **libprojectM 4.x** (OpenGL ES 3). There is no custom tone mapping, zoom slider, album-art tint, or Metal grading on top — only what the preset author wrote.
 
-Presets come from [presets-cream-of-the-crop](https://github.com/projectM-visualizer/presets-cream-of-the-crop) (see `scripts/fetch-presets.sh`). Textures ship from [presets-milkdrop-texture-pack](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack). Both TV and Mic apps read the same `manifest.json` order.
+The default playlist is **50 hand-picked** presets from [presets-cream-of-the-crop](https://github.com/projectM-visualizer/presets-cream-of-the-crop) (`Wizuale/Resources/Presets/selected.json`), followed by **Study of Space** originals (motifs from [studyofspace.gallery](https://studyofspace.gallery)). Run `./scripts/fetch-presets.sh` on a Mac to re-copy the `.milk` files and texture pack from upstream; thumbnails for the 50 are bundled as PNGs under `Presets/thumbs/`. Both TV and Mic read the same `manifest.json` order and `group` labels.
 
-Preset changes use projectM's **soft cut** (~2 s). Auto-advance (default on, ~45 s, adjustable on the phone) picks a random next preset when not locked to a single choice.
+Preset changes use projectM's **soft cut** (~2 s), starting from black via `idle://` so cuts do not flash white. Auto-advance (default on, ~45 s, adjustable on the phone) picks a random next preset when not locked to a single choice.
 
 The legacy Metal renderer (`Shaders.metal`, `Presets.swift`, …) remains in the repo but is **not** compiled into the tvOS target.
 
@@ -76,7 +76,9 @@ brew install cmake ninja   # if needed
 ./scripts/build-projectm-tvos.sh
 # optional: ./scripts/build-projectm-tvos.sh --tag v4.2.0
 
-./scripts/fetch-presets.sh --count 100   # 50–150 is fine
+./scripts/fetch-presets.sh               # curated 50 + textures; SOS .milk stay in-repo
+python3 scripts/generate-sos-presets.py  # only when adding Study of Space motifs
+python3 scripts/render-sos-thumbs.py       # needs studyofspace clone + rsvg-convert
 ```
 
 Details: `ThirdParty/README.md`.

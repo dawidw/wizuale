@@ -90,6 +90,11 @@ final class ProjectMController {
             loadedIndex = index
             return
         }
+        if smooth {
+            "idle://".withCString { idle in
+                projectm_load_preset_file(handle, idle, false)
+            }
+        }
         path.withCString { cPath in
             projectm_load_preset_file(handle, cPath, smooth)
         }

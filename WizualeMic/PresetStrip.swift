@@ -23,16 +23,19 @@ struct PresetStrip: View {
                             onSelect(Int(PresetWire.auto))
                         }
                         .id(Int(PresetWire.auto))
-                        ForEach(MilkPresetCatalog.presets) { preset in
-                            PresetCard(
-                                title: preset.displayName,
-                                thumbnail: PresetThumbnails.image(for: preset),
-                                selected: known && preset.id == active && !cycling,
-                                playing: known && preset.id == active
-                            ) {
-                                onSelect(preset.id)
+                        ForEach(MilkPresetCatalog.groupedPresets, id: \.group) { section in
+                            PresetGroupLabel(title: section.group)
+                            ForEach(section.presets) { preset in
+                                PresetCard(
+                                    title: preset.displayName,
+                                    thumbnail: PresetThumbnails.image(for: preset),
+                                    selected: known && preset.id == active && !cycling,
+                                    playing: known && preset.id == active
+                                ) {
+                                    onSelect(preset.id)
+                                }
+                                .id(preset.id)
                             }
-                            .id(preset.id)
                         }
                     }
                     .padding(.horizontal, 22)
@@ -53,6 +56,19 @@ struct PresetStrip: View {
                 }
             }
         }
+    }
+}
+
+private struct PresetGroupLabel: View {
+    var title: String
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: 9.5, weight: .bold))
+            .tracking(1.1)
+            .foregroundStyle(.white.opacity(0.42))
+            .frame(height: 58, alignment: .bottomLeading)
+            .padding(.leading, 2)
     }
 }
 
