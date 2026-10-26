@@ -45,6 +45,7 @@ enum MicPacket: Equatable, Sendable {
     case pcm(sequence: UInt16, sampleRate: Float, samples: [Int16])
     case cycle(sequence: UInt16, autoAdvance: Bool, intervalSeconds: Int)
     case boost(sequence: UInt16, amount: Float)
+    case debug(sequence: UInt16, showAudioOverlay: Bool)
     case ack(preset: Int16, cycling: Bool, latencyMs: Int?, sensitivity: Float?)
 }
 
@@ -77,6 +78,8 @@ enum MicWire {
     static let kindBoost: UInt16 = 5
     static let kindPcm: UInt16 = 6
     static let kindCycle: UInt16 = 7
+    static let kindDebug: UInt16 = 8
+    static let debugBytes = 10
     static let gainCeiling: Float = 2.5
     static let audioBytes = 40
     static let commandBytes = 10
@@ -86,7 +89,7 @@ enum MicWire {
     static let cycleBytes = 12
     static let boostBytes = 12
     static let pcmHeaderBytes = 16
-    static let pcmMaxSamples = 512
+    static let pcmMaxSamples = 1024
 
     /// Kind field at byte offset 4, without full decode.
     static func peekKind(_ data: Data) -> UInt16? {
@@ -153,6 +156,15 @@ enum MicWire {
         write(sequence, &data)
         write(autoAdvance ? UInt16(1) : UInt16(0), &data)
         write(UInt16(clamping: MicTuning.clampCycleSeconds(intervalSeconds)), &data)
+        return data
+    }
+
+    static func encodeDebug(sequence: UInt16, showAudioOverlay: Bool) -> Data {
+        var data = Data(capacity: debugBytes)
+        write(magic, &data)
+        write(kindDebug, &data)
+        write(sequence, &data)
+        write(showAudioOverlay ? UInt16(1) : UInt16(0), &data)
         return data
     }
 
@@ -250,6 +262,10 @@ enum MicWire {
             guard data.count >= boostBytes else { return nil }
             guard let amount = readBoost(data, 8) else { return nil }
             return .boost(sequence: readUInt16(data, 6), amount: amount)
+        }
+        if kind == kindDebug {
+            guard data.count >= debugBytes else { return nil }
+            return .debug(sequence: readUInt16(data, 6), showAudioOverlay: readUInt16(data, 8) != 0)
         }
         if kind == kindAck {
             guard data.count >= ackBytes else { return nil }

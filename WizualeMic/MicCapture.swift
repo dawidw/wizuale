@@ -59,6 +59,12 @@ final class MicCapture: ObservableObject {
             scheduleCycle()
         }
     }
+    @Published var tvAudioDebug = false {
+        didSet {
+            guard !applyingRemote, tvAudioDebug != oldValue else { return }
+            scheduleTVAudioDebug()
+        }
+    }
     @Published var cycleSeconds: Int = MicTuning.loadCycleSeconds() {
         didSet {
             let clamped = MicTuning.clampCycleSeconds(cycleSeconds)
@@ -84,6 +90,7 @@ final class MicCapture: ObservableObject {
     private var boostSequence: UInt16 = 0
     private var pcmSequence: UInt16 = 0
     private var cycleSequence: UInt16 = 0
+    private var debugSequence: UInt16 = 0
     private var pendingPCM: [Data] = []
     private var heldSensitivity: Float = MicTuning.loadSensitivity()
     private var applyingRemote = false
@@ -95,10 +102,13 @@ final class MicCapture: ObservableObject {
     private var pendingCommands: [Data] = []
     private var pendingSettings: Data?
     private var pendingBoost: Data?
+    private var pendingDebug: Data?
     private var lastCommand: Data?
     private var lastSettings: Data?
     private var lastBoost: Data?
     private var sending = false
+    private var pcmInFlight = 0
+    private let maxPCMInFlight = 4
     private var receiving = false
     private var wantsLink = false
     private var epoch = 0
@@ -789,8 +799,8 @@ final class MicCapture: ObservableObject {
     private func enqueuePCM(_ data: Data) {
         guard linkWanted() else { return }
         pendingPCM.append(data)
-        if pendingPCM.count > 24 {
-            pendingPCM.removeFirst(pendingPCM.count - 24)
+        if pendingPCM.count > 48 {
+            pendingPCM.removeFirst(pendingPCM.count - 48)
         }
         pump()
     }
@@ -804,11 +814,28 @@ final class MicCapture: ObservableObject {
         pump()
     }
 
+    private func scheduleTVAudioDebug() {
+        debugSequence &+= 1
+        if debugSequence == 0 { debugSequence = 1 }
+        let packet = MicWire.encodeDebug(sequence: debugSequence, showAudioOverlay: tvAudioDebug)
+        network.async { [weak self] in
+            self?.pendingDebug = packet
+            self?.pump()
+        }
+    }
+
     private func pump() {
-        guard !sending, let connection, connection.state == .ready else { return }
-        let data: Data
+        guard let connection, connection.state == .ready else { return }
+        while pcmInFlight < maxPCMInFlight, !pendingPCM.isEmpty {
+            startSend(pendingPCM.removeFirst(), isPCM: true, on: connection)
+        }
+        guard !sending else { return }
+        let data: Data?
         if !pendingCommands.isEmpty {
             data = pendingCommands.removeFirst()
+        } else if let debug = pendingDebug {
+            pendingDebug = nil
+            data = debug
         } else if let boost = pendingBoost {
             pendingBoost = nil
             data = boost
@@ -816,8 +843,6 @@ final class MicCapture: ObservableObject {
             pendingSettings = nil
             data = settings
         } else if let audio = pendingAudio {
-            // Beat features first: they are tiny and drive the TV's mic link and reactivity.
-            // PCM used to win here and starved them, so the TV never saw the phone as a mic.
             pendingAudio = nil
             data = audio
         } else if !pendingPCM.isEmpty {
@@ -825,12 +850,24 @@ final class MicCapture: ObservableObject {
         } else {
             return
         }
-        sending = true
+        startSend(data!, isPCM: false, on: connection)
+    }
+
+    private func startSend(_ data: Data, isPCM: Bool, on connection: NWConnection) {
+        if isPCM {
+            pcmInFlight += 1
+        } else {
+            sending = true
+        }
         let token = sendToken
         connection.send(content: data, completion: .contentProcessed { [weak self] _ in
             self?.network.async {
                 guard let self, self.sendToken == token else { return }
-                self.sending = false
+                if isPCM {
+                    self.pcmInFlight = max(0, self.pcmInFlight - 1)
+                } else {
+                    self.sending = false
+                }
                 self.pump()
             }
         })

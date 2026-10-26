@@ -30,9 +30,20 @@ struct RootView: View {
                     audioHub: visuals.audioHub,
                     micReceiver: visuals.micReceiver,
                     paused: scenePhase != .active,
+                    onAudioFrame: { drive, metrics in
+                        visuals.noteAudioFrame(drive: drive, metrics: metrics)
+                    },
                     failure: $failure
                 )
                 .ignoresSafeArea()
+            }
+
+            if visuals.showAudioDebug {
+                MicAudioDebugOverlay(
+                    drive: visuals.audioDebugDrive,
+                    metrics: visuals.audioDebugMetrics,
+                    latencyMs: visuals.latencyMs
+                )
             }
 
             NowPlayingOverlay(

@@ -39,6 +39,7 @@ struct MicRootView: View {
                         meter(title: "Bass", value: mic.bassLevel)
                         sensitivitySlider
                         latencySlider
+                        tvDebugToggle
                         autoCycleControls
                         calibrateControl
                     }
@@ -135,6 +136,21 @@ struct MicRootView: View {
                 in: Double(MicTuning.latencyMin)...Double(MicTuning.latencyMax),
                 step: Double(MicTuning.latencyStep)
             )
+        }
+    }
+
+    private var tvDebugToggle: some View {
+        HStack {
+            Text("TV AUDIO DEBUG")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(1.4)
+                .foregroundStyle(.white.opacity(0.5))
+            Spacer()
+            Toggle("Show audio debug on Apple TV", isOn: $mic.tvAudioDebug)
+                .labelsHidden()
+                .tint(.white.opacity(0.4))
+                .scaleEffect(0.75, anchor: .trailing)
+                .frame(height: 24)
         }
     }
 

@@ -42,6 +42,8 @@ final class MicReceiver: @unchecked Sendable {
     var onPCM: (@Sendable (Float, [Int16]) -> Void)?
     /// Auto-advance toggle and interval from the phone.
     var onCycle: (@Sendable (Bool, Int) -> Void)?
+    /// TV audio debug overlay from the phone.
+    var onDebugOverlay: (@Sendable (Bool) -> Void)?
 
     private struct Stamp {
         var features: MicFeatures
@@ -197,7 +199,7 @@ final class MicReceiver: @unchecked Sendable {
 
         let target = fresh ? packet : MicFeatures.zero
         onset *= expf(-dtSafe / 0.14)
-        bass = follow(bass, target.bass, dt: dtSafe, attack: 0.012, release: 0.30)
+        bass = follow(bass, target.bass, dt: dtSafe, attack: 0.006, release: 0.22)
         lowMid = follow(lowMid, target.lowMid, dt: dtSafe, attack: 0.018, release: 0.24)
         mid = follow(mid, target.mid, dt: dtSafe, attack: 0.02, release: 0.16)
         high = follow(high, target.high, dt: dtSafe, attack: 0.015, release: 0.09)
@@ -389,6 +391,13 @@ final class MicReceiver: @unchecked Sendable {
             dropTarget = amount
             lastBoostAt = CACurrentMediaTime()
             lock.unlock()
+        case .debug(_, let show):
+            let handler = onDebugOverlay
+            if let handler {
+                DispatchQueue.main.async {
+                    handler(show)
+                }
+            }
         case .ack(_, _, _, _):
             break
         }

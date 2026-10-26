@@ -8,10 +8,16 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
     var audioHub: ProjectMAudioHub
     var micReceiver: MicReceiver
     var paused: Bool
+    var onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
     @Binding var failure: String?
 
     func makeUIViewController(context: Context) -> ProjectMViewController {
-        let controller = ProjectMViewController(renderState: renderState, audioHub: audioHub, micReceiver: micReceiver)
+        let controller = ProjectMViewController(
+            renderState: renderState,
+            audioHub: audioHub,
+            micReceiver: micReceiver,
+            onAudioFrame: onAudioFrame
+        )
         controller.onFailure = { message in
             DispatchQueue.main.async { failure = message }
         }
@@ -27,6 +33,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private let renderState: ProjectMRenderState
     private let audioHub: ProjectMAudioHub
     private let micReceiver: MicReceiver
+    private let onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
     private var lastFrameTime: CFTimeInterval = 0
     private let projectM = ProjectMController()
     private var glView: GLKView!
@@ -37,10 +44,16 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     var paused = false
     var onFailure: ((String) -> Void)?
 
-    init(renderState: ProjectMRenderState, audioHub: ProjectMAudioHub, micReceiver: MicReceiver) {
+    init(
+        renderState: ProjectMRenderState,
+        audioHub: ProjectMAudioHub,
+        micReceiver: MicReceiver,
+        onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
+    ) {
         self.renderState = renderState
         self.audioHub = audioHub
         self.micReceiver = micReceiver
+        self.onAudioFrame = onAudioFrame
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -116,20 +129,24 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         let now = CACurrentMediaTime()
         let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : 1.0 / 60.0
         lastFrameTime = now
-        _ = micReceiver.sample(dt: dt)
         glView.display()
     }
 
     func glkView(_ view: GLKView, drawIn rect: CGRect) {
         guard !paused, let context else { return }
         EAGLContext.setCurrent(context)
+        let now = CACurrentMediaTime()
+        let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : 1.0 / 60.0
+        lastFrameTime = now
+        let drive = micReceiver.sample(dt: dt)
         let snap = renderState.snapshot()
         projectM.setBeatSensitivity(snap.beatSensitivity)
         if snap.targetIndex != lastIndex {
             projectM.loadPreset(index: snap.targetIndex, smooth: lastIndex >= 0)
             lastIndex = snap.targetIndex
         }
-        audioHub.feed { projectM.addPCM(floats: $0) }
+        audioHub.feed(accent: drive, now: now) { projectM.addPCM(floats: $0) }
+        onAudioFrame?(drive, audioHub.metricsSnapshot())
         glClearColor(0, 0, 0, 1)
         glClear(UInt32(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT))
         projectM.render()
