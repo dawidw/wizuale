@@ -282,6 +282,7 @@ final class MicReceiver: @unchecked Sendable {
         if listener != nil { return }
         let params = NWParameters.udp
         params.includePeerToPeer = true
+        params.serviceClass = .interactiveVoice
         do {
             let created = try NWListener(using: params)
             created.service = NWListener.Service(name: name, type: MicWire.serviceType)

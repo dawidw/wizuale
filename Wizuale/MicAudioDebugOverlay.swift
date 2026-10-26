@@ -16,7 +16,10 @@ struct MicAudioDebugOverlay: View {
             row("TV mic", metrics.micSource.title)
             row("PCM rx", metrics.streamLive ? "live" : "stale/none")
             row("Wi‑Fi feats", drive.presence > 0.12 ? "live" : "off")
+            row("PCM/s", String(format: "%.0f", metrics.pcmPacketsPerSec))
+            row("Gap ms", String(format: "avg %.0f  max %.0f", metrics.gapAvgMs, metrics.gapMaxMs))
             row("FIFO", String(format: "%.0f ms (%d smp)", metrics.fifoMs, metrics.fifoSamples))
+            row("Underruns", "\(metrics.underrunTotal)")
             row("Chunk", "\(metrics.lastChunk) smp/frame")
             row("RMS", String(format: "%.3f  AGC %.1f×", metrics.rms, metrics.agcGain))
             row("Latency", "\(latencyMs) ms (slider)")
@@ -24,6 +27,9 @@ struct MicAudioDebugOverlay: View {
             row("Mid/Hi", String(format: "%.2f / %.2f", drive.mid, drive.high))
             row("Presence", String(format: "%.2f  Flux %.2f", drive.presence, drive.flux))
             row("Accent", String(format: "%.2f", metrics.accentOnset))
+            if metrics.micSource == .phone && drive.presence > 0.12 && !metrics.streamLive {
+                row("Anomaly", "feats without PCM")
+            }
         }
         .font(.system(size: 13, weight: .medium, design: .monospaced))
         .foregroundStyle(.white.opacity(0.92))
@@ -48,7 +54,7 @@ struct MicAudioDebugOverlay: View {
         HStack(spacing: 8) {
             Text(label)
                 .foregroundStyle(.white.opacity(0.5))
-                .frame(width: 72, alignment: .leading)
+                .frame(width: 80, alignment: .leading)
             Text(value)
         }
     }

@@ -5,7 +5,7 @@ import QuartzCore
 enum ProjectMAudioFeedState: String, Sendable {
     /// TV mic input is Off — silence only.
     case none
-    /// Phone/Continuity selected but no live packets yet (or FIFO priming).
+    /// Phone/Continuity selected but FIFO is still filling (transport is up).
     case idle
     /// Mono PCM from Wizuale Mic over Wi‑Fi.
     case phonePCM
@@ -23,10 +23,15 @@ final class ProjectMAudioHub: @unchecked Sendable {
         var lastChunk: Int
         var rms: Float
         var agcGain: Float
+        /// UDP PCM still arriving (hysteresis — see `transportDropTimeout`).
         var streamLive: Bool
         var accentOnset: Float
         var feedState: ProjectMAudioFeedState
         var micSource: MicInputSource
+        var pcmPacketsPerSec: Float
+        var gapAvgMs: Float
+        var gapMaxMs: Float
+        var underrunTotal: UInt32
     }
 
     private let lock = NSLock()
@@ -34,8 +39,9 @@ final class ProjectMAudioHub: @unchecked Sendable {
     private var rate: Float = 48_000
     private var sensitivity: Float = MicTuning.loadSensitivity()
     private var latencyMs: Int = MicTuning.loadLatency()
+    /// TV monotonic clock — last PCM datagram arrival.
     private var lastArrival: CFTimeInterval = 0
-    private var wasStreamLive = false
+    private var transportUp = false
 
     private var lastFeed: CFTimeInterval = 0
     private var meanSquare: Float = 0
@@ -43,18 +49,34 @@ final class ProjectMAudioHub: @unchecked Sendable {
     private var fastEnv: Float = 0
     private var slowEnv: Float = 0
     private var accentEnvelope: Float = 0
+    private var lastSample: Float = 0
+    private var underrunDecay: Float = 0
+    private var underrunTotal: UInt32 = 0
+
+    private var windowBegin: CFTimeInterval = 0
+    private var windowPackets = 0
+    private var displayedPPS: Float = 0
+    private var gapSumMs: Float = 0
+    private var gapCount = 0
+    private var gapMaxMs: Float = 0
+
     private var lastMetrics = Metrics(
         fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: 6,
         streamLive: false, accentOnset: 0, feedState: .fallback,
-        micSource: .phone
+        micSource: .phone, pcmPacketsPerSec: 0, gapAvgMs: 0, gapMaxMs: 0,
+        underrunTotal: 0
     )
 
     static let primeFrameCount: Float = 2
-    static let maxFifoSeconds: Float = 0.35
+    /// Jitter absorption — larger than phone burst spacing.
+    static let maxFifoSeconds: Float = 0.85
+    static let targetJitterMs: Float = 70
+    static let minPrimeMs: Float = 20
     static let targetRMS: Float = 0.22
     static let maxGain: Float = 64
     static let noiseFloorRMS: Float = 0.0004
-    static let streamTimeout: CFTimeInterval = 0.35
+    /// No PCM this long ⇒ stream dead (silence drain).
+    static let transportDropTimeout: CFTimeInterval = 1.75
 
     func setBeatSensitivity(_ value: Float) {
         lock.lock()
@@ -75,11 +97,35 @@ final class ProjectMAudioHub: @unchecked Sendable {
             rate = sampleRate
             fifo.removeAll(keepingCapacity: true)
         }
+        if lastArrival > 0 {
+            let gapMs = Float((now - lastArrival) * 1000)
+            if gapMs.isFinite, gapMs >= 0 {
+                gapSumMs += gapMs
+                gapCount += 1
+                gapMaxMs = max(gapMaxMs, gapMs)
+            }
+        }
+        lastArrival = now
+        transportUp = true
+
+        if windowBegin == 0 {
+            windowBegin = now
+        }
+        windowPackets += 1
+        let windowElapsed = now - windowBegin
+        if windowElapsed >= 1.0 {
+            displayedPPS = Float(windowPackets) / Float(windowElapsed)
+            windowPackets = 0
+            windowBegin = now
+            gapSumMs = 0
+            gapCount = 0
+            gapMaxMs = 0
+        }
+
         fifo.reserveCapacity(fifo.count + samples.count)
         for s in samples { fifo.append(Float(s) / 32768) }
         let cap = Int(Self.maxFifoSeconds * rate)
         if fifo.count > cap { fifo.removeFirst(fifo.count - cap) }
-        lastArrival = now
         lock.unlock()
     }
 
@@ -104,16 +150,17 @@ final class ProjectMAudioHub: @unchecked Sendable {
         let r = rate
         let sens = sensitivity
         let latency = latencyMs
-        let stale = now - lastArrival > Self.streamTimeout
-        let streamLive = !stale && lastArrival > 0
-        if wasStreamLive && !streamLive {
+        if lastArrival > 0, now - lastArrival > Self.transportDropTimeout {
+            transportUp = false
             fifo.removeAll(keepingCapacity: true)
             softenShapingState()
+            lastArrival = 0
         }
-        wasStreamLive = streamLive
+        let transportLive = transportUp
         let frameSamples = max(1, Int((r * dt).rounded()))
-        let primeTarget = max(frameSamples * 2, Int(Self.primeFrameCount * r / 60))
-        let holdTarget = primeTarget + max(0, latency) * Int(r) / 1000
+        let minPrime = max(frameSamples, Int(Self.minPrimeMs * r / 1000))
+        let jitterTarget = Int(Self.targetJitterMs * r / 1000)
+        let holdTarget = jitterTarget + max(0, latency) * Int(r) / 1000
         var due = frameSamples
         if latency < 0 {
             let boost = min(frameSamples, max(0, -latency) * Int(r) / 1000 / 8)
@@ -121,54 +168,75 @@ final class ProjectMAudioHub: @unchecked Sendable {
         }
         var chunk: [Float] = []
         var feedState: ProjectMAudioFeedState = .fallback
+        var underrunThisFrame = false
 
         switch micSource {
         case .off:
             feedState = .none
         case .phone:
-            if !streamLive {
+            if !transportLive {
                 feedState = .fallback
-            } else if fifo.count < primeTarget {
-                feedState = .idle
             } else {
                 feedState = .phonePCM
-                let excess = fifo.count - holdTarget
-                if excess > frameSamples * 2 {
-                    due += min(excess / 4, frameSamples * 2)
+                if fifo.count >= minPrime {
+                    let excess = fifo.count - holdTarget
+                    if excess > frameSamples * 2 {
+                        due += min(excess / 4, frameSamples * 2)
+                    }
                 }
                 let take = min(due, fifo.count)
-                chunk = Array(fifo.prefix(take))
-                fifo.removeFirst(take)
+                if take < due {
+                    underrunThisFrame = true
+                }
+                if take > 0 {
+                    chunk = Array(fifo.prefix(take))
+                    fifo.removeFirst(take)
+                }
             }
         case .continuity:
-            if !streamLive {
+            if !transportLive {
                 feedState = .fallback
-            } else if fifo.count < primeTarget {
-                feedState = .idle
             } else {
                 feedState = .continuityPCM
                 let take = min(due, fifo.count)
-                chunk = Array(fifo.prefix(take))
-                fifo.removeFirst(take)
+                if take < due {
+                    underrunThisFrame = true
+                }
+                if take > 0 {
+                    chunk = Array(fifo.prefix(take))
+                    fifo.removeFirst(take)
+                }
             }
         }
+        if underrunThisFrame {
+            underrunTotal += 1
+        }
         let fifoCount = fifo.count
+        let pps = displayedPPS
+        let gapAvg = gapCount > 0 ? gapSumMs / Float(gapCount) : 0
+        let gapMax = gapMaxMs
+        let underruns = underrunTotal
         lock.unlock()
 
         var out: [Float]
         switch feedState {
         case .phonePCM, .continuityPCM:
             if chunk.isEmpty {
-                out = [Float](repeating: 0, count: due)
+                out = underrunHold(count: due)
             } else {
                 out = shape(chunk, dt: dt, rate: r, sensitivity: sens)
+                if let tail = out.last {
+                    lastSample = tail
+                    underrunDecay = 1
+                }
                 if out.count < due {
-                    out.append(contentsOf: [Float](repeating: 0, count: due - out.count))
+                    out.append(contentsOf: underrunHold(count: due - out.count))
                 }
             }
         case .none, .idle, .fallback:
             out = [Float](repeating: 0, count: due)
             decayShapingState(dt: dt)
+            underrunDecay = 0
         }
 
         let accentActive = feedState == .phonePCM || feedState == .continuityPCM
@@ -186,12 +254,27 @@ final class ProjectMAudioHub: @unchecked Sendable {
             lastChunk: out.count,
             rms: sqrtf(max(meanSquare, 0)),
             agcGain: agcGain,
-            streamLive: streamLive,
+            streamLive: transportLive,
             accentOnset: accentEnvelope,
             feedState: feedState,
-            micSource: micSource
+            micSource: micSource,
+            pcmPacketsPerSec: pps,
+            gapAvgMs: gapAvg,
+            gapMaxMs: gapMax,
+            underrunTotal: underruns
         )
         lock.unlock()
+    }
+
+    private func underrunHold(count: Int) -> [Float] {
+        guard count > 0 else { return [] }
+        var out = [Float](repeating: 0, count: count)
+        let decayPerSample: Float = 0.9992
+        for i in 0..<count {
+            underrunDecay *= decayPerSample
+            out[i] = lastSample * underrunDecay
+        }
+        return out
     }
 
     private func softenShapingState() {
@@ -199,6 +282,8 @@ final class ProjectMAudioHub: @unchecked Sendable {
         fastEnv *= 0.2
         slowEnv *= 0.2
         accentEnvelope = 0
+        lastSample = 0
+        underrunDecay = 0
     }
 
     private func decayShapingState(dt: Float) {

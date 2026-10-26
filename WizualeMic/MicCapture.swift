@@ -108,7 +108,13 @@ final class MicCapture: ObservableObject {
     private var lastBoost: Data?
     private var sending = false
     private var pcmInFlight = 0
-    private let maxPCMInFlight = 4
+    private let maxPCMInFlight = 24
+    private let pcmRingLock = NSLock()
+    private var pcmRing: [Int16] = []
+    private var pcmWireRate: Float = 48_000
+    private var pcmSendTimer: DispatchSourceTimer?
+    /// 10 ms @ 48 kHz — one steady datagram per timer tick.
+    private let pcmFramesPerPacket = 480
     private var receiving = false
     private var wantsLink = false
     private var epoch = 0
@@ -289,6 +295,9 @@ final class MicCapture: ObservableObject {
         input.installTap(onBus: 0, bufferSize: 512, format: nil) { [weak self] buffer, _ in
             self?.handle(buffer)
         }
+        network.async { [weak self] in
+            self?.startPCMSender()
+        }
         tapInstalled = true
         engine.prepare()
         do {
@@ -338,6 +347,7 @@ final class MicCapture: ObservableObject {
         engine.stop()
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
         network.async { [weak self] in
+            self?.stopPCMSender()
             self?.stopLink()
         }
         running = false
@@ -376,23 +386,15 @@ final class MicCapture: ObservableObject {
             features: features,
             sensitivity: currentSensitivity()
         )
-        // iOS often delivers ~4800 frames per tap regardless of bufferSize,
-        // so split the whole buffer into wire-sized chunks instead of truncating.
         let pcmPacked = MicPCM.monoInt16(from: buffer, maxFrames: Int.max)
-        var pcmPackets: [Data] = []
-        var start = 0
-        let chunk = MicWire.pcmMaxSamples
-        while start < pcmPacked.samples.count {
-            let end = min(start + chunk, pcmPacked.samples.count)
-            pcmSequence &+= 1
-            if pcmSequence == 0 { pcmSequence = 1 }
-            pcmPackets.append(MicWire.encodePCM(
-                sequence: pcmSequence,
-                sampleRate: pcmPacked.sampleRate,
-                samples: Array(pcmPacked.samples[start..<end])
-            ))
-            start = end
+        pcmRingLock.lock()
+        pcmWireRate = Float(pcmPacked.sampleRate)
+        pcmRing.append(contentsOf: pcmPacked.samples)
+        let cap = max(Int(pcmWireRate * 1.25), pcmFramesPerPacket * 8)
+        if pcmRing.count > cap {
+            pcmRing.removeFirst(pcmRing.count - cap)
         }
+        pcmRingLock.unlock()
         let loud = features.loudness
         let bass = features.bass
         let now = CACurrentMediaTime()
@@ -400,7 +402,6 @@ final class MicCapture: ObservableObject {
         if publishUI { lastUI = now }
         network.async { [weak self] in
             self?.enqueueAudio(packet)
-            for p in pcmPackets { self?.enqueuePCM(p) }
             if publishUI { self?.refreshLink() }
         }
         if publishUI {
@@ -594,6 +595,7 @@ final class MicCapture: ObservableObject {
         browser?.cancel()
         let params = NWParameters.udp
         params.includePeerToPeer = true
+        params.serviceClass = .interactiveVoice
         let created = NWBrowser(
             for: NWBrowser.Descriptor.bonjour(type: MicWire.serviceType, domain: nil),
             using: params
@@ -651,6 +653,7 @@ final class MicCapture: ObservableObject {
         dropConnection()
         let params = NWParameters.udp
         params.includePeerToPeer = true
+        params.serviceClass = .interactiveVoice
         let created = NWConnection(to: endpoint, using: params)
         connectedName = name
         connection = created
@@ -681,6 +684,7 @@ final class MicCapture: ObservableObject {
             if let lastBoost {
                 pendingBoost = lastBoost
             }
+            startPCMSender()
             pump()
         case .failed(let error):
             confirmed = false
@@ -799,10 +803,53 @@ final class MicCapture: ObservableObject {
     private func enqueuePCM(_ data: Data) {
         guard linkWanted() else { return }
         pendingPCM.append(data)
-        if pendingPCM.count > 48 {
-            pendingPCM.removeFirst(pendingPCM.count - 48)
+        if pendingPCM.count > 160 {
+            pendingPCM.removeFirst(pendingPCM.count - 160)
         }
         pump()
+    }
+
+    private func startPCMSender() {
+        pcmSendTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: network)
+        timer.schedule(deadline: .now() + .milliseconds(4), repeating: .milliseconds(10), leeway: .milliseconds(2))
+        timer.setEventHandler { [weak self] in
+            self?.tickPCMSend()
+        }
+        timer.resume()
+        pcmSendTimer = timer
+    }
+
+    private func stopPCMSender() {
+        pcmSendTimer?.cancel()
+        pcmSendTimer = nil
+        pcmRingLock.lock()
+        pcmRing.removeAll(keepingCapacity: true)
+        pcmRingLock.unlock()
+        pendingPCM.removeAll()
+        pcmInFlight = 0
+    }
+
+    private func tickPCMSend() {
+        guard linkWanted(), let connection, connection.state == .ready else { return }
+        pcmRingLock.lock()
+        let rate = pcmWireRate
+        let want = pcmFramesPerPacket
+        var block: [Int16] = []
+        if pcmRing.count >= want {
+            block = Array(pcmRing.prefix(want))
+            pcmRing.removeFirst(want)
+        }
+        pcmRingLock.unlock()
+        guard !block.isEmpty, rate > 1000 else { return }
+        pcmSequence &+= 1
+        if pcmSequence == 0 { pcmSequence = 1 }
+        let packet = MicWire.encodePCM(
+            sequence: pcmSequence,
+            sampleRate: rate,
+            samples: block
+        )
+        enqueuePCM(packet)
     }
 
     private func enqueueCommand(_ data: Data) {
@@ -829,7 +876,7 @@ final class MicCapture: ObservableObject {
         while pcmInFlight < maxPCMInFlight, !pendingPCM.isEmpty {
             startSend(pendingPCM.removeFirst(), isPCM: true, on: connection)
         }
-        guard !sending else { return }
+        guard !sending, pendingPCM.isEmpty else { return }
         let data: Data?
         if !pendingCommands.isEmpty {
             data = pendingCommands.removeFirst()
@@ -880,6 +927,7 @@ final class MicCapture: ObservableObject {
     }
 
     private func dropConnection() {
+        stopPCMSender()
         sendToken += 1
         connection?.cancel()
         connection = nil
