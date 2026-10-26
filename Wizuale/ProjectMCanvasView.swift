@@ -36,7 +36,6 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private let renderState: ProjectMRenderState
     private let audioHub: ProjectMAudioHub
     private let micReceiver: MicReceiver
-    private var micSource: MicInputSource
     private let onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
     private var lastFrameTime: CFTimeInterval = 0
     private let projectM = ProjectMController()

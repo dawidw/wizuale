@@ -177,7 +177,10 @@ final class VisualSession: ObservableObject {
         } else {
             let created = ContinuityMic()
             created.onPCM = { [weak self] samples, rate in
-                self?.audioHub.enqueue(sampleRate: rate, samples: samples)
+                Task { @MainActor in
+                    guard let self, self.micSource == .continuity else { return }
+                    self.audioHub.enqueue(sampleRate: rate, samples: samples)
+                }
             }
             created.onStatus = { [weak self] text in
                 Task { @MainActor in
