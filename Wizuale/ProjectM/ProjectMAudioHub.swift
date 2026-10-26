@@ -152,7 +152,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
             accentEnvelope *= 0.9
             return
         }
-        let hit = min(accent.onset * 1.5 + accent.bass * 0.4, 2.8)
+        let hit = min(accent.onset * 1.5 + accent.bass * 0.4, 2.8 as Float)
         accentEnvelope = max(accentEnvelope * 0.82, hit)
         let bump = accentEnvelope * 0.24 * accent.presence
         guard bump > 0.01 else { return }
@@ -163,11 +163,11 @@ final class ProjectMAudioHub: @unchecked Sendable {
     }
 
     private func shape(_ input: [Float], dt: Float, rate: Float, sensitivity: Float) -> [Float] {
-        let fastAttack = 1 - expf(-1 / (0.0015 * rate))
-        let fastRelease = 1 - expf(-1 / (0.040 * rate))
-        let slowCoef = 1 - expf(-1 / (0.180 * rate))
-        let rmsCoef = 1 - expf(-1 / (0.35 * rate))
-        let punch = 1.15 * sensitivity
+        let fastAttack = 1 as Float - expf(-1 / (0.0015 as Float * rate))
+        let fastRelease = 1 as Float - expf(-1 / (0.040 as Float * rate))
+        let slowCoef = 1 as Float - expf(-1 / (0.180 as Float * rate))
+        let rmsCoef = 1 as Float - expf(-1 / (0.35 as Float * rate))
+        let punch: Float = 1.15 * sensitivity
         var out = [Float](repeating: 0, count: input.count)
         let gain = agcGain
         for i in 0..<input.count {
@@ -176,15 +176,15 @@ final class ProjectMAudioHub: @unchecked Sendable {
             fastEnv += (a - fastEnv) * (a > fastEnv ? fastAttack : fastRelease)
             slowEnv += (a - slowEnv) * slowCoef
             meanSquare += (x * x - meanSquare) * rmsCoef
-            let ratio = slowEnv > 1e-6 ? fastEnv / slowEnv : 1
-            let boost = 1 + punch * min(max(ratio - 1, 0), 4)
+            let ratio = slowEnv > 1e-6 ? fastEnv / slowEnv : 1 as Float
+            let boost = 1 as Float + punch * min(max(ratio - 1, 0), 4)
             out[i] = tanhf(x * gain * boost)
         }
         let rms = sqrtf(meanSquare)
         if rms > Self.noiseFloorRMS {
             let desired = min(max(Self.targetRMS / rms, 1), Self.maxGain)
-            let attack = rms > Self.targetRMS * 0.9 ? 0.08 : 0.35
-            agcGain += (desired - agcGain) * (1 - expf(-dt / attack))
+            let attack: Float = rms > Self.targetRMS * 0.9 ? 0.08 as Float : 0.35 as Float
+            agcGain += (desired - agcGain) * (1 as Float - expf(-dt / attack))
         }
         return out
     }
