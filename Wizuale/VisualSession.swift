@@ -87,6 +87,11 @@ final class VisualSession: ObservableObject {
                     self?.showAudioDebug = show
                 }
             }
+            micReceiver.onAdoptPhoneSource = { [weak self] in
+                Task { @MainActor in
+                    self?.micSource = .phone
+                }
+            }
             micReceiver.onCycle = { [weak self] auto, seconds in
                 Task { @MainActor in
                     guard let self else { return }

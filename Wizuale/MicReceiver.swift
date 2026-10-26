@@ -44,6 +44,8 @@ final class MicReceiver: @unchecked Sendable {
     var onCycle: (@Sendable (Bool, Int) -> Void)?
     /// TV audio debug overlay from the phone.
     var onDebugOverlay: (@Sendable (Bool) -> Void)?
+    /// First phone PCM while TV mic was Off — adopt iPhone app (Wi‑Fi) as source.
+    var onAdoptPhoneSource: (@Sendable () -> Void)?
 
     private struct Stamp {
         var features: MicFeatures
@@ -373,12 +375,16 @@ final class MicReceiver: @unchecked Sendable {
             sendAck(force: true)
         case .pcm(_, let rate, let samples):
             lock.lock()
-            var accept = source == .phone
-            if source == .off {
-                source = .phone
-                accept = true
-            }
+            let adoptPhone = source == .off
+            let accept = source == .phone || adoptPhone
             lock.unlock()
+            if adoptPhone {
+                setSource(.phone)
+                let hook = onAdoptPhoneSource
+                if let hook {
+                    DispatchQueue.main.async { hook() }
+                }
+            }
             if accept {
                 onPCM?(rate, samples)
             }
