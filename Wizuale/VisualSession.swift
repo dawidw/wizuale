@@ -28,7 +28,7 @@ final class VisualSession: ObservableObject {
     @Published private(set) var audioDebugMetrics = ProjectMAudioHub.Metrics(
         fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: 6,
         streamLive: false, accentOnset: 0, feedState: .fallback, micSource: .phone,
-        pcmPacketsPerSec: 0, gapAvgMs: 0, gapMaxMs: 0, underrunTotal: 0
+        pcmPacketsPerSec: 0, gapAvgMs: 0, gapMaxMs: 0, underrunTotal: 0, pcmInRms: 0
     )
     @Published var micSource = MicTuning.loadSource()
     @Published var sensitivity = MicTuning.loadSensitivity()

@@ -32,6 +32,8 @@ final class ProjectMAudioHub: @unchecked Sendable {
         var gapAvgMs: Float
         var gapMaxMs: Float
         var underrunTotal: UInt32
+        /// RMS of last enqueued PCM (int16 → float), before TV AGC/shaping.
+        var pcmInRms: Float
     }
 
     private let lock = NSLock()
@@ -59,12 +61,13 @@ final class ProjectMAudioHub: @unchecked Sendable {
     private var gapSumMs: Float = 0
     private var gapCount = 0
     private var gapMaxMs: Float = 0
+    private var lastEnqueueRms: Float = 0
 
     private var lastMetrics = Metrics(
         fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: 6,
         streamLive: false, accentOnset: 0, feedState: .fallback,
         micSource: .phone, pcmPacketsPerSec: 0, gapAvgMs: 0, gapMaxMs: 0,
-        underrunTotal: 0
+        underrunTotal: 0, pcmInRms: 0
     )
 
     static let primeFrameCount: Float = 2
@@ -77,6 +80,8 @@ final class ProjectMAudioHub: @unchecked Sendable {
     static let noiseFloorRMS: Float = 0.0004
     /// No PCM this long ⇒ stream dead (silence drain).
     static let transportDropTimeout: CFTimeInterval = 1.75
+    /// Never drain more than ~1.2 frames of audio per GL tick (steady ~800 smp @ 60 Hz).
+    static let maxConsumeFrameFactor: Float = 1.2
 
     func setBeatSensitivity(_ value: Float) {
         lock.lock()
@@ -124,6 +129,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
 
         fifo.reserveCapacity(fifo.count + samples.count)
         for s in samples { fifo.append(Float(s) / 32768) }
+        lastEnqueueRms = MicPCM.rmsInt16(samples)
         let cap = Int(Self.maxFifoSeconds * rate)
         if fifo.count > cap { fifo.removeFirst(fifo.count - cap) }
         lock.unlock()
@@ -157,15 +163,15 @@ final class ProjectMAudioHub: @unchecked Sendable {
             lastArrival = 0
         }
         let transportLive = transportUp
-        let frameSamples = max(1, Int((r * dt).rounded()))
-        let minPrime = max(frameSamples, Int(Self.minPrimeMs * r / 1000))
-        let jitterTarget = Int(Self.targetJitterMs * r / 1000)
-        let holdTarget = jitterTarget + max(0, latency) * Int(r) / 1000
+        let paceDt = min(dt, 1.0 / 55.0)
+        let frameSamples = max(1, Int((r * paceDt).rounded()))
         var due = frameSamples
         if latency < 0 {
-            let boost = min(frameSamples, max(0, -latency) * Int(r) / 1000 / 8)
+            let boost = min(frameSamples / 4, max(0, -latency) * Int(r) / 1000 / 16)
             due += boost
         }
+        let maxDue = max(1, Int(Float(frameSamples) * Self.maxConsumeFrameFactor))
+        due = min(due, maxDue)
         var chunk: [Float] = []
         var feedState: ProjectMAudioFeedState = .fallback
         var underrunThisFrame = false
@@ -178,12 +184,6 @@ final class ProjectMAudioHub: @unchecked Sendable {
                 feedState = .fallback
             } else {
                 feedState = .phonePCM
-                if fifo.count >= minPrime {
-                    let excess = fifo.count - holdTarget
-                    if excess > frameSamples * 2 {
-                        due += min(excess / 4, frameSamples * 2)
-                    }
-                }
                 let take = min(due, fifo.count)
                 if take < due {
                     underrunThisFrame = true
@@ -216,6 +216,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
         let gapAvg = gapCount > 0 ? gapSumMs / Float(gapCount) : 0
         let gapMax = gapMaxMs
         let underruns = underrunTotal
+        let pcmIn = lastEnqueueRms
         lock.unlock()
 
         var out: [Float]
@@ -261,7 +262,8 @@ final class ProjectMAudioHub: @unchecked Sendable {
             pcmPacketsPerSec: pps,
             gapAvgMs: gapAvg,
             gapMaxMs: gapMax,
-            underrunTotal: underruns
+            underrunTotal: underruns,
+            pcmInRms: pcmIn
         )
         lock.unlock()
     }

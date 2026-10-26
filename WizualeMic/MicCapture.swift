@@ -18,6 +18,8 @@ final class MicCapture: ObservableObject {
     @Published private(set) var tvName = ""
     @Published private(set) var level: Float = 0
     @Published private(set) var bassLevel: Float = 0
+    /// RMS of the last tap buffer (mono float), for PCM debug.
+    @Published private(set) var capturePcmRms: Float = 0
     @Published private(set) var activePreset = 0
     @Published private(set) var cycling = true
     @Published private(set) var pictureKnown = false
@@ -267,13 +269,29 @@ final class MicCapture: ObservableObject {
     private func beginEngine() {
         bumpEpoch()
         let session = AVAudioSession.sharedInstance()
-        var measuring = true
+        var measuring = false
         do {
             do {
-                try session.setCategory(.playAndRecord, mode: .measurement, options: [.mixWithOthers, .defaultToSpeaker])
+                try session.setCategory(
+                    .playAndRecord,
+                    mode: .videoRecording,
+                    options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth]
+                )
             } catch {
-                measuring = false
-                try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker])
+                do {
+                    try session.setCategory(
+                        .playAndRecord,
+                        mode: .default,
+                        options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth]
+                    )
+                } catch {
+                    measuring = true
+                    try session.setCategory(
+                        .playAndRecord,
+                        mode: .measurement,
+                        options: [.mixWithOthers, .defaultToSpeaker]
+                    )
+                }
             }
             try? session.setPreferredSampleRate(48_000)
             try? session.setPreferredIOBufferDuration(1.0 / 60.0)
@@ -292,7 +310,14 @@ final class MicCapture: ObservableObject {
         sequence = 0
         lastUI = 0
         let input = engine.inputNode
-        input.installTap(onBus: 0, bufferSize: 512, format: nil) { [weak self] buffer, _ in
+        let bus = input.outputFormat(forBus: 0)
+        let tapFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: bus.sampleRate,
+            channels: 1,
+            interleaved: false
+        )
+        input.installTap(onBus: 0, bufferSize: 512, format: tapFormat) { [weak self] buffer, _ in
             self?.handle(buffer)
         }
         network.async { [weak self] in
@@ -355,6 +380,7 @@ final class MicCapture: ObservableObject {
         tvName = ""
         level = 0
         bassLevel = 0
+        capturePcmRms = 0
         status = next
         UIApplication.shared.isIdleTimerDisabled = false
         network.async { [weak self] in
@@ -386,7 +412,12 @@ final class MicCapture: ObservableObject {
             features: features,
             sensitivity: currentSensitivity()
         )
-        let pcmPacked = MicPCM.monoInt16(from: buffer, maxFrames: Int.max)
+        let tapRms = MicPCM.rms(samples)
+        let pcmPacked = MicPCM.monoInt16(
+            from: buffer,
+            maxFrames: Int.max,
+            wireGain: currentSensitivity()
+        )
         pcmRingLock.lock()
         pcmWireRate = Float(pcmPacked.sampleRate)
         pcmRing.append(contentsOf: pcmPacked.samples)
@@ -409,6 +440,7 @@ final class MicCapture: ObservableObject {
                 guard let self, self.running else { return }
                 self.level = loud
                 self.bassLevel = bass
+                self.capturePcmRms = tapRms
                 UIApplication.shared.isIdleTimerDisabled = true
             }
         }

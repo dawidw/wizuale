@@ -37,6 +37,12 @@ struct MicRootView: View {
 
                         meter(title: "Level", value: mic.level)
                         meter(title: "Bass", value: mic.bassLevel)
+                        if mic.tvAudioDebug {
+                            meter(title: "PCM RMS", value: min(mic.capturePcmRms * 4, 1))
+                            Text(String(format: "PCM RMS raw %.4f", mic.capturePcmRms))
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.55))
+                        }
                         sensitivitySlider
                         latencySlider
                         tvDebugToggle

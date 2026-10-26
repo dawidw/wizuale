@@ -21,6 +21,7 @@ struct MicAudioDebugOverlay: View {
             row("FIFO", String(format: "%.0f ms (%d smp)", metrics.fifoMs, metrics.fifoSamples))
             row("Underruns", "\(metrics.underrunTotal)")
             row("Chunk", "\(metrics.lastChunk) smp/frame")
+            row("PCM in", String(format: "%.4f", metrics.pcmInRms))
             row("RMS", String(format: "%.3f  AGC %.1f×", metrics.rms, metrics.agcGain))
             row("Latency", "\(latencyMs) ms (slider)")
             row("Onset", String(format: "%.2f  Bass %.2f", drive.onset, drive.bass))
@@ -45,7 +46,7 @@ struct MicAudioDebugOverlay: View {
         case .phonePCM: return "PHONE PCM"
         case .continuityPCM: return "CONTINUITY PCM"
         case .fallback: return "FALLBACK (silence)"
-        case .idle: return "IDLE (waiting)"
+        case .idle: return "IDLE (prime)"
         case .none: return "NONE (mic off)"
         }
     }
