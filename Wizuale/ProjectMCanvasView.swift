@@ -126,9 +126,6 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         guard !paused else { return }
         // The Metal renderer used to call sample() every frame; projectM does not.
         // sample() is what reports mic liveness (the green "Mic" chip) to VisualSession.
-        let now = CACurrentMediaTime()
-        let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : 1.0 / 60.0
-        lastFrameTime = now
         glView.display()
     }
 
@@ -136,7 +133,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         guard !paused, let context else { return }
         EAGLContext.setCurrent(context)
         let now = CACurrentMediaTime()
-        let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : 1.0 / 60.0
+        let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : Float(1.0 / 60.0)
         lastFrameTime = now
         let drive = micReceiver.sample(dt: dt)
         let snap = renderState.snapshot()
