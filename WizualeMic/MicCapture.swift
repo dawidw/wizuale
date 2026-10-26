@@ -835,13 +835,13 @@ final class MicCapture: ObservableObject {
         pcmRingLock.lock()
         let rate = pcmWireRate
         let want = pcmFramesPerPacket
-        var block: [Int16] = []
-        if pcmRing.count >= want {
-            block = Array(pcmRing.prefix(want))
-            pcmRing.removeFirst(want)
+        let take = min(want, pcmRing.count)
+        let block = take > 0 ? Array(pcmRing.prefix(take)) : []
+        if take > 0 {
+            pcmRing.removeFirst(take)
         }
         pcmRingLock.unlock()
-        guard !block.isEmpty, rate > 1000 else { return }
+        guard block.count >= want / 2, rate > 1000 else { return }
         pcmSequence &+= 1
         if pcmSequence == 0 { pcmSequence = 1 }
         let packet = MicWire.encodePCM(
