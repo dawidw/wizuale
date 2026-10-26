@@ -12,11 +12,13 @@ struct MicAudioDebugOverlay: View {
                 .font(.system(size: 11, weight: .bold))
                 .tracking(1.2)
                 .foregroundStyle(.white.opacity(0.55))
+            row("Source", sourceLabel)
+            row("TV mic", metrics.micSource.title)
+            row("Packets", metrics.streamLive ? "live" : "stale/none")
             row("FIFO", String(format: "%.0f ms (%d smp)", metrics.fifoMs, metrics.fifoSamples))
             row("Chunk", "\(metrics.lastChunk) smp/frame")
             row("RMS", String(format: "%.3f  AGC %.1f×", metrics.rms, metrics.agcGain))
             row("Latency", "\(latencyMs) ms (slider)")
-            row("Live", metrics.streamLive ? "yes" : "no")
             row("Onset", String(format: "%.2f  Bass %.2f", drive.onset, drive.bass))
             row("Mid/Hi", String(format: "%.2f / %.2f", drive.mid, drive.high))
             row("Presence", String(format: "%.2f  Flux %.2f", drive.presence, drive.flux))
@@ -29,6 +31,16 @@ struct MicAudioDebugOverlay: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.leading, 48)
         .padding(.top, 48)
+    }
+
+    private var sourceLabel: String {
+        switch metrics.feedState {
+        case .phonePCM: return "PHONE PCM"
+        case .continuityPCM: return "CONTINUITY PCM"
+        case .fallback: return "FALLBACK (silence)"
+        case .idle: return "IDLE (waiting)"
+        case .none: return "NONE (mic off)"
+        }
     }
 
     private func row(_ label: String, _ value: String) -> some View {

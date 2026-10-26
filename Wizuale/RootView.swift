@@ -29,6 +29,7 @@ struct RootView: View {
                     renderState: visuals.projectMState,
                     audioHub: visuals.audioHub,
                     micReceiver: visuals.micReceiver,
+                    micSource: visuals.micSource,
                     paused: scenePhase != .active,
                     onAudioFrame: { drive, metrics in
                         visuals.noteAudioFrame(drive: drive, metrics: metrics)

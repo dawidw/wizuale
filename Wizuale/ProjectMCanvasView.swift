@@ -7,6 +7,7 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
     var renderState: ProjectMRenderState
     var audioHub: ProjectMAudioHub
     var micReceiver: MicReceiver
+    var micSource: MicInputSource
     var paused: Bool
     var onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
     @Binding var failure: String?
@@ -16,6 +17,7 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
             renderState: renderState,
             audioHub: audioHub,
             micReceiver: micReceiver,
+            micSource: micSource,
             onAudioFrame: onAudioFrame
         )
         controller.onFailure = { message in
@@ -26,6 +28,7 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: ProjectMViewController, context: Context) {
         controller.paused = paused
+        controller.micSource = micSource
     }
 }
 
@@ -33,6 +36,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private let renderState: ProjectMRenderState
     private let audioHub: ProjectMAudioHub
     private let micReceiver: MicReceiver
+    private var micSource: MicInputSource
     private let onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
     private var lastFrameTime: CFTimeInterval = 0
     private let projectM = ProjectMController()
@@ -42,17 +46,20 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private var lastIndex = -1
 
     var paused = false
+    var micSource: MicInputSource = .phone
     var onFailure: ((String) -> Void)?
 
     init(
         renderState: ProjectMRenderState,
         audioHub: ProjectMAudioHub,
         micReceiver: MicReceiver,
+        micSource: MicInputSource,
         onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
     ) {
         self.renderState = renderState
         self.audioHub = audioHub
         self.micReceiver = micReceiver
+        self.micSource = micSource
         self.onAudioFrame = onAudioFrame
         super.init(nibName: nil, bundle: nil)
     }
@@ -142,7 +149,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
             projectM.loadPreset(index: snap.targetIndex, smooth: lastIndex >= 0)
             lastIndex = snap.targetIndex
         }
-        audioHub.feed(accent: drive, now: now) { projectM.addPCM(floats: $0) }
+        audioHub.feed(accent: drive, micSource: micSource, now: now) { projectM.addPCM(floats: $0) }
         onAudioFrame?(drive, audioHub.metricsSnapshot())
         glClearColor(0, 0, 0, 1)
         glClear(UInt32(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT))
