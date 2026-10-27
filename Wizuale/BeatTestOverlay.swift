@@ -19,8 +19,8 @@ struct BeatTestOverlay: View {
                         .tracking(1.1)
                         .foregroundStyle(.white.opacity(0.7))
                     HStack(alignment: .bottom, spacing: 14) {
-                        bar(label: "PCM", level: min(metrics.rms * 1.4, 1))
-                        bar(label: "BASS", level: min(drive.bass / 2.5, 1))
+                        bar(label: "PCM", level: CGFloat(min(metrics.rms * 1.4, 1)))
+                        bar(label: "BASS", level: CGFloat(min(drive.bass / 2.5, 1)))
                     }
                     Text(String(format: "→ projectM %.0f smp/s", metrics.projectMFeedSps))
                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
