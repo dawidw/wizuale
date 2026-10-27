@@ -302,7 +302,7 @@ enum MicPCM {
         return Array(UnsafeBufferPointer(start: channels[0], count: got))
     }
 
-    /// Mono int16 for the Wi-Fi PCM side channel. `wireGain` scales before quantize (phone sensitivity).
+    /// Mono int16 for the Wi-Fi PCM side channel. Linear encode — TV AGC brings quiet room mics up.
     static func monoInt16(
         from buffer: AVAudioPCMBuffer,
         maxFrames: Int = 512,
@@ -312,13 +312,12 @@ enum MicPCM {
         let rate = Float(buffer.format.sampleRate)
         guard !floats.isEmpty else { return ([], rate) }
         let count = min(floats.count, maxFrames)
-        let peak = floats.prefix(count).map { abs($0) }.max() ?? 0
-        let auto = peak > 0.00008 ? min(0.95 / peak, 16) : 1 as Float
-        let gain = min(max(wireGain, 0.25), 3) * auto
+        let gain = min(max(wireGain, 0.25), 3)
         var out = [Int16](repeating: 0, count: count)
         for i in 0..<count {
             let scaled = min(max(floats[i] * gain, -1), 1)
-            out[i] = Int16(scaled * 32767)
+            let quantized = scaled * 32767
+            out[i] = Int16(clamping: Int(quantized.rounded()))
         }
         return (out, rate)
     }

@@ -39,7 +39,11 @@ struct MicRootView: View {
                         meter(title: "Bass", value: mic.bassLevel)
                         if mic.tvAudioDebug {
                             meter(title: "PCM RMS", value: min(mic.capturePcmRms * 4, 1))
-                            Text(String(format: "PCM RMS raw %.4f", mic.capturePcmRms))
+                            Text(String(
+                                format: "tap %.4f  wire %.4f",
+                                mic.capturePcmRms,
+                                mic.wirePcmRms
+                            ))
                                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.white.opacity(0.55))
                         }

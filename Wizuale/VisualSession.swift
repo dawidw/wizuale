@@ -4,6 +4,8 @@ import Foundation
 /// Which picture is showing, and the small title card in the corner.
 @MainActor
 final class VisualSession: ObservableObject {
+    private static let audioDebugKey = "wizuale.tv.audioDebug"
+
     let projectMState = ProjectMRenderState()
     let audioHub = ProjectMAudioHub()
     let beatClock: BeatClock
@@ -23,7 +25,7 @@ final class VisualSession: ObservableObject {
     @Published private(set) var showHint = true
     @Published private(set) var micLive = false
     @Published private(set) var micName = ""
-    @Published private(set) var showAudioDebug = false
+    @Published private(set) var showAudioDebug = UserDefaults.standard.bool(forKey: Self.audioDebugKey)
     @Published private(set) var audioDebugDrive = MicDrive.silent
     @Published private(set) var audioDebugMetrics = ProjectMAudioHub.Metrics(
         fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: 6,
@@ -85,7 +87,9 @@ final class VisualSession: ObservableObject {
             }
             micReceiver.onDebugOverlay = { [weak self] show in
                 Task { @MainActor in
-                    self?.showAudioDebug = show
+                    guard let self else { return }
+                    self.showAudioDebug = show
+                    UserDefaults.standard.set(show, forKey: Self.audioDebugKey)
                 }
             }
             micReceiver.onAdoptPhoneSource = { [weak self] in

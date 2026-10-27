@@ -45,6 +45,8 @@ struct RootView: View {
                     metrics: visuals.audioDebugMetrics,
                     latencyMs: visuals.latencyMs
                 )
+                .zIndex(400)
+                .allowsHitTesting(false)
             }
 
             NowPlayingOverlay(

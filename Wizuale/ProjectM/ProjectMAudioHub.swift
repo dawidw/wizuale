@@ -62,6 +62,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
     private var gapCount = 0
     private var gapMaxMs: Float = 0
     private var lastEnqueueRms: Float = 0
+    private var streamRmsEma: Float = 0
 
     private var lastMetrics = Metrics(
         fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: 6,
@@ -75,9 +76,9 @@ final class ProjectMAudioHub: @unchecked Sendable {
     static let maxFifoSeconds: Float = 0.85
     static let targetJitterMs: Float = 70
     static let minPrimeMs: Float = 20
-    static let targetRMS: Float = 0.22
-    static let maxGain: Float = 64
-    static let noiseFloorRMS: Float = 0.0004
+    static let targetRMS: Float = 0.28
+    static let maxGain: Float = 80
+    static let noiseFloorRMS: Float = 1e-7
     /// No PCM this long ⇒ stream dead (silence drain).
     static let transportDropTimeout: CFTimeInterval = 1.75
     /// Never drain more than ~1.2 frames of audio per GL tick (steady ~800 smp @ 60 Hz).
@@ -129,7 +130,15 @@ final class ProjectMAudioHub: @unchecked Sendable {
 
         fifo.reserveCapacity(fifo.count + samples.count)
         for s in samples { fifo.append(Float(s) / 32768) }
-        lastEnqueueRms = MicPCM.rmsInt16(samples)
+        let batchRms = MicPCM.rmsInt16(samples)
+        lastEnqueueRms = batchRms
+        if batchRms > 1e-8 {
+            if streamRmsEma < 1e-8 {
+                streamRmsEma = batchRms
+            } else {
+                streamRmsEma = streamRmsEma * 0.88 + batchRms * 0.12
+            }
+        }
         let cap = Int(Self.maxFifoSeconds * rate)
         if fifo.count > cap { fifo.removeFirst(fifo.count - cap) }
         lock.unlock()
@@ -161,6 +170,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
             fifo.removeAll(keepingCapacity: true)
             softenShapingState()
             lastArrival = 0
+            streamRmsEma = 0
         }
         let transportLive = transportUp
         let paceDt = min(dt, 1.0 / 55.0)
@@ -320,8 +330,10 @@ final class ProjectMAudioHub: @unchecked Sendable {
         let slowCoef = 1 as Float - expf(-1 / (0.180 as Float * rate))
         let rmsCoef = 1 as Float - expf(-1 / (0.35 as Float * rate))
         let punch: Float = 1.15 * sensitivity
+        let streamLevel = max(streamRmsEma, 1e-6)
+        let streamMakeup = min(max(Self.targetRMS / streamLevel, 1), Self.maxGain)
+        let combinedGain = min(agcGain * streamMakeup, Self.maxGain)
         var out = [Float](repeating: 0, count: input.count)
-        let gain = agcGain
         for i in 0..<input.count {
             let x = input[i]
             let a = abs(x)
@@ -330,14 +342,20 @@ final class ProjectMAudioHub: @unchecked Sendable {
             meanSquare += (x * x - meanSquare) * rmsCoef
             let ratio = slowEnv > 1e-6 ? fastEnv / slowEnv : 1 as Float
             let boost = 1 as Float + punch * min(max(ratio - 1, 0), 4)
-            out[i] = tanhf(x * gain * boost)
+            out[i] = tanhf(x * combinedGain * boost)
         }
         let rms = sqrtf(meanSquare)
-        if rms > Self.noiseFloorRMS {
-            let desired = min(max(Self.targetRMS / rms, 1), Self.maxGain)
-            let attack: Float = rms > Self.targetRMS * 0.9 ? 0.08 as Float : 0.35 as Float
-            agcGain += (desired - agcGain) * (1 as Float - expf(-dt / attack))
+        let level = max(rms, streamRmsEma * 0.35)
+        let desired = min(max(Self.targetRMS / max(level, 1e-6), 1), Self.maxGain)
+        let attack: Float
+        if level < Self.targetRMS * 0.08 {
+            attack = 0.045 as Float
+        } else if level > Self.targetRMS * 0.85 {
+            attack = 0.10 as Float
+        } else {
+            attack = 0.22 as Float
         }
+        agcGain += (desired - agcGain) * (1 as Float - expf(-dt / attack))
         return out
     }
 }
