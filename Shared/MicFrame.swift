@@ -46,7 +46,7 @@ enum MicPacket: Equatable, Sendable {
     case cycle(sequence: UInt16, autoAdvance: Bool, intervalSeconds: Int)
     case boost(sequence: UInt16, amount: Float)
     case debug(sequence: UInt16, showAudioOverlay: Bool)
-    case ack(preset: Int16, cycling: Bool, latencyMs: Int?, sensitivity: Float?)
+    case ack(preset: Int16, cycling: Bool, latencyMs: Int?, sensitivity: Float?, showAudioDebug: Bool?)
 }
 
 /// Picture choice on the wire. Both apps use `MilkPresetCatalog.presets` in this order.
@@ -85,6 +85,7 @@ enum MicWire {
     static let commandBytes = 10
     static let ackBytes = 10
     static let ackTunedBytes = 16
+    static let ackDebugBytes = 18
     static let settingsBytes = 16
     static let cycleBytes = 12
     static let boostBytes = 12
@@ -177,14 +178,21 @@ enum MicWire {
         return data
     }
 
-    static func encodeAck(preset: Int16, cycling: Bool, latencyMs: Int, sensitivity: Float) -> Data {
-        var data = Data(capacity: ackTunedBytes)
+    static func encodeAck(
+        preset: Int16,
+        cycling: Bool,
+        latencyMs: Int,
+        sensitivity: Float,
+        showAudioDebug: Bool
+    ) -> Data {
+        var data = Data(capacity: ackDebugBytes)
         write(magic, &data)
         write(kindAck, &data)
         write(preset, &data)
         write(cycling ? UInt16(1) : UInt16(0), &data)
         write(Int16(clamping: MicTuning.clampLatency(latencyMs)), &data)
         write(slider(sensitivity), &data)
+        write(showAudioDebug ? UInt16(1) : UInt16(0), &data)
         return data
     }
 
@@ -271,14 +279,22 @@ enum MicWire {
             guard data.count >= ackBytes else { return nil }
             let cycling = readUInt16(data, 8) != 0
             if data.count >= ackTunedBytes, let sensitivity = readSlider(data, 12) {
+                let debug: Bool? = data.count >= ackDebugBytes ? (readUInt16(data, 16) != 0) : nil
                 return .ack(
                     preset: readInt16(data, 6),
                     cycling: cycling,
                     latencyMs: Int(readInt16(data, 10)),
-                    sensitivity: sensitivity
+                    sensitivity: sensitivity,
+                    showAudioDebug: debug
                 )
             }
-            return .ack(preset: readInt16(data, 6), cycling: cycling, latencyMs: nil, sensitivity: nil)
+            return .ack(
+                preset: readInt16(data, 6),
+                cycling: cycling,
+                latencyMs: nil,
+                sensitivity: nil,
+                showAudioDebug: nil
+            )
         }
         return nil
     }

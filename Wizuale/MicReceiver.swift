@@ -90,6 +90,7 @@ final class MicReceiver: @unchecked Sendable {
     /// same NWConnection the Mic app is receiving on.
     private var lastPeerKey: ObjectIdentifier?
     private var ackHeartbeat: DispatchWorkItem?
+    private var ackAudioDebug = false
 
     private let hitCap: Float = 3.5
 
@@ -97,6 +98,17 @@ final class MicReceiver: @unchecked Sendable {
         sensitivity = MicTuning.loadSensitivity()
         latencyMs = MicTuning.loadLatency()
         source = MicTuning.loadSource()
+        ackAudioDebug = UserDefaults.standard.bool(forKey: "wizuale.tv.audioDebug")
+    }
+
+    /// Echoed in acks so the phone toggle stays in sync with the TV overlay.
+    func setAckAudioDebug(_ show: Bool) {
+        lock.lock()
+        ackAudioDebug = show
+        lock.unlock()
+        queue.async { [weak self] in
+            self?.sendAck(force: true)
+        }
     }
 
     func start() {
@@ -408,7 +420,7 @@ final class MicReceiver: @unchecked Sendable {
                     handler(show)
                 }
             }
-        case .ack(_, _, _, _):
+        case .ack:
             break
         }
     }
@@ -475,8 +487,15 @@ final class MicReceiver: @unchecked Sendable {
         let cycling = shownCycling
         let ms = latencyMs
         let sens = sensitivity
+        let debug = ackAudioDebug
         lock.unlock()
-        let packet = MicWire.encodeAck(preset: preset, cycling: cycling, latencyMs: ms, sensitivity: sens)
+        let packet = MicWire.encodeAck(
+            preset: preset,
+            cycling: cycling,
+            latencyMs: ms,
+            sensitivity: sens,
+            showAudioDebug: debug
+        )
         let targets: [NWConnection]
         if let lastPeerKey, let peer = peers[lastPeerKey] {
             targets = [peer]

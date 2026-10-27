@@ -91,6 +91,8 @@ struct RootView: View {
                     sensitivity: visuals.sensitivity,
                     latencyMs: visuals.latencyMs,
                     continuityStatus: visuals.continuityStatus,
+                    showAudioDebug: visuals.showAudioDebug,
+                    onAudioDebug: { visuals.setShowAudioDebug($0) },
                     onSource: { visuals.setMicSource($0) },
                     onSensitivity: { visuals.setSensitivity($0) },
                     onLatency: { visuals.setLatency($0) },

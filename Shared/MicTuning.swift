@@ -25,6 +25,7 @@ enum MicTuning {
     static let sourceKey = "wizuale.mic.source"
     static let autoCycleKey = "wizuale.mic.autoCycle"
     static let cycleSecondsKey = "wizuale.mic.cycleSeconds"
+    static let tvAudioDebugKey = "wizuale.mic.tvAudioDebug"
 
     static let sensitivityMin: Float = 0.25
     static let sensitivityMax: Float = 3
@@ -97,6 +98,14 @@ enum MicTuning {
 
     static func saveCycleSeconds(_ seconds: Int) {
         UserDefaults.standard.set(clampCycleSeconds(seconds), forKey: cycleSecondsKey)
+    }
+
+    static func loadTVAudioDebug() -> Bool {
+        UserDefaults.standard.bool(forKey: tvAudioDebugKey)
+    }
+
+    static func saveTVAudioDebug(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: tvAudioDebugKey)
     }
 }
 

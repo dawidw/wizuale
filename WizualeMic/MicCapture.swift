@@ -65,9 +65,10 @@ final class MicCapture: ObservableObject {
             scheduleCycle()
         }
     }
-    @Published var tvAudioDebug = false {
+    @Published var tvAudioDebug = MicTuning.loadTVAudioDebug() {
         didSet {
             guard !applyingRemote, tvAudioDebug != oldValue else { return }
+            MicTuning.saveTVAudioDebug(tvAudioDebug)
             scheduleTVAudioDebug()
         }
     }
@@ -135,6 +136,7 @@ final class MicCapture: ObservableObject {
     private var latHold = 0
     private var sensHoldUntil: CFTimeInterval = 0
     private var latHoldUntil: CFTimeInterval = 0
+    private var debugSyncHeartbeat: DispatchWorkItem?
     private var startGeneration = 0
     private var interruption: NSObjectProtocol?
     private var calibrateOn = false
@@ -319,9 +321,8 @@ final class MicCapture: ObservableObject {
         status = "Listening (\(session.mode.rawValue)). Allow Local Network if an Apple TV never appears."
         network.async { [weak self] in
             self?.startPCMSender()
-            if self?.tvAudioDebug == true {
-                self?.scheduleTVAudioDebug()
-            }
+            self?.scheduleTVAudioDebug()
+            self?.scheduleDebugSyncHeartbeat()
         }
         setWantsLink(true)
         let sens = sensitivity
@@ -762,9 +763,8 @@ final class MicCapture: ObservableObject {
                 pendingBoost = lastBoost
             }
             startPCMSender()
-            if tvAudioDebug {
-                scheduleTVAudioDebug()
-            }
+            scheduleTVAudioDebug()
+            scheduleDebugSyncHeartbeat()
             pump()
         case .failed(let error):
             confirmed = false
@@ -791,10 +791,13 @@ final class MicCapture: ObservableObject {
                 guard let self, self.receiving else { return }
                 if let data {
                     if let packet = MicWire.decode(data) {
-                        if case .ack(let preset, let cycling, let latency, let sensitivity) = packet {
+                        if case .ack(let preset, let cycling, let latency, let sensitivity, let audioDebug) = packet {
                             self.log.debug("ack received preset=\(preset) cycling=\(cycling)")
                             self.noteAck(preset: preset, cycling: cycling)
                             self.noteRemoteTuning(latency: latency, sensitivity: sensitivity)
+                            if let audioDebug {
+                                self.noteRemoteAudioDebug(audioDebug)
+                            }
                         }
                     } else if data.count >= 6, MicWire.peekKind(data) == MicWire.kindAck {
                         self.log.error("ack decode failed (\(data.count) bytes)")
@@ -819,6 +822,7 @@ final class MicCapture: ObservableObject {
         guard linkWanted() else { return }
         lastAck = CACurrentMediaTime()
         confirmed = true
+        scheduleTVAudioDebug()
         let name = connectedName.isEmpty ? "Apple TV" : connectedName
         let index = Int(preset)
         guard MilkPresetCatalog.presets.indices.contains(index) else {
@@ -901,6 +905,8 @@ final class MicCapture: ObservableObject {
     }
 
     private func stopPCMSender() {
+        debugSyncHeartbeat?.cancel()
+        debugSyncHeartbeat = nil
         pcmSendTimer?.cancel()
         pcmSendTimer = nil
         pcmRingLock.lock()
@@ -951,16 +957,37 @@ final class MicCapture: ObservableObject {
         }
     }
 
+    private func scheduleDebugSyncHeartbeat() {
+        debugSyncHeartbeat?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.running, self.linkWanted() else { return }
+            self.scheduleTVAudioDebug()
+            self.scheduleDebugSyncHeartbeat()
+        }
+        debugSyncHeartbeat = work
+        network.asyncAfter(deadline: .now() + 2.5, execute: work)
+    }
+
+    private func noteRemoteAudioDebug(_ enabled: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            guard self.tvAudioDebug != enabled else { return }
+            self.applyingRemote = true
+            self.tvAudioDebug = enabled
+            self.applyingRemote = false
+        }
+    }
+
     private func pump() {
         guard let connection, connection.state == .ready else { return }
         // Never let the PCM backlog starve feature, settings, or debug datagrams.
         if !sending {
             let control: Data?
-            if !pendingCommands.isEmpty {
-                control = pendingCommands.removeFirst()
-            } else if let debug = pendingDebug {
+            if let debug = pendingDebug {
                 pendingDebug = nil
                 control = debug
+            } else if !pendingCommands.isEmpty {
+                control = pendingCommands.removeFirst()
             } else if let boost = pendingBoost {
                 pendingBoost = nil
                 control = boost

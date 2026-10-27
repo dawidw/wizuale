@@ -87,11 +87,10 @@ final class VisualSession: ObservableObject {
             }
             micReceiver.onDebugOverlay = { [weak self] show in
                 Task { @MainActor in
-                    guard let self else { return }
-                    self.showAudioDebug = show
-                    UserDefaults.standard.set(show, forKey: Self.audioDebugKey)
+                    self?.applyShowAudioDebug(show, fromPhone: true)
                 }
             }
+            micReceiver.setAckAudioDebug(showAudioDebug)
             micReceiver.onAdoptPhoneSource = { [weak self] in
                 Task { @MainActor in
                     self?.micSource = .phone
@@ -118,6 +117,17 @@ final class VisualSession: ObservableObject {
         guard showAudioDebug else { return }
         audioDebugDrive = drive
         audioDebugMetrics = metrics
+    }
+
+    func setShowAudioDebug(_ enabled: Bool) {
+        applyShowAudioDebug(enabled, fromPhone: false)
+    }
+
+    private func applyShowAudioDebug(_ enabled: Bool, fromPhone: Bool) {
+        showAudioDebug = enabled
+        UserDefaults.standard.set(enabled, forKey: VisualSession.audioDebugKey)
+        micReceiver.setAckAudioDebug(enabled)
+        _ = fromPhone
     }
 
     func openSettings() {
