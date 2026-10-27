@@ -227,6 +227,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
         let gapMax = gapMaxMs
         let underruns = underrunTotal
         let pcmIn = lastEnqueueRms
+        let streamRms = streamRmsEma
         lock.unlock()
 
         var out: [Float]
@@ -235,7 +236,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
             if chunk.isEmpty {
                 out = underrunHold(count: due)
             } else {
-                out = shape(chunk, dt: dt, rate: r, sensitivity: sens)
+                out = shape(chunk, dt: dt, rate: r, sensitivity: sens, streamRms: streamRms)
                 if let tail = out.last {
                     lastSample = tail
                     underrunDecay = 1
