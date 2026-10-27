@@ -291,7 +291,7 @@ final class MicCapture: ObservableObject {
         sequence = 0
         lastUI = 0
         let input = engine.inputNode
-        input.voiceProcessingEnabled = false
+        try? input.setVoiceProcessingEnabled(false)
         // Native tap — avoid an extra converter that can lower level; downmix in MicPCM.
         input.installTap(onBus: 0, bufferSize: 512, format: nil) { [weak self] buffer, _ in
             self?.handle(buffer)
@@ -434,7 +434,7 @@ final class MicCapture: ObservableObject {
         } else {
             gain = "n/a"
         }
-        let vp = input.voiceProcessingEnabled ? "on" : "off"
+        let vp = input.isVoiceProcessingEnabled ? "on" : "off"
         let ch = input.outputFormat(forBus: 0).channelCount
         let rate = Int(input.outputFormat(forBus: 0).sampleRate)
         return "\(session.category.rawValue)/\(session.mode.rawValue) · \(port) (\(portType)) · \(source) · pol \(polar) · gain \(gain) · VPIO \(vp) · \(rate) Hz \(ch)ch"

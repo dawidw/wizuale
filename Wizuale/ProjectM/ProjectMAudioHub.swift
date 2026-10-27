@@ -325,13 +325,13 @@ final class ProjectMAudioHub: @unchecked Sendable {
         accentEnvelope *= 0.9
     }
 
-    private func shape(_ input: [Float], dt: Float, rate: Float, sensitivity: Float) -> [Float] {
+    private func shape(_ input: [Float], dt: Float, rate: Float, sensitivity: Float, streamRms: Float) -> [Float] {
         let fastAttack = 1 as Float - expf(-1 / (0.0015 as Float * rate))
         let fastRelease = 1 as Float - expf(-1 / (0.040 as Float * rate))
         let slowCoef = 1 as Float - expf(-1 / (0.180 as Float * rate))
         let rmsCoef = 1 as Float - expf(-1 / (0.35 as Float * rate))
         let punch: Float = 1.15 * sensitivity
-        let streamLevel = max(streamRmsEma, 1e-6)
+        let streamLevel = max(streamRms, 1e-6)
         let streamMakeup = min(max(Self.targetRMS / streamLevel, 1), Self.maxGain)
         let combinedGain = min(agcGain * streamMakeup, Self.maxGain)
         var out = [Float](repeating: 0, count: input.count)
@@ -346,7 +346,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
             out[i] = tanhf(x * combinedGain * boost)
         }
         let rms = sqrtf(meanSquare)
-        let level = max(rms, streamRmsEma * 0.35)
+        let level = max(rms, streamRms * 0.35)
         let desired = min(max(Self.targetRMS / max(level, 1e-6), 1), Self.maxGain)
         let attack: Float
         if level < Self.targetRMS * 0.08 {
