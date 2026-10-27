@@ -22,6 +22,8 @@ final class MicCapture: ObservableObject {
     @Published private(set) var capturePcmRms: Float = 0
     /// RMS of the last int16 block queued for Wi‑Fi (after wire gain, before UDP).
     @Published private(set) var wirePcmRms: Float = 0
+    /// Category / mode / route / gain — shown when TV AUDIO DEBUG is on.
+    @Published private(set) var captureSessionInfo = ""
     @Published private(set) var activePreset = 0
     @Published private(set) var cycling = true
     @Published private(set) var pictureKnown = false
@@ -271,36 +273,13 @@ final class MicCapture: ObservableObject {
     private func beginEngine() {
         bumpEpoch()
         let session = AVAudioSession.sharedInstance()
-        var measuring = false
         do {
-            do {
-                try session.setCategory(
-                    .playAndRecord,
-                    mode: .videoRecording,
-                    options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth]
-                )
-            } catch {
-                do {
-                    try session.setCategory(
-                        .playAndRecord,
-                        mode: .default,
-                        options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth]
-                    )
-                } catch {
-                    measuring = true
-                    try session.setCategory(
-                        .playAndRecord,
-                        mode: .measurement,
-                        options: [.mixWithOthers, .defaultToSpeaker]
-                    )
-                }
-            }
-            try? session.setPreferredSampleRate(48_000)
-            try? session.setPreferredIOBufferDuration(1.0 / 60.0)
-            if session.isInputGainSettable {
-                try? session.setInputGain(1)
-            }
+            try configureCaptureSession(session)
             try session.setActive(true)
+            configurePreferredBuiltInMic(session)
+            if session.isInputGainSettable {
+                try session.setInputGain(1)
+            }
         } catch {
             status = "The audio session did not start. \(error.localizedDescription)"
             cancelCalibration()
@@ -312,14 +291,9 @@ final class MicCapture: ObservableObject {
         sequence = 0
         lastUI = 0
         let input = engine.inputNode
-        let bus = input.outputFormat(forBus: 0)
-        let tapFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: bus.sampleRate,
-            channels: 1,
-            interleaved: false
-        )
-        input.installTap(onBus: 0, bufferSize: 512, format: tapFormat) { [weak self] buffer, _ in
+        input.voiceProcessingEnabled = false
+        // Native tap — avoid an extra converter that can lower level; downmix in MicPCM.
+        input.installTap(onBus: 0, bufferSize: 512, format: nil) { [weak self] buffer, _ in
             self?.handle(buffer)
         }
         tapInstalled = true
@@ -340,11 +314,9 @@ final class MicCapture: ObservableObject {
 
         running = true
         UIApplication.shared.isIdleTimerDisabled = true
-        if measuring {
-            status = "Listening. Allow Local Network if an Apple TV never appears."
-        } else {
-            status = "Listening. System gain is on, so quiet rooms may be squashed."
-        }
+        let report = Self.captureSessionReport(session: session, input: input)
+        captureSessionInfo = report
+        status = "Listening (\(session.mode.rawValue)). Allow Local Network if an Apple TV never appears."
         network.async { [weak self] in
             self?.startPCMSender()
             if self?.tvAudioDebug == true {
@@ -387,6 +359,7 @@ final class MicCapture: ObservableObject {
         bassLevel = 0
         capturePcmRms = 0
         wirePcmRms = 0
+        captureSessionInfo = ""
         status = next
         UIApplication.shared.isIdleTimerDisabled = false
         network.async { [weak self] in
@@ -401,6 +374,70 @@ final class MicCapture: ObservableObject {
         guard let raw, AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
         cancelCalibration()
         tearDown(status: "Audio was interrupted. Tap Start to listen again.")
+    }
+
+    /// Raw music capture: measurement first, no defaultToSpeaker / Bluetooth (voice paths).
+    private func configureCaptureSession(_ session: AVAudioSession) throws {
+        let attempts: [(AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)] = [
+            (.record, .measurement, [.mixWithOthers]),
+            (.playAndRecord, .measurement, [.mixWithOthers]),
+            (.playAndRecord, .default, [.mixWithOthers]),
+        ]
+        var lastError: Error?
+        for attempt in attempts {
+            do {
+                try session.setCategory(attempt.0, mode: attempt.1, options: attempt.2)
+                try? session.setPreferredSampleRate(48_000)
+                try? session.setPreferredIOBufferDuration(1.0 / 60.0)
+                return
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError ?? NSError(domain: "WizualeMic", code: 1)
+    }
+
+    private func configurePreferredBuiltInMic(_ session: AVAudioSession) {
+        guard let inputs = session.availableInputs else { return }
+        guard let builtIn = inputs.first(where: { $0.portType == .builtInMic }) ?? inputs.first else { return }
+        try? session.setPreferredInput(builtIn)
+        guard let sources = builtIn.dataSources, !sources.isEmpty else { return }
+        let bottom = sources.first(where: { $0.orientation == .bottom })
+            ?? sources.first(where: { $0.dataSourceName.localizedCaseInsensitiveContains("bottom") })
+            ?? sources.first
+        guard let bottom else { return }
+        try? builtIn.setPreferredDataSource(bottom)
+        if #available(iOS 14.0, *) {
+            if let patterns = bottom.supportedPolarPatterns,
+               patterns.contains(.omnidirectional) {
+                try? bottom.setPreferredPolarPattern(.omnidirectional)
+            }
+        }
+    }
+
+    private static func captureSessionReport(session: AVAudioSession, input: AVAudioInputNode) -> String {
+        let routeIn = session.currentRoute.inputs.first
+        let port = routeIn?.portName ?? "unknown"
+        let portType = routeIn?.portType.rawValue ?? "?"
+        let source = routeIn?.selectedDataSource?.dataSourceName
+            ?? routeIn?.dataSources?.first?.dataSourceName
+            ?? "—"
+        let polar: String
+        if #available(iOS 14.0, *) {
+            polar = routeIn?.selectedDataSource?.selectedPolarPattern?.rawValue ?? "—"
+        } else {
+            polar = "—"
+        }
+        let gain: String
+        if session.isInputGainSettable {
+            gain = String(format: "%.2f", session.inputGain)
+        } else {
+            gain = "n/a"
+        }
+        let vp = input.voiceProcessingEnabled ? "on" : "off"
+        let ch = input.outputFormat(forBus: 0).channelCount
+        let rate = Int(input.outputFormat(forBus: 0).sampleRate)
+        return "\(session.category.rawValue)/\(session.mode.rawValue) · \(port) (\(portType)) · \(source) · pol \(polar) · gain \(gain) · VPIO \(vp) · \(rate) Hz \(ch)ch"
     }
 
     private func handle(_ buffer: AVAudioPCMBuffer) {

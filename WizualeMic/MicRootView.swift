@@ -46,6 +46,12 @@ struct MicRootView: View {
                             ))
                                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                                 .foregroundStyle(.white.opacity(0.55))
+                            if !mic.captureSessionInfo.isEmpty {
+                                Text(mic.captureSessionInfo)
+                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.5))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                         sensitivitySlider
                         latencySlider
