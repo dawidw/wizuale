@@ -40,6 +40,11 @@ struct RootView: View {
             }
 
             if visuals.showAudioDebug {
+                BeatTestOverlay(
+                    drive: visuals.audioDebugDrive,
+                    metrics: visuals.audioDebugMetrics
+                )
+                .zIndex(399)
                 MicAudioDebugOverlay(
                     drive: visuals.audioDebugDrive,
                     metrics: visuals.audioDebugMetrics,

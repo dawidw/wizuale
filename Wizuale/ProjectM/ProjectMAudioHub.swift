@@ -34,6 +34,8 @@ final class ProjectMAudioHub: @unchecked Sendable {
         var underrunTotal: UInt32
         /// RMS of last enqueued PCM (int16 → float), before TV AGC/shaping.
         var pcmInRms: Float
+        /// Mono samples handed to libprojectM per second (rolling ~1 s).
+        var projectMFeedSps: Float
     }
 
     private let lock = NSLock()
@@ -63,12 +65,15 @@ final class ProjectMAudioHub: @unchecked Sendable {
     private var gapMaxMs: Float = 0
     private var lastEnqueueRms: Float = 0
     private var streamRmsEma: Float = 0
+    private var feedWindowBegin: CFTimeInterval = 0
+    private var feedWindowSamples = 0
+    private var displayedFeedSps: Float = 0
 
     private var lastMetrics = Metrics(
         fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: 6,
         streamLive: false, accentOnset: 0, feedState: .fallback,
         micSource: .phone, pcmPacketsPerSec: 0, gapAvgMs: 0, gapMaxMs: 0,
-        underrunTotal: 0, pcmInRms: 0
+        underrunTotal: 0, pcmInRms: 0, projectMFeedSps: 0
     )
 
     static let primeFrameCount: Float = 2
@@ -80,7 +85,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
     static let maxGain: Float = 80
     static let noiseFloorRMS: Float = 1e-7
     /// No PCM this long ⇒ stream dead (silence drain).
-    static let transportDropTimeout: CFTimeInterval = 1.75
+    static let transportDropTimeout: CFTimeInterval = 2.35
     /// Never drain more than ~1.2 frames of audio per GL tick (steady ~800 smp @ 60 Hz).
     static let maxConsumeFrameFactor: Float = 1.2
 
@@ -260,6 +265,17 @@ final class ProjectMAudioHub: @unchecked Sendable {
         sink(out)
 
         lock.lock()
+        if feedWindowBegin == 0 {
+            feedWindowBegin = now
+        }
+        feedWindowSamples += out.count
+        let feedElapsed = now - feedWindowBegin
+        if feedElapsed >= 1.0 {
+            displayedFeedSps = Float(feedWindowSamples) / Float(feedElapsed)
+            feedWindowSamples = 0
+            feedWindowBegin = now
+        }
+        let feedSps = displayedFeedSps
         lastMetrics = Metrics(
             fifoSamples: fifoCount,
             fifoMs: fifoCount > 0 ? Float(fifoCount) / r * 1000 : 0,
@@ -274,7 +290,8 @@ final class ProjectMAudioHub: @unchecked Sendable {
             gapAvgMs: gapAvg,
             gapMaxMs: gapMax,
             underrunTotal: underruns,
-            pcmInRms: pcmIn
+            pcmInRms: pcmIn,
+            projectMFeedSps: feedSps
         )
         lock.unlock()
     }

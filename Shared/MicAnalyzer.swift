@@ -248,7 +248,7 @@ enum MicPCM {
             let count = Int(buffer.format.channelCount)
             guard count > 0 else { return [] }
             var mono = [Float](repeating: 0, count: frames)
-            let scale = 1 / (Float(count) * 32768)
+            let scale = 1 / (sqrtf(Float(count)) * 32768)
             for channel in 0..<count {
                 let samples = channels[channel]
                 for frame in 0..<frames {

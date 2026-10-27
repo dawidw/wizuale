@@ -82,6 +82,7 @@ final class MicReceiver: @unchecked Sendable {
     private var appliedSequence: UInt16 = 0
     private var haveApplied = false
     private var reportedLive = false
+    private var liveHoldUntil: CFTimeInterval = 0
 
     private var shownIndex = 0
     private var shownCycling = true
@@ -182,7 +183,11 @@ final class MicReceiver: @unchecked Sendable {
         let boostIn = dropTarget
         let boostAt = lastBoostAt
         let arrivedAt = lastArrival
-        let arriving = sourceNow != .off && havePacket && (now - arrivedAt) < 0.30
+        let packetFresh = sourceNow != .off && havePacket && (now - arrivedAt) < 0.42
+        if packetFresh {
+            liveHoldUntil = now + 0.55
+        }
+        let arriving = packetFresh || (sourceNow != .off && now < liveHoldUntil)
         var chosen: Stamp?
         if sourceNow != .off {
             let delay = latency < 0 ? 0.0 : Double(latency) / 1000
@@ -372,7 +377,6 @@ final class MicReceiver: @unchecked Sendable {
             if accept {
                 push(features, sequence: sequence)
             }
-            sendAck(force: false)
         case .command(_, let preset):
             apply(preset)
             sendAck(force: true)

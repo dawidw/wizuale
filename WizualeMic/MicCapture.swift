@@ -67,7 +67,11 @@ final class MicCapture: ObservableObject {
     }
     @Published var tvAudioDebug = MicTuning.loadTVAudioDebug() {
         didSet {
-            guard !applyingRemote, tvAudioDebug != oldValue else { return }
+            guard tvAudioDebug != oldValue else { return }
+            flag.lock()
+            heldTVAudioDebug = tvAudioDebug
+            flag.unlock()
+            guard !applyingRemote else { return }
             MicTuning.saveTVAudioDebug(tvAudioDebug)
             scheduleTVAudioDebug()
         }
@@ -100,10 +104,13 @@ final class MicCapture: ObservableObject {
     private var debugSequence: UInt16 = 0
     private var pendingPCM: [Data] = []
     private var heldSensitivity: Float = MicTuning.loadSensitivity()
+    private var heldTVAudioDebug = MicTuning.loadTVAudioDebug()
     private var applyingRemote = false
+    private var reportedTapFormat = false
     private var lastUI: CFTimeInterval = 0
     private var browser: NWBrowser?
-    private var connection: NWConnection?
+    private var controlConnection: NWConnection?
+    private var pcmConnection: NWConnection?
     private var connectedName = ""
     private var pendingAudio: Data?
     private var pendingCommands: [Data] = []
@@ -113,7 +120,7 @@ final class MicCapture: ObservableObject {
     private var lastCommand: Data?
     private var lastSettings: Data?
     private var lastBoost: Data?
-    private var sending = false
+    private var controlSending = false
     private var pcmInFlight = 0
     private let maxPCMInFlight = 24
     private let pcmRingLock = NSLock()
@@ -294,8 +301,9 @@ final class MicCapture: ObservableObject {
         lastUI = 0
         let input = engine.inputNode
         try? input.setVoiceProcessingEnabled(false)
-        // Native tap — avoid an extra converter that can lower level; downmix in MicPCM.
-        input.installTap(onBus: 0, bufferSize: 512, format: nil) { [weak self] buffer, _ in
+        let tapFormat = input.outputFormat(forBus: 0)
+        // Explicit bus format — `nil` can yield a silent planar channel on some routes.
+        input.installTap(onBus: 0, bufferSize: 512, format: tapFormat) { [weak self] buffer, _ in
             self?.handle(buffer)
         }
         tapInstalled = true
@@ -361,6 +369,7 @@ final class MicCapture: ObservableObject {
         capturePcmRms = 0
         wirePcmRms = 0
         captureSessionInfo = ""
+        reportedTapFormat = false
         status = next
         UIApplication.shared.isIdleTimerDisabled = false
         network.async { [weak self] in
@@ -380,6 +389,7 @@ final class MicCapture: ObservableObject {
     /// Raw music capture: measurement first, no defaultToSpeaker / Bluetooth (voice paths).
     private func configureCaptureSession(_ session: AVAudioSession) throws {
         let attempts: [(AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)] = [
+            (.record, .measurement, []),
             (.record, .measurement, [.mixWithOthers]),
             (.playAndRecord, .measurement, [.mixWithOthers]),
             (.playAndRecord, .default, [.mixWithOthers]),
@@ -436,9 +446,11 @@ final class MicCapture: ObservableObject {
             gain = "n/a"
         }
         let vp = input.isVoiceProcessingEnabled ? "on" : "off"
-        let ch = input.outputFormat(forBus: 0).channelCount
-        let rate = Int(input.outputFormat(forBus: 0).sampleRate)
-        return "\(session.category.rawValue)/\(session.mode.rawValue) · \(port) (\(portType)) · \(source) · pol \(polar) · gain \(gain) · VPIO \(vp) · \(rate) Hz \(ch)ch"
+        let out = input.outputFormat(forBus: 0)
+        let ch = out.channelCount
+        let rate = Int(out.sampleRate)
+        let fmt = "fmt \(out.commonFormat.rawValue) int=\(out.isInterleaved ? 1 : 0)"
+        return "\(session.category.rawValue)/\(session.mode.rawValue) · \(port) (\(portType)) · \(source) · pol \(polar) · gain \(gain) · VPIO \(vp) · \(rate) Hz \(ch)ch · \(fmt)"
     }
 
     private func handle(_ buffer: AVAudioPCMBuffer) {
@@ -456,6 +468,25 @@ final class MicCapture: ObservableObject {
             features: features,
             sensitivity: currentSensitivity()
         )
+        if !reportedTapFormat {
+            reportedTapFormat = true
+            let f = buffer.format
+            let extra = String(
+                format: "tap buf %.0f Hz %dch cf=%d fl=%d",
+                f.sampleRate,
+                f.channelCount,
+                f.commonFormat.rawValue,
+                Int(buffer.frameLength)
+            )
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if self.captureSessionInfo.isEmpty {
+                    self.captureSessionInfo = extra
+                } else {
+                    self.captureSessionInfo += " · " + extra
+                }
+            }
+        }
         let tapRms = MicPCM.rms(samples)
         let pcmPacked = MicPCM.monoInt16(
             from: buffer,
@@ -606,7 +637,7 @@ final class MicCapture: ObservableObject {
             self.latHoldUntil = self.sensHoldUntil
             self.pendingSettings = packet
             self.lastSettings = packet
-            self.pump()
+            self.pumpControl()
         }
     }
 
@@ -629,7 +660,7 @@ final class MicCapture: ObservableObject {
         if pendingCommands.count > 8 {
             pendingCommands.removeFirst(pendingCommands.count - 8)
         }
-        pump()
+        pumpControl()
     }
 
     private func beginBoost(_ amount: Float) {
@@ -664,7 +695,7 @@ final class MicCapture: ObservableObject {
             guard let self else { return }
             self.pendingBoost = packet
             self.lastBoost = packet
-            self.pump()
+            self.pumpControl()
         }
     }
 
@@ -716,12 +747,12 @@ final class MicCapture: ObservableObject {
         // An empty callback in the middle of browsing is common. Dropping the
         // socket there makes the picture hiccup, so only switch when a real list arrives.
         guard let first = found.first else {
-            if connection == nil {
+            if controlConnection == nil {
                 publish(status: "Allow Local Network if an Apple TV never appears.", tv: "", linked: false)
             }
             return
         }
-        if connection != nil, found.contains(where: { $0.0 == connectedName }) {
+        if controlConnection != nil, found.contains(where: { $0.0 == connectedName }) {
             return
         }
         connect(endpoint: first.1, name: first.0)
@@ -732,17 +763,23 @@ final class MicCapture: ObservableObject {
         let params = NWParameters.udp
         params.includePeerToPeer = true
         params.serviceClass = .interactiveVoice
-        let created = NWConnection(to: endpoint, using: params)
+        let control = NWConnection(to: endpoint, using: params)
+        let pcm = NWConnection(to: endpoint, using: params)
         connectedName = name
-        connection = created
-        created.stateUpdateHandler = { [weak self] state in
-            self?.connectionState(state, name: name)
+        controlConnection = control
+        pcmConnection = pcm
+        control.stateUpdateHandler = { [weak self] state in
+            self?.controlConnectionState(state, name: name)
         }
-        created.start(queue: network)
+        pcm.stateUpdateHandler = { [weak self] state in
+            self?.pcmConnectionState(state, name: name)
+        }
+        control.start(queue: network)
+        pcm.start(queue: network)
         publish(status: "Found \(name). Waiting for the Wizuale app.", tv: name, linked: false)
     }
 
-    private func connectionState(_ state: NWConnection.State, name: String) {
+    private func controlConnectionState(_ state: NWConnection.State, name: String) {
         guard linkWanted(), connectedName == name else { return }
         switch state {
         case .ready:
@@ -765,7 +802,8 @@ final class MicCapture: ObservableObject {
             startPCMSender()
             scheduleTVAudioDebug()
             scheduleDebugSyncHeartbeat()
-            pump()
+            pumpControl()
+            pumpPCM()
         case .failed(let error):
             confirmed = false
             publish(status: "Could not reach \(name). \(error.localizedDescription)", tv: name, linked: false)
@@ -784,20 +822,27 @@ final class MicCapture: ObservableObject {
         }
     }
 
+    private func pcmConnectionState(_ state: NWConnection.State, name: String) {
+        guard linkWanted(), connectedName == name else { return }
+        if case .ready = state {
+            pumpPCM()
+        } else if case .failed = state {
+            pcmConnection?.cancel()
+            pcmConnection = nil
+        }
+    }
+
     private func receiveAck() {
-        guard let connection, receiving else { return }
-        connection.receiveMessage { [weak self] data, _, _, error in
+        guard let controlConnection, receiving else { return }
+        controlConnection.receiveMessage { [weak self] data, _, _, error in
             self?.network.async {
                 guard let self, self.receiving else { return }
                 if let data {
                     if let packet = MicWire.decode(data) {
-                        if case .ack(let preset, let cycling, let latency, let sensitivity, let audioDebug) = packet {
+                        if case .ack(let preset, let cycling, let latency, let sensitivity, _) = packet {
                             self.log.debug("ack received preset=\(preset) cycling=\(cycling)")
                             self.noteAck(preset: preset, cycling: cycling)
                             self.noteRemoteTuning(latency: latency, sensitivity: sensitivity)
-                            if let audioDebug {
-                                self.noteRemoteAudioDebug(audioDebug)
-                            }
                         }
                     } else if data.count >= 6, MicWire.peekKind(data) == MicWire.kindAck {
                         self.log.error("ack decode failed (\(data.count) bytes)")
@@ -881,7 +926,7 @@ final class MicCapture: ObservableObject {
     private func enqueueAudio(_ data: Data) {
         guard linkWanted() else { return }
         pendingAudio = data
-        pump()
+        pumpControl()
     }
 
     private func enqueuePCM(_ data: Data) {
@@ -890,7 +935,7 @@ final class MicCapture: ObservableObject {
         if pendingPCM.count > 160 {
             pendingPCM.removeFirst(pendingPCM.count - 160)
         }
-        pump()
+        pumpPCM()
     }
 
     private func startPCMSender() {
@@ -917,7 +962,7 @@ final class MicCapture: ObservableObject {
     }
 
     private func tickPCMSend() {
-        guard linkWanted(), let connection, connection.state == .ready else { return }
+        guard linkWanted(), let pcmConnection, pcmConnection.state == .ready else { return }
         pcmRingLock.lock()
         let rate = pcmWireRate
         let want = pcmFramesPerPacket
@@ -944,16 +989,19 @@ final class MicCapture: ObservableObject {
         if pendingCommands.count > 6 {
             pendingCommands.removeFirst(pendingCommands.count - 6)
         }
-        pump()
+        pumpControl()
     }
 
     private func scheduleTVAudioDebug() {
         debugSequence &+= 1
         if debugSequence == 0 { debugSequence = 1 }
-        let packet = MicWire.encodeDebug(sequence: debugSequence, showAudioOverlay: tvAudioDebug)
+        flag.lock()
+        let show = heldTVAudioDebug
+        flag.unlock()
+        let packet = MicWire.encodeDebug(sequence: debugSequence, showAudioOverlay: show)
         network.async { [weak self] in
             self?.pendingDebug = packet
-            self?.pump()
+            self?.pumpControl()
         }
     }
 
@@ -968,20 +1016,11 @@ final class MicCapture: ObservableObject {
         network.asyncAfter(deadline: .now() + 2.5, execute: work)
     }
 
-    private func noteRemoteAudioDebug(_ enabled: Bool) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            guard self.tvAudioDebug != enabled else { return }
-            self.applyingRemote = true
-            self.tvAudioDebug = enabled
-            self.applyingRemote = false
-        }
-    }
-
-    private func pump() {
-        guard let connection, connection.state == .ready else { return }
-        // Never let the PCM backlog starve feature, settings, or debug datagrams.
-        if !sending {
+    private func pumpControl() {
+        guard let controlConnection, controlConnection.state == .ready else { return }
+        guard !controlSending else { return }
+        var batch = 0
+        while batch < 4, !controlSending {
             let control: Data?
             if let debug = pendingDebug {
                 pendingDebug = nil
@@ -1000,37 +1039,37 @@ final class MicCapture: ObservableObject {
             } else {
                 control = nil
             }
-            if let control {
-                startSend(control, isPCM: false, on: connection)
-                return
-            }
-        }
-        let burst = 8
-        var sent = 0
-        while pcmInFlight < maxPCMInFlight, !pendingPCM.isEmpty, sent < burst {
-            startSend(pendingPCM.removeFirst(), isPCM: true, on: connection)
-            sent += 1
+            guard let control else { break }
+            batch += 1
+            controlSending = true
+            let token = sendToken
+            controlConnection.send(content: control, completion: .contentProcessed { [weak self] _ in
+                self?.network.async {
+                    guard let self, self.sendToken == token else { return }
+                    self.controlSending = false
+                    self.pumpControl()
+                }
+            })
         }
     }
 
-    private func startSend(_ data: Data, isPCM: Bool, on connection: NWConnection) {
-        if isPCM {
+    private func pumpPCM() {
+        guard let pcmConnection, pcmConnection.state == .ready else { return }
+        let burst = 14
+        var sent = 0
+        while pcmInFlight < maxPCMInFlight, !pendingPCM.isEmpty, sent < burst {
+            let data = pendingPCM.removeFirst()
             pcmInFlight += 1
-        } else {
-            sending = true
-        }
-        let token = sendToken
-        connection.send(content: data, completion: .contentProcessed { [weak self] _ in
-            self?.network.async {
-                guard let self, self.sendToken == token else { return }
-                if isPCM {
+            let token = sendToken
+            pcmConnection.send(content: data, completion: .contentProcessed { [weak self] _ in
+                self?.network.async {
+                    guard let self, self.sendToken == token else { return }
                     self.pcmInFlight = max(0, self.pcmInFlight - 1)
-                } else {
-                    self.sending = false
+                    self.pumpPCM()
                 }
-                self.pump()
-            }
-        })
+            })
+            sent += 1
+        }
     }
 
     private func stopLink() {
@@ -1042,13 +1081,15 @@ final class MicCapture: ObservableObject {
     private func dropConnection() {
         stopPCMSender()
         sendToken += 1
-        connection?.cancel()
-        connection = nil
+        controlConnection?.cancel()
+        pcmConnection?.cancel()
+        controlConnection = nil
+        pcmConnection = nil
         connectedName = ""
         pendingAudio = nil
         pendingPCM.removeAll()
         pendingCommands.removeAll()
-        sending = false
+        controlSending = false
         receiving = false
         confirmed = false
         lastAck = 0

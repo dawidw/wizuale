@@ -23,6 +23,7 @@ struct MicAudioDebugOverlay: View {
             row("Chunk", "\(metrics.lastChunk) smp/frame")
             row("PCM in", String(format: "%.4f", metrics.pcmInRms))
             row("RMS", String(format: "%.3f  AGC %.1f×", metrics.rms, metrics.agcGain))
+            row("projectM", String(format: "%.0f smp/s", metrics.projectMFeedSps))
             row("Latency", "\(latencyMs) ms (slider)")
             row("Onset", String(format: "%.2f  Bass %.2f", drive.onset, drive.bass))
             row("Mid/Hi", String(format: "%.2f / %.2f", drive.mid, drive.high))
