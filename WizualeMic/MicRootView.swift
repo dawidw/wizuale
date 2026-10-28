@@ -56,6 +56,7 @@ struct MicRootView: View {
                         sensitivitySlider
                         latencySlider
                         brightnessSlider
+                        beatStrengthSlider
                         tvDebugToggle
                         autoCycleControls
                         calibrateControl
@@ -151,6 +152,29 @@ struct MicRootView: View {
                     set: { mic.pictureBrightness = Int($0.rounded()) }
                 ),
                 in: Double(MicTuning.pictureBrightnessMin)...Double(MicTuning.pictureBrightnessMax),
+                step: 1
+            )
+        }
+    }
+
+    private var beatStrengthSlider: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("SIŁA BITU")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Text("\(mic.beatStrength)%")
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            MiniSlider(
+                value: Binding(
+                    get: { Double(mic.beatStrength) },
+                    set: { mic.beatStrength = Int($0.rounded()) }
+                ),
+                in: Double(MicTuning.beatStrengthMin)...Double(MicTuning.beatStrengthMax),
                 step: 1
             )
         }
