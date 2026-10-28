@@ -39,7 +39,7 @@ final class BeatPunchState {
 
         if strength > 0, kickArmed, onset > 0.48 {
             let since = now - lastTrigger
-            if since >= Double(refractorySeconds) {
+            if since >= Double(Self.refractorySeconds) {
                 let magnitude = min(max(onset / 2.0, 0), 1)
                 triggerPeak = magnitude * strength
                 if triggerPeak > 0.04 {
@@ -57,13 +57,13 @@ final class BeatPunchState {
 
         let age = Float(now - lastTrigger)
         if age >= 0, triggerPeak > 0 {
-            if age < attackSeconds {
-                let t = age / attackSeconds
+            if age < Self.attackSeconds {
+                let t = age / Self.attackSeconds
                 let eased = t * t * (3 - 2 * t)
                 envelope = triggerPeak * eased
             } else {
-                let release = age - attackSeconds
-                let decay = expf(-release / releaseTau)
+                let release = age - Self.attackSeconds
+                let decay = expf(-release / Self.releaseTau)
                 let overshoot = 1 + 0.1 * expf(-release / 0.045)
                 envelope = triggerPeak * decay * overshoot
                 if envelope < 0.008 {
@@ -72,7 +72,7 @@ final class BeatPunchState {
                 }
             }
         } else {
-            envelope *= expf(-dtSafe / releaseTau)
+            envelope *= expf(-dtSafe / Self.releaseTau)
             if envelope < 0.008 { envelope = 0 }
         }
 
