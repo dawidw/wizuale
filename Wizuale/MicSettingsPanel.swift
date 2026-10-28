@@ -9,6 +9,8 @@ struct MicSettingsPanel: View {
     var sensitivity: Float
     var latencyMs: Int
     var continuityStatus: String
+    var showAudioDebug: Bool
+    var onAudioDebug: (Bool) -> Void
     var onSource: (MicInputSource) -> Void
     var onSensitivity: (Float) -> Void
     var onLatency: (Int) -> Void
@@ -55,6 +57,20 @@ struct MicSettingsPanel: View {
                         Button("+") { onSensitivity(min(MicTuning.sensitivityMax, sensitivity + 0.25)) }
                             .buttonStyle(.card)
                     }
+                }
+
+                HStack {
+                    Text("AUDIO DEBUG")
+                        .font(.system(size: 24, weight: .medium))
+                    Spacer()
+                    Toggle(
+                        "Show audio debug overlay",
+                        isOn: Binding(
+                            get: { showAudioDebug },
+                            set: { onAudioDebug($0) }
+                        )
+                    )
+                    .labelsHidden()
                 }
 
                 HStack(spacing: 16) {

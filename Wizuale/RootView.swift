@@ -29,10 +29,39 @@ struct RootView: View {
                     renderState: visuals.projectMState,
                     audioHub: visuals.audioHub,
                     micReceiver: visuals.micReceiver,
+                    micSource: visuals.micSource,
                     paused: scenePhase != .active,
+                    beatPunchScale: visuals.beatPunchScale,
+                    beatPunchRotation: visuals.beatPunchRotation,
+                    onAudioFrame: { drive, metrics in
+                        visuals.noteAudioFrame(drive: drive, metrics: metrics)
+                    },
                     failure: $failure
                 )
                 .ignoresSafeArea()
+
+                Color.black
+                    .opacity(visuals.pictureDimOpacity)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+
+            if visuals.showAudioDebug {
+                BeatTestOverlay(
+                    drive: visuals.audioDebugDrive,
+                    metrics: visuals.audioDebugMetrics,
+                    punchFlash: visuals.beatPunchFlash
+                )
+                .zIndex(399)
+                MicAudioDebugOverlay(
+                    drive: visuals.audioDebugDrive,
+                    metrics: visuals.audioDebugMetrics,
+                    latencyMs: visuals.latencyMs,
+                    beatStrength: visuals.beatStrength,
+                    punchesPerMinute: visuals.beatPunchesPerMinute
+                )
+                .zIndex(400)
+                .allowsHitTesting(false)
             }
 
             NowPlayingOverlay(
@@ -77,6 +106,8 @@ struct RootView: View {
                     sensitivity: visuals.sensitivity,
                     latencyMs: visuals.latencyMs,
                     continuityStatus: visuals.continuityStatus,
+                    showAudioDebug: visuals.showAudioDebug,
+                    onAudioDebug: { visuals.setShowAudioDebug($0) },
                     onSource: { visuals.setMicSource($0) },
                     onSensitivity: { visuals.setSensitivity($0) },
                     onLatency: { visuals.setLatency($0) },

@@ -7,11 +7,21 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
     var renderState: ProjectMRenderState
     var audioHub: ProjectMAudioHub
     var micReceiver: MicReceiver
+    var micSource: MicInputSource
     var paused: Bool
+    var beatPunchScale: CGFloat = CGFloat(BeatPunchState.baseOverscan)
+    var beatPunchRotation: Angle = .zero
+    var onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
     @Binding var failure: String?
 
     func makeUIViewController(context: Context) -> ProjectMViewController {
-        let controller = ProjectMViewController(renderState: renderState, audioHub: audioHub, micReceiver: micReceiver)
+        let controller = ProjectMViewController(
+            renderState: renderState,
+            audioHub: audioHub,
+            micReceiver: micReceiver,
+            micSource: micSource,
+            onAudioFrame: onAudioFrame
+        )
         controller.onFailure = { message in
             DispatchQueue.main.async { failure = message }
         }
@@ -20,6 +30,9 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: ProjectMViewController, context: Context) {
         controller.paused = paused
+        controller.micSource = micSource
+        controller.beatPunchScale = beatPunchScale
+        controller.beatPunchRotation = CGFloat(beatPunchRotation.radians)
     }
 }
 
@@ -27,7 +40,9 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private let renderState: ProjectMRenderState
     private let audioHub: ProjectMAudioHub
     private let micReceiver: MicReceiver
+    private let onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
     private var lastFrameTime: CFTimeInterval = 0
+    private var renderFpsEma: Float = 60
     private let projectM = ProjectMController()
     private var glView: GLKView!
     private var context: EAGLContext!
@@ -35,12 +50,23 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private var lastIndex = -1
 
     var paused = false
+    var micSource: MicInputSource = .phone
+    var beatPunchScale: CGFloat = CGFloat(BeatPunchState.baseOverscan)
+    var beatPunchRotation: CGFloat = 0
     var onFailure: ((String) -> Void)?
 
-    init(renderState: ProjectMRenderState, audioHub: ProjectMAudioHub, micReceiver: MicReceiver) {
+    init(
+        renderState: ProjectMRenderState,
+        audioHub: ProjectMAudioHub,
+        micReceiver: MicReceiver,
+        micSource: MicInputSource,
+        onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
+    ) {
         self.renderState = renderState
         self.audioHub = audioHub
         self.micReceiver = micReceiver
+        self.micSource = micSource
+        self.onAudioFrame = onAudioFrame
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -54,13 +80,17 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
             return
         }
         context = ctx
-        glView = GLKView(frame: view.bounds, context: ctx)
+        let punchHost = UIView(frame: view.bounds)
+        punchHost.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        punchHost.backgroundColor = .black
+        view.addSubview(punchHost)
+        glView = GLKView(frame: punchHost.bounds, context: ctx)
         glView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         glView.drawableColorFormat = .RGBA8888
         glView.drawableDepthFormat = .format24
         glView.enableSetNeedsDisplay = false
         glView.delegate = self
-        view.addSubview(glView)
+        punchHost.addSubview(glView)
 
         EAGLContext.setCurrent(ctx)
         projectM.create(in: ctx, size: pixelSize)
@@ -113,25 +143,41 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         guard !paused else { return }
         // The Metal renderer used to call sample() every frame; projectM does not.
         // sample() is what reports mic liveness (the green "Mic" chip) to VisualSession.
-        let now = CACurrentMediaTime()
-        let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : 1.0 / 60.0
-        lastFrameTime = now
-        _ = micReceiver.sample(dt: dt)
         glView.display()
     }
 
     func glkView(_ view: GLKView, drawIn rect: CGRect) {
         guard !paused, let context else { return }
         EAGLContext.setCurrent(context)
+        let now = CACurrentMediaTime()
+        let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : Float(1.0 / 60.0)
+        lastFrameTime = now
+        if dt > 1e-4 {
+            let instant = min(max(1 / dt, 24), 120)
+            renderFpsEma = renderFpsEma * 0.9 + instant * 0.1
+            projectM.setRenderFPS(renderFpsEma)
+        }
+        let drive = micReceiver.sample(dt: dt)
         let snap = renderState.snapshot()
         projectM.setBeatSensitivity(snap.beatSensitivity)
         if snap.targetIndex != lastIndex {
             projectM.loadPreset(index: snap.targetIndex, smooth: lastIndex >= 0)
             lastIndex = snap.targetIndex
         }
-        audioHub.feed { projectM.addPCM(floats: $0) }
+        audioHub.feed(micSource: micSource, now: now) { projectM.addPCM(floats: $0) }
+        onAudioFrame?(drive, audioHub.metricsSnapshot())
         glClearColor(0, 0, 0, 1)
         glClear(UInt32(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT))
         projectM.render()
+        applyBeatPunchTransform(on: glView.superview)
+    }
+
+    /// Geometry-only punch after libprojectM draws; debug overlays sit above this view.
+    private func applyBeatPunchTransform(on host: UIView?) {
+        guard let host else { return }
+        var transform = CGAffineTransform.identity
+        transform = transform.rotated(by: beatPunchRotation)
+        transform = transform.scaledBy(x: beatPunchScale, y: beatPunchScale)
+        host.transform = transform
     }
 }

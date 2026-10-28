@@ -1,9 +1,12 @@
 import Combine
 import Foundation
+import SwiftUI
 
 /// Which picture is showing, and the small title card in the corner.
 @MainActor
 final class VisualSession: ObservableObject {
+    private static let audioDebugKey = "wizuale.tv.audioDebug"
+
     let projectMState = ProjectMRenderState()
     let audioHub = ProjectMAudioHub()
     let beatClock: BeatClock
@@ -23,6 +26,23 @@ final class VisualSession: ObservableObject {
     @Published private(set) var showHint = true
     @Published private(set) var micLive = false
     @Published private(set) var micName = ""
+    @Published private(set) var showAudioDebug = UserDefaults.standard.bool(forKey: VisualSession.audioDebugKey)
+    @Published private(set) var pictureBrightness = MicTuning.loadTVPictureBrightness()
+    @Published private(set) var pictureDimOpacity = VisualSession.dimOpacity(
+        for: MicTuning.loadTVPictureBrightness()
+    )
+    @Published private(set) var beatStrength = MicTuning.loadTVBeatStrength()
+    @Published private(set) var beatPunchScale: CGFloat = CGFloat(BeatPunchState.baseOverscan)
+    @Published private(set) var beatPunchRotation: Angle = .zero
+    @Published private(set) var beatPunchFlash = false
+    @Published private(set) var beatPunchesPerMinute = 0
+    @Published private(set) var audioDebugDrive = MicDrive.silent
+    @Published private(set) var audioDebugMetrics = ProjectMAudioHub.Metrics(
+        fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: ProjectMAudioHub.defaultAgcGain,
+        streamLive: false, feedState: .fallback, micSource: .phone,
+        pcmPacketsPerSec: 0, gapAvgMs: 0, gapMaxMs: 0, underrunTotal: 0, pcmInRms: 0,
+        projectMFeedSps: 0
+    )
     @Published var micSource = MicTuning.loadSource()
     @Published var sensitivity = MicTuning.loadSensitivity()
     @Published var latencyMs = MicTuning.loadLatency()
@@ -39,6 +59,9 @@ final class VisualSession: ObservableObject {
     private var cycleToken = UUID()
     private var hideToken = UUID()
     private var hintToken = UUID()
+    private var dimAnimToken = UUID()
+    private let beatPunch = BeatPunchState()
+    private var lastAudioFrameTime: CFTimeInterval = 0
 
     var currentPresetName: String {
         MilkPresetCatalog.preset(at: presetIndex)?.displayName ?? "Preset"
@@ -76,12 +99,37 @@ final class VisualSession: ObservableObject {
             micReceiver.onPCM = { [weak self] rate, samples in
                 self?.audioHub.enqueue(sampleRate: rate, samples: samples)
             }
+            micReceiver.onDebugOverlay = { [weak self] show in
+                Task { @MainActor in
+                    self?.applyShowAudioDebug(show, fromPhone: true)
+                }
+            }
+            micReceiver.onDimming = { [weak self] percent in
+                Task { @MainActor in
+                    self?.applyPictureBrightness(percent)
+                }
+            }
+            micReceiver.onBeatStrength = { [weak self] percent in
+                Task { @MainActor in
+                    self?.applyBeatStrength(percent)
+                }
+            }
+            micReceiver.setAckAudioDebug(showAudioDebug)
+            micReceiver.setAckPictureBrightness(MicTuning.loadTVPictureBrightness())
+            micReceiver.setAckBeatStrength(MicTuning.loadTVBeatStrength())
+            micReceiver.onAdoptPhoneSource = { [weak self] in
+                Task { @MainActor in
+                    self?.micSource = .phone
+                }
+            }
             micReceiver.onCycle = { [weak self] auto, seconds in
                 Task { @MainActor in
                     guard let self else { return }
                     self.autoCycle = auto
                     self.cycleSeconds = seconds
                     self.projectMState.setAutoCycle(auto, seconds: seconds)
+                    let cycling = auto && !self.phoneLocked
+                    self.micReceiver.setShown(index: self.presetIndex, cycling: cycling)
                     if auto && !self.phoneLocked { self.armCycle() }
                 }
             }
@@ -89,6 +137,73 @@ final class VisualSession: ObservableObject {
             micReceiver.start()
             if micSource == .continuity {
                 startContinuity()
+            }
+        }
+    }
+
+    func noteAudioFrame(drive: MicDrive, metrics: ProjectMAudioHub.Metrics) {
+        let now = CACurrentMediaTime()
+        let dt: Float
+        if lastAudioFrameTime > 0 {
+            dt = Float(now - lastAudioFrameTime)
+        } else {
+            dt = 1.0 / 60.0
+        }
+        lastAudioFrameTime = now
+        beatPunch.setStrengthPercent(beatStrength)
+        let frame = beatPunch.advance(drive: drive, dt: dt, now: now)
+        beatPunchScale = frame.scale
+        beatPunchRotation = .radians(Double(frame.rotationRadians))
+        beatPunchFlash = frame.flash
+        beatPunchesPerMinute = beatPunch.punchesPerMinute
+        guard showAudioDebug else { return }
+        audioDebugDrive = drive
+        audioDebugMetrics = metrics
+    }
+
+    func setShowAudioDebug(_ enabled: Bool) {
+        applyShowAudioDebug(enabled, fromPhone: false)
+    }
+
+    private func applyShowAudioDebug(_ enabled: Bool, fromPhone: Bool) {
+        showAudioDebug = enabled
+        UserDefaults.standard.set(enabled, forKey: VisualSession.audioDebugKey)
+        micReceiver.setAckAudioDebug(enabled)
+        _ = fromPhone
+    }
+
+    private static func dimOpacity(for percent: Int) -> Double {
+        1.0 - Double(MicTuning.clampPictureBrightness(percent)) / 100.0
+    }
+
+    func applyPictureBrightness(_ percent: Int) {
+        let clamped = MicTuning.clampPictureBrightness(percent)
+        pictureBrightness = clamped
+        MicTuning.saveTVPictureBrightness(clamped)
+        micReceiver.setAckPictureBrightness(clamped)
+        animatePictureDim(to: VisualSession.dimOpacity(for: clamped))
+    }
+
+    func applyBeatStrength(_ percent: Int) {
+        let clamped = MicTuning.clampBeatStrength(percent)
+        beatStrength = clamped
+        MicTuning.saveTVBeatStrength(clamped)
+        micReceiver.setAckBeatStrength(clamped)
+        beatPunch.setStrengthPercent(clamped)
+    }
+
+    private func animatePictureDim(to target: Double) {
+        dimAnimToken = UUID()
+        let token = dimAnimToken
+        let start = pictureDimOpacity
+        Task { @MainActor in
+            let steps = 14
+            for step in 1...steps {
+                try? await Task.sleep(nanoseconds: 22_000_000)
+                guard token == dimAnimToken else { return }
+                let t = Double(step) / Double(steps)
+                let eased = t * t * (3 - 2 * t)
+                pictureDimOpacity = start + (target - start) * eased
             }
         }
     }
@@ -155,7 +270,10 @@ final class VisualSession: ObservableObject {
         } else {
             let created = ContinuityMic()
             created.onPCM = { [weak self] samples, rate in
-                self?.audioHub.enqueue(sampleRate: rate, samples: samples)
+                Task { @MainActor in
+                    guard let self, self.micSource == .continuity else { return }
+                    self.audioHub.enqueue(sampleRate: rate, samples: samples)
+                }
             }
             created.onStatus = { [weak self] text in
                 Task { @MainActor in

@@ -15,6 +15,9 @@
 		C10000000000000000000006 /* MusicSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* MusicSession.swift */; };
 		C10000000000000000000007 /* ArtworkPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* ArtworkPalette.swift */; };
 		C10000000000000000000008 /* NowPlayingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* NowPlayingOverlay.swift */; };
+		F20000000000000000000090 /* MicAudioDebugOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000090 /* MicAudioDebugOverlay.swift */; };
+		F20000000000000000000091 /* BeatTestOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000091 /* BeatTestOverlay.swift */; };
+		F20000000000000000000092 /* BeatPunchState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000092 /* BeatPunchState.swift */; };
 		C10000000000000000000009 /* RemoteReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* RemoteReader.swift */; };
 		C1000000000000000000000A /* FrameUniforms.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* FrameUniforms.swift */; };
 		C1000000000000000000000B /* Presets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* Presets.swift */; };
@@ -63,6 +66,9 @@
 		B10000000000000000000006 /* MusicSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicSession.swift; sourceTree = "<group>"; };
 		B10000000000000000000007 /* ArtworkPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkPalette.swift; sourceTree = "<group>"; };
 		B10000000000000000000008 /* NowPlayingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingOverlay.swift; sourceTree = "<group>"; };
+		F10000000000000000000090 /* MicAudioDebugOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicAudioDebugOverlay.swift; sourceTree = "<group>"; };
+		F10000000000000000000091 /* BeatTestOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatTestOverlay.swift; sourceTree = "<group>"; };
+		F10000000000000000000092 /* BeatPunchState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatPunchState.swift; sourceTree = "<group>"; };
 		B10000000000000000000009 /* RemoteReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteReader.swift; sourceTree = "<group>"; };
 		B1000000000000000000000A /* FrameUniforms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameUniforms.swift; sourceTree = "<group>"; };
 		B1000000000000000000000B /* Presets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Presets.swift; sourceTree = "<group>"; };
@@ -171,6 +177,9 @@
 				B100000000000000000001F /* Wizuale-Bridging-Header.h */,
 				B10000000000000000000006 /* MusicSession.swift */,
 				B10000000000000000000008 /* NowPlayingOverlay.swift */,
+				F10000000000000000000090 /* MicAudioDebugOverlay.swift */,
+				F10000000000000000000091 /* BeatTestOverlay.swift */,
+				F10000000000000000000092 /* BeatPunchState.swift */,
 				B10000000000000000000009 /* RemoteReader.swift */,
 				B10000000000000000000011 /* BeatClock.swift */,
 				B10000000000000000000012 /* TempoService.swift */,
@@ -335,6 +344,9 @@
 				C100000000000000000001D /* ProjectMRenderState.swift in Sources */,
 				C10000000000000000000006 /* MusicSession.swift in Sources */,
 				C10000000000000000000008 /* NowPlayingOverlay.swift in Sources */,
+				F20000000000000000000090 /* MicAudioDebugOverlay.swift in Sources */,
+				F20000000000000000000091 /* BeatTestOverlay.swift in Sources */,
+				F20000000000000000000092 /* BeatPunchState.swift in Sources */,
 				C10000000000000000000009 /* RemoteReader.swift in Sources */,
 				C10000000000000000000011 /* BeatClock.swift in Sources */,
 				C10000000000000000000012 /* TempoService.swift in Sources */,

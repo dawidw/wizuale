@@ -37,8 +37,27 @@ struct MicRootView: View {
 
                         meter(title: "Level", value: mic.level)
                         meter(title: "Bass", value: mic.bassLevel)
+                        if mic.tvAudioDebug {
+                            meter(title: "PCM RMS", value: min(mic.capturePcmRms * 4, 1))
+                            Text(String(
+                                format: "tap %.4f  wire %.4f",
+                                mic.capturePcmRms,
+                                mic.wirePcmRms
+                            ))
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.55))
+                            if !mic.captureSessionInfo.isEmpty {
+                                Text(mic.captureSessionInfo)
+                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.5))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
                         sensitivitySlider
                         latencySlider
+                        brightnessSlider
+                        beatStrengthSlider
+                        tvDebugToggle
                         autoCycleControls
                         calibrateControl
                     }
@@ -115,6 +134,52 @@ struct MicRootView: View {
         }
     }
 
+    private var brightnessSlider: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("JASNOŚĆ")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Text("\(mic.pictureBrightness)%")
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            MiniSlider(
+                value: Binding(
+                    get: { Double(mic.pictureBrightness) },
+                    set: { mic.pictureBrightness = Int($0.rounded()) }
+                ),
+                in: Double(MicTuning.pictureBrightnessMin)...Double(MicTuning.pictureBrightnessMax),
+                step: 1
+            )
+        }
+    }
+
+    private var beatStrengthSlider: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("SIŁA BITU")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Text("\(mic.beatStrength)%")
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            MiniSlider(
+                value: Binding(
+                    get: { Double(mic.beatStrength) },
+                    set: { mic.beatStrength = Int($0.rounded()) }
+                ),
+                in: Double(MicTuning.beatStrengthMin)...Double(MicTuning.beatStrengthMax),
+                step: 1
+            )
+        }
+    }
+
     private var latencySlider: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -135,6 +200,21 @@ struct MicRootView: View {
                 in: Double(MicTuning.latencyMin)...Double(MicTuning.latencyMax),
                 step: Double(MicTuning.latencyStep)
             )
+        }
+    }
+
+    private var tvDebugToggle: some View {
+        HStack {
+            Text("TV AUDIO DEBUG")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(1.4)
+                .foregroundStyle(.white.opacity(0.5))
+            Spacer()
+            Toggle("Show audio debug on Apple TV", isOn: $mic.tvAudioDebug)
+                .labelsHidden()
+                .tint(.white.opacity(0.4))
+                .scaleEffect(0.75, anchor: .trailing)
+                .frame(height: 24)
         }
     }
 

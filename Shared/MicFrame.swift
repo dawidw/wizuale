@@ -45,7 +45,19 @@ enum MicPacket: Equatable, Sendable {
     case pcm(sequence: UInt16, sampleRate: Float, samples: [Int16])
     case cycle(sequence: UInt16, autoAdvance: Bool, intervalSeconds: Int)
     case boost(sequence: UInt16, amount: Float)
-    case ack(preset: Int16, cycling: Bool, latencyMs: Int?, sensitivity: Float?)
+    case debug(sequence: UInt16, showAudioOverlay: Bool)
+    case dim(sequence: UInt16, brightnessPercent: Int)
+    case beatStrength(sequence: UInt16, strengthPercent: Int)
+    case ack(
+        preset: Int16,
+        cycling: Bool,
+        latencyMs: Int?,
+        sensitivity: Float?,
+        showAudioDebug: Bool?,
+        pictureBrightness: Int?,
+        beatStrength: Int?,
+        stateRevision: UInt16?
+    )
 }
 
 /// Picture choice on the wire. Both apps use `MilkPresetCatalog.presets` in this order.
@@ -63,7 +75,11 @@ enum PresetWire {
 /// PCM, 16 + 2*N bytes: kind = 6, sampleRate f32, sampleCount u16, reserved u16, int16 mono samples (max 512).
 /// Cycle, 12 bytes: kind = 7, auto u16 (0/1), intervalSeconds u16 (15…600).
 /// Boost, 12 bytes: magic, kind = 5, sequence u16, amount f32 (0...1).
+/// Dim, 12 bytes: kind = 9, sequence u16, brightnessPercent u16 (10…100), reserved u16.
+/// Beat strength, 12 bytes: kind = 10, sequence u16, strengthPercent u16 (0…100), reserved u16.
 /// Ack, 16 bytes: magic, kind = 3, preset i16, cycling u16, latency i16, sensitivity f32.
+/// 18 bytes adds showAudioDebug u16. 22 bytes adds pictureBrightness u16 and stateRevision u16.
+/// 24 bytes adds beatStrength u16 (0…100).
 /// A 10-byte ack from the previous build still decodes; latency and sensitivity are absent.
 ///
 /// A 36-byte packet from the first mic build is ignored. Both apps ship together.
@@ -77,16 +93,25 @@ enum MicWire {
     static let kindBoost: UInt16 = 5
     static let kindPcm: UInt16 = 6
     static let kindCycle: UInt16 = 7
+    static let kindDebug: UInt16 = 8
+    static let kindDim: UInt16 = 9
+    static let kindBeatStrength: UInt16 = 10
+    static let debugBytes = 10
+    static let dimBytes = 12
+    static let beatStrengthBytes = 12
     static let gainCeiling: Float = 2.5
     static let audioBytes = 40
     static let commandBytes = 10
     static let ackBytes = 10
     static let ackTunedBytes = 16
+    static let ackDebugBytes = 18
+    static let ackStateBytes = 22
+    static let ackBeatBytes = 24
     static let settingsBytes = 16
     static let cycleBytes = 12
     static let boostBytes = 12
     static let pcmHeaderBytes = 16
-    static let pcmMaxSamples = 512
+    static let pcmMaxSamples = 1024
 
     /// Kind field at byte offset 4, without full decode.
     static func peekKind(_ data: Data) -> UInt16? {
@@ -156,6 +181,37 @@ enum MicWire {
         return data
     }
 
+    static func encodeDebug(sequence: UInt16, showAudioOverlay: Bool) -> Data {
+        var data = Data(capacity: debugBytes)
+        write(magic, &data)
+        write(kindDebug, &data)
+        write(sequence, &data)
+        write(showAudioOverlay ? UInt16(1) : UInt16(0), &data)
+        return data
+    }
+
+    static func encodeBeatStrength(sequence: UInt16, strengthPercent: Int) -> Data {
+        let pct = UInt16(clamping: MicTuning.clampBeatStrength(strengthPercent))
+        var data = Data(capacity: beatStrengthBytes)
+        write(magic, &data)
+        write(kindBeatStrength, &data)
+        write(sequence, &data)
+        write(pct, &data)
+        write(UInt16(0), &data)
+        return data
+    }
+
+    static func encodeDim(sequence: UInt16, brightnessPercent: Int) -> Data {
+        let pct = UInt16(clamping: MicTuning.clampPictureBrightness(brightnessPercent))
+        var data = Data(capacity: dimBytes)
+        write(magic, &data)
+        write(kindDim, &data)
+        write(sequence, &data)
+        write(pct, &data)
+        write(UInt16(0), &data)
+        return data
+    }
+
     static func encodeBoost(sequence: UInt16, amount: Float) -> Data {
         var data = Data(capacity: boostBytes)
         write(magic, &data)
@@ -165,14 +221,29 @@ enum MicWire {
         return data
     }
 
-    static func encodeAck(preset: Int16, cycling: Bool, latencyMs: Int, sensitivity: Float) -> Data {
-        var data = Data(capacity: ackTunedBytes)
+    static func encodeAck(
+        preset: Int16,
+        cycling: Bool,
+        latencyMs: Int,
+        sensitivity: Float,
+        showAudioDebug: Bool,
+        pictureBrightness: Int,
+        beatStrength: Int,
+        stateRevision: UInt16
+    ) -> Data {
+        let pct = UInt16(clamping: MicTuning.clampPictureBrightness(pictureBrightness))
+        let beat = UInt16(clamping: MicTuning.clampBeatStrength(beatStrength))
+        var data = Data(capacity: ackBeatBytes)
         write(magic, &data)
         write(kindAck, &data)
         write(preset, &data)
         write(cycling ? UInt16(1) : UInt16(0), &data)
         write(Int16(clamping: MicTuning.clampLatency(latencyMs)), &data)
         write(slider(sensitivity), &data)
+        write(showAudioDebug ? UInt16(1) : UInt16(0), &data)
+        write(pct, &data)
+        write(stateRevision, &data)
+        write(beat, &data)
         return data
     }
 
@@ -251,18 +322,53 @@ enum MicWire {
             guard let amount = readBoost(data, 8) else { return nil }
             return .boost(sequence: readUInt16(data, 6), amount: amount)
         }
+        if kind == kindDebug {
+            guard data.count >= debugBytes else { return nil }
+            return .debug(sequence: readUInt16(data, 6), showAudioOverlay: readUInt16(data, 8) != 0)
+        }
+        if kind == kindDim {
+            guard data.count >= dimBytes else { return nil }
+            let pct = MicTuning.clampPictureBrightness(Int(readUInt16(data, 8)))
+            return .dim(sequence: readUInt16(data, 6), brightnessPercent: pct)
+        }
+        if kind == kindBeatStrength {
+            guard data.count >= beatStrengthBytes else { return nil }
+            let pct = MicTuning.clampBeatStrength(Int(readUInt16(data, 8)))
+            return .beatStrength(sequence: readUInt16(data, 6), strengthPercent: pct)
+        }
         if kind == kindAck {
             guard data.count >= ackBytes else { return nil }
             let cycling = readUInt16(data, 8) != 0
             if data.count >= ackTunedBytes, let sensitivity = readSlider(data, 12) {
+                let debug: Bool? = data.count >= ackDebugBytes ? (readUInt16(data, 16) != 0) : nil
+                let brightness: Int? = data.count >= ackStateBytes
+                    ? MicTuning.clampPictureBrightness(Int(readUInt16(data, 18)))
+                    : nil
+                let revision: UInt16? = data.count >= ackStateBytes ? readUInt16(data, 20) : nil
+                let beat: Int? = data.count >= ackBeatBytes
+                    ? MicTuning.clampBeatStrength(Int(readUInt16(data, 22)))
+                    : nil
                 return .ack(
                     preset: readInt16(data, 6),
                     cycling: cycling,
                     latencyMs: Int(readInt16(data, 10)),
-                    sensitivity: sensitivity
+                    sensitivity: sensitivity,
+                    showAudioDebug: debug,
+                    pictureBrightness: brightness,
+                    beatStrength: beat,
+                    stateRevision: revision
                 )
             }
-            return .ack(preset: readInt16(data, 6), cycling: cycling, latencyMs: nil, sensitivity: nil)
+            return .ack(
+                preset: readInt16(data, 6),
+                cycling: cycling,
+                latencyMs: nil,
+                sensitivity: nil,
+                showAudioDebug: nil,
+                pictureBrightness: nil,
+                beatStrength: nil,
+                stateRevision: nil
+            )
         }
         return nil
     }

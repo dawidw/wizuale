@@ -224,14 +224,44 @@ struct BandAnalyzer {
 
 /// Downmix a tap buffer to mono floats. Shared by the phone and the TV mic.
 enum MicPCM {
+    static func rms(_ samples: [Float]) -> Float {
+        guard !samples.isEmpty else { return 0 }
+        var sum: Float = 0
+        for s in samples { sum += s * s }
+        return sqrtf(sum / Float(samples.count))
+    }
+
+    static func rmsInt16(_ samples: [Int16]) -> Float {
+        guard !samples.isEmpty else { return 0 }
+        var sum: Float = 0
+        for s in samples {
+            let f = Float(s) / 32768
+            sum += f * f
+        }
+        return sqrtf(sum / Float(samples.count))
+    }
+
     static func monoFloats(from buffer: AVAudioPCMBuffer) -> [Float] {
         let frames = Int(buffer.frameLength)
         guard frames > 0 else { return [] }
+        if let channels = buffer.int16ChannelData {
+            let count = Int(buffer.format.channelCount)
+            guard count > 0 else { return [] }
+            var mono = [Float](repeating: 0, count: frames)
+            let scale = 1 / (sqrtf(Float(count)) * 32768)
+            for channel in 0..<count {
+                let samples = channels[channel]
+                for frame in 0..<frames {
+                    mono[frame] += Float(samples[frame]) * scale
+                }
+            }
+            return mono
+        }
         if let channels = buffer.floatChannelData {
             let count = Int(buffer.format.channelCount)
             guard count > 0 else { return [] }
             var mono = [Float](repeating: 0, count: frames)
-            let scale = 1 / Float(count)
+            let scale = 1 / sqrtf(Float(count))
             for channel in 0..<count {
                 let samples = channels[channel]
                 for frame in 0..<frames {
@@ -272,16 +302,22 @@ enum MicPCM {
         return Array(UnsafeBufferPointer(start: channels[0], count: got))
     }
 
-    /// Mono int16 for the Wi-Fi PCM side channel (~512 samples per datagram).
-    static func monoInt16(from buffer: AVAudioPCMBuffer, maxFrames: Int = 512) -> (samples: [Int16], sampleRate: Float) {
+    /// Mono int16 for the Wi-Fi PCM side channel. Linear encode — TV AGC brings quiet room mics up.
+    static func monoInt16(
+        from buffer: AVAudioPCMBuffer,
+        maxFrames: Int = 512,
+        wireGain: Float = 1
+    ) -> (samples: [Int16], sampleRate: Float) {
         let floats = monoFloats(from: buffer)
         let rate = Float(buffer.format.sampleRate)
         guard !floats.isEmpty else { return ([], rate) }
         let count = min(floats.count, maxFrames)
+        let gain = min(max(wireGain, 0.25), 3)
         var out = [Int16](repeating: 0, count: count)
         for i in 0..<count {
-            let clamped = min(max(floats[i], -1), 1)
-            out[i] = Int16(clamped * 32767)
+            let scaled = min(max(floats[i] * gain, -1), 1)
+            let quantized = scaled * 32767
+            out[i] = Int16(clamping: Int(quantized.rounded()))
         }
         return (out, rate)
     }
