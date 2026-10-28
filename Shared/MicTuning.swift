@@ -28,10 +28,16 @@ enum MicTuning {
     static let tvAudioDebugKey = "wizuale.mic.tvAudioDebug"
     static let pictureBrightnessKey = "wizuale.mic.pictureBrightness"
     static let tvPictureBrightnessKey = "wizuale.tv.pictureBrightness"
+    static let beatStrengthKey = "wizuale.mic.beatStrength"
+    static let tvBeatStrengthKey = "wizuale.tv.beatStrength"
 
     static let pictureBrightnessMin = 10
     static let pictureBrightnessMax = 100
     static let pictureBrightnessDefault = 100
+
+    static let beatStrengthMin = 0
+    static let beatStrengthMax = 100
+    static let beatStrengthDefault = 70
 
     static let sensitivityMin: Float = 0.25
     static let sensitivityMax: Float = 3
@@ -138,6 +144,32 @@ enum MicTuning {
 
     static func saveTVPictureBrightness(_ percent: Int) {
         UserDefaults.standard.set(clampPictureBrightness(percent), forKey: tvPictureBrightnessKey)
+    }
+
+    static func clampBeatStrength(_ percent: Int) -> Int {
+        min(max(percent, beatStrengthMin), beatStrengthMax)
+    }
+
+    static func loadBeatStrength() -> Int {
+        guard UserDefaults.standard.object(forKey: beatStrengthKey) != nil else {
+            return beatStrengthDefault
+        }
+        return clampBeatStrength(UserDefaults.standard.integer(forKey: beatStrengthKey))
+    }
+
+    static func saveBeatStrength(_ percent: Int) {
+        UserDefaults.standard.set(clampBeatStrength(percent), forKey: beatStrengthKey)
+    }
+
+    static func loadTVBeatStrength() -> Int {
+        guard UserDefaults.standard.object(forKey: tvBeatStrengthKey) != nil else {
+            return beatStrengthDefault
+        }
+        return clampBeatStrength(UserDefaults.standard.integer(forKey: tvBeatStrengthKey))
+    }
+
+    static func saveTVBeatStrength(_ percent: Int) {
+        UserDefaults.standard.set(clampBeatStrength(percent), forKey: tvBeatStrengthKey)
     }
 }
 

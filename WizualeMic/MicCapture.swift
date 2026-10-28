@@ -103,6 +103,21 @@ final class MicCapture: ObservableObject {
             scheduleDim()
         }
     }
+    @Published var beatStrength: Int = MicTuning.loadBeatStrength() {
+        didSet {
+            let clamped = MicTuning.clampBeatStrength(beatStrength)
+            if clamped != beatStrength {
+                beatStrength = clamped
+                return
+            }
+            guard !applyingRemote, clamped != oldValue else { return }
+            MicTuning.saveBeatStrength(clamped)
+            flag.lock()
+            heldBeatStrength = clamped
+            flag.unlock()
+            scheduleBeatStrength()
+        }
+    }
 
     private let engine = AVAudioEngine()
     private let network = DispatchQueue(label: "app.wizuale.mic.send")
@@ -118,10 +133,12 @@ final class MicCapture: ObservableObject {
     private var cycleSequence: UInt16 = 0
     private var debugSequence: UInt16 = 0
     private var dimSequence: UInt16 = 0
+    private var beatStrengthSequence: UInt16 = 0
     private var pendingPCM: [Data] = []
     private var heldSensitivity: Float = MicTuning.loadSensitivity()
     private var heldTVAudioDebug = MicTuning.loadTVAudioDebug()
     private var heldPictureBrightness = MicTuning.loadPictureBrightness()
+    private var heldBeatStrength = MicTuning.loadBeatStrength()
     private var applyingRemote = false
     private var reportedTapFormat = false
     private var lastUI: CFTimeInterval = 0
@@ -136,10 +153,12 @@ final class MicCapture: ObservableObject {
     private var pendingBoost: Data?
     private var pendingDebug: Data?
     private var pendingDim: Data?
+    private var pendingBeatStrength: Data?
     private var lastCommand: Data?
     private var lastSettings: Data?
     private var lastBoost: Data?
     private var lastDim: Data?
+    private var lastBeatStrength: Data?
     private var lastCycle: Data?
     private var controlSending = false
     private var pcmInFlight = 0
@@ -167,6 +186,8 @@ final class MicCapture: ObservableObject {
     private var latHoldUntil: CFTimeInterval = 0
     private var debugSyncHeartbeat: DispatchWorkItem?
     private var dimSyncHeartbeat: DispatchWorkItem?
+    private var beatStrengthSyncHeartbeat: DispatchWorkItem?
+    private var beatStrengthDebounceWork: DispatchWorkItem?
     private var dimDebounceWork: DispatchWorkItem?
     private var startGeneration = 0
     private var interruption: NSObjectProtocol?
@@ -832,10 +853,14 @@ final class MicCapture: ObservableObject {
             if pendingDim == nil, let lastDim {
                 pendingDim = lastDim
             }
+            if pendingBeatStrength == nil, let lastBeatStrength {
+                pendingBeatStrength = lastBeatStrength
+            }
             startPCMSender()
             scheduleTVAudioDebug()
             scheduleDebugSyncHeartbeat()
             scheduleDimSyncHeartbeat()
+            primeBeatStrengthOnNetwork()
             pumpControl()
             pumpPCM()
         case .failed(let error):
@@ -893,6 +918,7 @@ final class MicCapture: ObservableObject {
                             let sensitivity,
                             _,
                             let brightness,
+                            let beat,
                             let revision
                         ) = packet {
                             self.log.debug("ack received preset=\(preset) cycling=\(cycling) rev=\(revision ?? 0)")
@@ -903,6 +929,7 @@ final class MicCapture: ObservableObject {
                             )
                             self.noteRemoteTuning(latency: latency, sensitivity: sensitivity)
                             self.noteRemoteBrightness(brightness)
+                            self.noteRemoteBeatStrength(beat)
                         }
                     } else if data.count >= 6, MicWire.peekKind(data) == MicWire.kindAck {
                         self.log.error("ack decode failed (\(data.count) bytes)")
@@ -995,6 +1022,16 @@ final class MicCapture: ObservableObject {
         }
     }
 
+    private func noteRemoteBeatStrength(_ percent: Int?) {
+        guard let percent else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.applyingRemote = true
+            self.beatStrength = percent
+            self.applyingRemote = false
+        }
+    }
+
     private func refreshLink() {
         guard confirmed else { return }
         if CACurrentMediaTime() - lastAck > 1.1 {
@@ -1036,6 +1073,10 @@ final class MicCapture: ObservableObject {
         dimSyncHeartbeat = nil
         dimDebounceWork?.cancel()
         dimDebounceWork = nil
+        beatStrengthSyncHeartbeat?.cancel()
+        beatStrengthSyncHeartbeat = nil
+        beatStrengthDebounceWork?.cancel()
+        beatStrengthDebounceWork = nil
         pcmSendTimer?.cancel()
         pcmSendTimer = nil
         pcmRingLock.lock()
@@ -1138,6 +1179,55 @@ final class MicCapture: ObservableObject {
         network.asyncAfter(deadline: .now() + 2.5, execute: work)
     }
 
+    private func scheduleBeatStrength() {
+        flag.lock()
+        let pct = heldBeatStrength
+        flag.unlock()
+        beatStrengthDebounceWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.emitBeatStrength(percent: pct)
+        }
+        beatStrengthDebounceWork = work
+        network.asyncAfter(deadline: .now() + 0.12, execute: work)
+    }
+
+    private func primeBeatStrengthOnNetwork() {
+        let pct = MicTuning.loadBeatStrength()
+        if lastBeatStrength == nil {
+            emitBeatStrength(percent: pct)
+        }
+        scheduleBeatStrengthSyncHeartbeat()
+    }
+
+    private func emitBeatStrength(percent: Int) {
+        flag.lock()
+        beatStrengthSequence &+= 1
+        if beatStrengthSequence == 0 { beatStrengthSequence = 1 }
+        let seq = beatStrengthSequence
+        flag.unlock()
+        let packet = MicWire.encodeBeatStrength(sequence: seq, strengthPercent: percent)
+        network.async { [weak self] in
+            guard let self else { return }
+            self.pendingBeatStrength = packet
+            self.lastBeatStrength = packet
+            self.pumpControl()
+        }
+    }
+
+    private func scheduleBeatStrengthSyncHeartbeat() {
+        beatStrengthSyncHeartbeat?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.running, self.linkWanted() else { return }
+            self.flag.lock()
+            let pct = self.heldBeatStrength
+            self.flag.unlock()
+            self.emitBeatStrength(percent: pct)
+            self.scheduleBeatStrengthSyncHeartbeat()
+        }
+        beatStrengthSyncHeartbeat = work
+        network.asyncAfter(deadline: .now() + 2.5, execute: work)
+    }
+
     private func scheduleDebugSyncHeartbeat() {
         debugSyncHeartbeat?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -1163,6 +1253,9 @@ final class MicCapture: ObservableObject {
             } else if let dim = pendingDim {
                 pendingDim = nil
                 control = dim
+            } else if let beat = pendingBeatStrength {
+                pendingBeatStrength = nil
+                control = beat
             } else if let boost = pendingBoost {
                 pendingBoost = nil
                 control = boost
