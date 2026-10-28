@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import SwiftUI
 
 /// Which picture is showing, and the small title card in the corner.
 @MainActor
@@ -30,6 +31,11 @@ final class VisualSession: ObservableObject {
     @Published private(set) var pictureDimOpacity = VisualSession.dimOpacity(
         for: MicTuning.loadTVPictureBrightness()
     )
+    @Published private(set) var beatStrength = MicTuning.loadTVBeatStrength()
+    @Published private(set) var beatPunchScale: CGFloat = CGFloat(BeatPunchState.baseOverscan)
+    @Published private(set) var beatPunchRotation: Angle = .zero
+    @Published private(set) var beatPunchFlash = false
+    @Published private(set) var beatPunchesPerMinute = 0
     @Published private(set) var audioDebugDrive = MicDrive.silent
     @Published private(set) var audioDebugMetrics = ProjectMAudioHub.Metrics(
         fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: ProjectMAudioHub.defaultAgcGain,
@@ -54,6 +60,8 @@ final class VisualSession: ObservableObject {
     private var hideToken = UUID()
     private var hintToken = UUID()
     private var dimAnimToken = UUID()
+    private let beatPunch = BeatPunchState()
+    private var lastAudioFrameTime: CFTimeInterval = 0
 
     var currentPresetName: String {
         MilkPresetCatalog.preset(at: presetIndex)?.displayName ?? "Preset"
@@ -101,7 +109,14 @@ final class VisualSession: ObservableObject {
                     self?.applyPictureBrightness(percent)
                 }
             }
+            micReceiver.onBeatStrength = { [weak self] percent in
+                Task { @MainActor in
+                    self?.applyBeatStrength(percent)
+                }
+            }
             micReceiver.setAckAudioDebug(showAudioDebug)
+            micReceiver.setAckPictureBrightness(MicTuning.loadTVPictureBrightness())
+            micReceiver.setAckBeatStrength(MicTuning.loadTVBeatStrength())
             micReceiver.onAdoptPhoneSource = { [weak self] in
                 Task { @MainActor in
                     self?.micSource = .phone
@@ -127,6 +142,20 @@ final class VisualSession: ObservableObject {
     }
 
     func noteAudioFrame(drive: MicDrive, metrics: ProjectMAudioHub.Metrics) {
+        let now = CACurrentMediaTime()
+        let dt: Float
+        if lastAudioFrameTime > 0 {
+            dt = Float(now - lastAudioFrameTime)
+        } else {
+            dt = 1.0 / 60.0
+        }
+        lastAudioFrameTime = now
+        beatPunch.setStrengthPercent(beatStrength)
+        let frame = beatPunch.advance(drive: drive, dt: dt, now: now)
+        beatPunchScale = frame.scale
+        beatPunchRotation = .radians(Double(frame.rotationRadians))
+        beatPunchFlash = frame.flash
+        beatPunchesPerMinute = beatPunch.punchesPerMinute
         guard showAudioDebug else { return }
         audioDebugDrive = drive
         audioDebugMetrics = metrics
@@ -152,7 +181,15 @@ final class VisualSession: ObservableObject {
         pictureBrightness = clamped
         MicTuning.saveTVPictureBrightness(clamped)
         micReceiver.setAckPictureBrightness(clamped)
-        animatePictureDim(to: Self.dimOpacity(for: clamped))
+        animatePictureDim(to: VisualSession.dimOpacity(for: clamped))
+    }
+
+    func applyBeatStrength(_ percent: Int) {
+        let clamped = MicTuning.clampBeatStrength(percent)
+        beatStrength = clamped
+        MicTuning.saveTVBeatStrength(clamped)
+        micReceiver.setAckBeatStrength(clamped)
+        beatPunch.setStrengthPercent(clamped)
     }
 
     private func animatePictureDim(to target: Double) {

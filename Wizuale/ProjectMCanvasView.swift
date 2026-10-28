@@ -9,6 +9,8 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
     var micReceiver: MicReceiver
     var micSource: MicInputSource
     var paused: Bool
+    var beatPunchScale: CGFloat = CGFloat(BeatPunchState.baseOverscan)
+    var beatPunchRotation: Angle = .zero
     var onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
     @Binding var failure: String?
 
@@ -29,6 +31,8 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: ProjectMViewController, context: Context) {
         controller.paused = paused
         controller.micSource = micSource
+        controller.beatPunchScale = beatPunchScale
+        controller.beatPunchRotation = CGFloat(beatPunchRotation.radians)
     }
 }
 
@@ -47,6 +51,8 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
 
     var paused = false
     var micSource: MicInputSource = .phone
+    var beatPunchScale: CGFloat = CGFloat(BeatPunchState.baseOverscan)
+    var beatPunchRotation: CGFloat = 0
     var onFailure: ((String) -> Void)?
 
     init(
@@ -74,13 +80,17 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
             return
         }
         context = ctx
-        glView = GLKView(frame: view.bounds, context: ctx)
+        let punchHost = UIView(frame: view.bounds)
+        punchHost.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        punchHost.backgroundColor = .black
+        view.addSubview(punchHost)
+        glView = GLKView(frame: punchHost.bounds, context: ctx)
         glView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         glView.drawableColorFormat = .RGBA8888
         glView.drawableDepthFormat = .format24
         glView.enableSetNeedsDisplay = false
         glView.delegate = self
-        view.addSubview(glView)
+        punchHost.addSubview(glView)
 
         EAGLContext.setCurrent(ctx)
         projectM.create(in: ctx, size: pixelSize)
@@ -159,5 +169,15 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         glClearColor(0, 0, 0, 1)
         glClear(UInt32(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT))
         projectM.render()
+        applyBeatPunchTransform(on: glView.superview)
+    }
+
+    /// Geometry-only punch after libprojectM draws; debug overlays sit above this view.
+    private func applyBeatPunchTransform(on host: UIView?) {
+        guard let host else { return }
+        var transform = CGAffineTransform.identity
+        transform = transform.rotated(by: beatPunchRotation)
+        transform = transform.scaledBy(x: beatPunchScale, y: beatPunchScale)
+        host.transform = transform
     }
 }
