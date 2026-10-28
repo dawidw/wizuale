@@ -89,11 +89,12 @@ final class MicReceiver: @unchecked Sendable {
     private var shownIndex = 0
     private var shownCycling = true
     private var lastAckTime: CFTimeInterval = 0
-    /// Last phone peer that sent a packet. Replies go here first so acks land on the
-    /// same NWConnection the Mic app is receiving on.
-    private var lastPeerKey: ObjectIdentifier?
+    /// Last phone peer on the **control** socket (not PCM). Acks must land where MicCapture listens.
+    private var lastControlPeerKey: ObjectIdentifier?
     private var ackHeartbeat: DispatchWorkItem?
     private var ackAudioDebug = false
+    private var ackPictureBrightness: Int
+    private var stateRevision: UInt16 = 0
 
     private let hitCap: Float = 3.5
 
@@ -102,12 +103,25 @@ final class MicReceiver: @unchecked Sendable {
         latencyMs = MicTuning.loadLatency()
         source = MicTuning.loadSource()
         ackAudioDebug = UserDefaults.standard.bool(forKey: "wizuale.tv.audioDebug")
+        ackPictureBrightness = MicTuning.loadTVPictureBrightness()
     }
 
     /// Echoed in acks so the phone toggle stays in sync with the TV overlay.
     func setAckAudioDebug(_ show: Bool) {
         lock.lock()
         ackAudioDebug = show
+        lock.unlock()
+        queue.async { [weak self] in
+            self?.sendAck(force: true)
+        }
+    }
+
+    func setAckPictureBrightness(_ percent: Int) {
+        let clamped = MicTuning.clampPictureBrightness(percent)
+        lock.lock()
+        ackPictureBrightness = clamped
+        stateRevision &+= 1
+        if stateRevision == 0 { stateRevision = 1 }
         lock.unlock()
         queue.async { [weak self] in
             self?.sendAck(force: true)
@@ -154,6 +168,8 @@ final class MicReceiver: @unchecked Sendable {
         lock.lock()
         shownIndex = index
         shownCycling = cycling
+        stateRevision &+= 1
+        if stateRevision == 0 { stateRevision = 1 }
         lock.unlock()
         queue.async { [weak self] in
             self?.sendAck(force: true)
@@ -368,8 +384,12 @@ final class MicReceiver: @unchecked Sendable {
     }
 
     private func ingest(_ data: Data, from key: ObjectIdentifier) {
-        lastPeerKey = key
         guard let packet = MicWire.decode(data) else { return }
+        if case .pcm = packet {
+            // Phone opens a second UDP socket for PCM. Do not route acks there.
+        } else {
+            lastControlPeerKey = key
+        }
         switch packet {
         case .audio(let sequence, let features, let sens):
             adoptSensitivity(sens)
@@ -408,6 +428,12 @@ final class MicReceiver: @unchecked Sendable {
                 onPCM?(rate, samples)
             }
         case .cycle(_, let auto, let seconds):
+            lock.lock()
+            shownCycling = auto
+            stateRevision &+= 1
+            if stateRevision == 0 { stateRevision = 1 }
+            lock.unlock()
+            sendAck(force: true)
             let handler = onCycle
             if let handler {
                 DispatchQueue.main.async {
@@ -429,6 +455,12 @@ final class MicReceiver: @unchecked Sendable {
         case .dim(_, let brightnessPercent):
             let clamped = MicTuning.clampPictureBrightness(brightnessPercent)
             MicTuning.saveTVPictureBrightness(clamped)
+            lock.lock()
+            ackPictureBrightness = clamped
+            stateRevision &+= 1
+            if stateRevision == 0 { stateRevision = 1 }
+            lock.unlock()
+            sendAck(force: true)
             let handler = onDimming
             if let handler {
                 DispatchQueue.main.async {
@@ -490,6 +522,8 @@ final class MicReceiver: @unchecked Sendable {
             shownIndex = Int(preset)
             shownCycling = false
         }
+        stateRevision &+= 1
+        if stateRevision == 0 { stateRevision = 1 }
         lock.unlock()
     }
 
@@ -503,16 +537,20 @@ final class MicReceiver: @unchecked Sendable {
         let ms = latencyMs
         let sens = sensitivity
         let debug = ackAudioDebug
+        let brightness = ackPictureBrightness
+        let revision = stateRevision
         lock.unlock()
         let packet = MicWire.encodeAck(
             preset: preset,
             cycling: cycling,
             latencyMs: ms,
             sensitivity: sens,
-            showAudioDebug: debug
+            showAudioDebug: debug,
+            pictureBrightness: brightness,
+            stateRevision: revision
         )
         let targets: [NWConnection]
-        if let lastPeerKey, let peer = peers[lastPeerKey] {
+        if let lastControlPeerKey, let peer = peers[lastControlPeerKey] {
             targets = [peer]
         } else {
             targets = Array(peers.values)
@@ -538,8 +576,8 @@ final class MicReceiver: @unchecked Sendable {
     private func drop(_ key: ObjectIdentifier) {
         peers[key]?.cancel()
         peers[key] = nil
-        if lastPeerKey == key {
-            lastPeerKey = nil
+        if lastControlPeerKey == key {
+            lastControlPeerKey = nil
         }
     }
 

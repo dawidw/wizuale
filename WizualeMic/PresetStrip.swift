@@ -8,6 +8,10 @@ struct PresetStrip: View {
     var known: Bool
     var onSelect: (Int) -> Void
 
+    private var scrollTarget: Int {
+        cycling ? Int(PresetWire.auto) : active
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("PRESETS")
@@ -42,16 +46,21 @@ struct PresetStrip: View {
                     .padding(.vertical, 2)
                 }
                 .onAppear {
-                    proxy.scrollTo(active, anchor: .center)
+                    proxy.scrollTo(scrollTarget, anchor: .center)
                 }
-                .onChange(of: active) { _, value in
+                .onChange(of: active) { _, _ in
                     withAnimation(.easeInOut(duration: 0.28)) {
-                        proxy.scrollTo(value, anchor: .center)
+                        proxy.scrollTo(scrollTarget, anchor: .center)
                     }
                 }
                 .onChange(of: cycling) { _, _ in
                     withAnimation(.easeInOut(duration: 0.28)) {
-                        proxy.scrollTo(active, anchor: .center)
+                        proxy.scrollTo(scrollTarget, anchor: .center)
+                    }
+                }
+                .onChange(of: known) { _, _ in
+                    withAnimation(.easeInOut(duration: 0.28)) {
+                        proxy.scrollTo(scrollTarget, anchor: .center)
                     }
                 }
             }

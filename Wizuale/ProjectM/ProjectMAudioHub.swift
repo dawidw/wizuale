@@ -46,6 +46,9 @@ final class ProjectMAudioHub: @unchecked Sendable {
     /// TV monotonic clock — last PCM datagram arrival.
     private var lastArrival: CFTimeInterval = 0
     private var transportUp = false
+    /// Display hysteresis so brief PCM gaps do not flip debug Source to FALLBACK.
+    private var streamDisplayedLive = false
+    private var streamDropGraceUntil: CFTimeInterval = 0
 
     private var lastFeed: CFTimeInterval = 0
     private var meanSquare: Float = 0
@@ -118,6 +121,8 @@ final class ProjectMAudioHub: @unchecked Sendable {
         }
         lastArrival = now
         transportUp = true
+        streamDisplayedLive = true
+        streamDropGraceUntil = 0
 
         if windowBegin == 0 {
             windowBegin = now
@@ -176,8 +181,20 @@ final class ProjectMAudioHub: @unchecked Sendable {
             softenShapingState()
             lastArrival = 0
             streamRmsEma = 0
+            if streamDropGraceUntil == 0 {
+                streamDropGraceUntil = now + 0.55
+            }
         }
-        let transportLive = transportUp
+        let transportLive: Bool
+        if transportUp {
+            transportLive = true
+        } else if streamDisplayedLive, now < streamDropGraceUntil {
+            transportLive = true
+        } else {
+            streamDisplayedLive = false
+            streamDropGraceUntil = 0
+            transportLive = false
+        }
         let paceDt = min(dt, 1.0 / 55.0)
         let frameSamples = max(1, Int((r * paceDt).rounded()))
         var due = frameSamples
@@ -196,7 +213,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
             feedState = .none
         case .phone:
             if !transportLive {
-                feedState = .fallback
+                feedState = fifo.count > 0 ? .phonePCM : .fallback
             } else {
                 feedState = .phonePCM
                 let take = min(due, fifo.count)
@@ -210,7 +227,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
             }
         case .continuity:
             if !transportLive {
-                feedState = .fallback
+                feedState = fifo.count > 0 ? .continuityPCM : .fallback
             } else {
                 feedState = .continuityPCM
                 let take = min(due, fifo.count)

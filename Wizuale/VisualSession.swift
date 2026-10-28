@@ -113,6 +113,8 @@ final class VisualSession: ObservableObject {
                     self.autoCycle = auto
                     self.cycleSeconds = seconds
                     self.projectMState.setAutoCycle(auto, seconds: seconds)
+                    let cycling = auto && !self.phoneLocked
+                    self.micReceiver.setShown(index: self.presetIndex, cycling: cycling)
                     if auto && !self.phoneLocked { self.armCycle() }
                 }
             }
@@ -149,6 +151,7 @@ final class VisualSession: ObservableObject {
         let clamped = MicTuning.clampPictureBrightness(percent)
         pictureBrightness = clamped
         MicTuning.saveTVPictureBrightness(clamped)
+        micReceiver.setAckPictureBrightness(clamped)
         animatePictureDim(to: Self.dimOpacity(for: clamped))
     }
 

@@ -47,7 +47,15 @@ enum MicPacket: Equatable, Sendable {
     case boost(sequence: UInt16, amount: Float)
     case debug(sequence: UInt16, showAudioOverlay: Bool)
     case dim(sequence: UInt16, brightnessPercent: Int)
-    case ack(preset: Int16, cycling: Bool, latencyMs: Int?, sensitivity: Float?, showAudioDebug: Bool?)
+    case ack(
+        preset: Int16,
+        cycling: Bool,
+        latencyMs: Int?,
+        sensitivity: Float?,
+        showAudioDebug: Bool?,
+        pictureBrightness: Int?,
+        stateRevision: UInt16?
+    )
 }
 
 /// Picture choice on the wire. Both apps use `MilkPresetCatalog.presets` in this order.
@@ -67,6 +75,7 @@ enum PresetWire {
 /// Boost, 12 bytes: magic, kind = 5, sequence u16, amount f32 (0...1).
 /// Dim, 12 bytes: kind = 9, sequence u16, brightnessPercent u16 (10…100), reserved u16.
 /// Ack, 16 bytes: magic, kind = 3, preset i16, cycling u16, latency i16, sensitivity f32.
+/// 18 bytes adds showAudioDebug u16. 22 bytes adds pictureBrightness u16 and stateRevision u16.
 /// A 10-byte ack from the previous build still decodes; latency and sensitivity are absent.
 ///
 /// A 36-byte packet from the first mic build is ignored. Both apps ship together.
@@ -90,6 +99,7 @@ enum MicWire {
     static let ackBytes = 10
     static let ackTunedBytes = 16
     static let ackDebugBytes = 18
+    static let ackStateBytes = 22
     static let settingsBytes = 16
     static let cycleBytes = 12
     static let boostBytes = 12
@@ -198,9 +208,12 @@ enum MicWire {
         cycling: Bool,
         latencyMs: Int,
         sensitivity: Float,
-        showAudioDebug: Bool
+        showAudioDebug: Bool,
+        pictureBrightness: Int,
+        stateRevision: UInt16
     ) -> Data {
-        var data = Data(capacity: ackDebugBytes)
+        let pct = UInt16(clamping: MicTuning.clampPictureBrightness(pictureBrightness))
+        var data = Data(capacity: ackStateBytes)
         write(magic, &data)
         write(kindAck, &data)
         write(preset, &data)
@@ -208,6 +221,8 @@ enum MicWire {
         write(Int16(clamping: MicTuning.clampLatency(latencyMs)), &data)
         write(slider(sensitivity), &data)
         write(showAudioDebug ? UInt16(1) : UInt16(0), &data)
+        write(pct, &data)
+        write(stateRevision, &data)
         return data
     }
 
@@ -300,12 +315,18 @@ enum MicWire {
             let cycling = readUInt16(data, 8) != 0
             if data.count >= ackTunedBytes, let sensitivity = readSlider(data, 12) {
                 let debug: Bool? = data.count >= ackDebugBytes ? (readUInt16(data, 16) != 0) : nil
+                let brightness: Int? = data.count >= ackStateBytes
+                    ? MicTuning.clampPictureBrightness(Int(readUInt16(data, 18)))
+                    : nil
+                let revision: UInt16? = data.count >= ackStateBytes ? readUInt16(data, 20) : nil
                 return .ack(
                     preset: readInt16(data, 6),
                     cycling: cycling,
                     latencyMs: Int(readInt16(data, 10)),
                     sensitivity: sensitivity,
-                    showAudioDebug: debug
+                    showAudioDebug: debug,
+                    pictureBrightness: brightness,
+                    stateRevision: revision
                 )
             }
             return .ack(
@@ -313,7 +334,9 @@ enum MicWire {
                 cycling: cycling,
                 latencyMs: nil,
                 sensitivity: nil,
-                showAudioDebug: nil
+                showAudioDebug: nil,
+                pictureBrightness: nil,
+                stateRevision: nil
             )
         }
         return nil

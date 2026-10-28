@@ -97,6 +97,9 @@ final class MicCapture: ObservableObject {
             }
             guard !applyingRemote, clamped != oldValue else { return }
             MicTuning.savePictureBrightness(clamped)
+            flag.lock()
+            heldPictureBrightness = clamped
+            flag.unlock()
             scheduleDim()
         }
     }
@@ -118,6 +121,7 @@ final class MicCapture: ObservableObject {
     private var pendingPCM: [Data] = []
     private var heldSensitivity: Float = MicTuning.loadSensitivity()
     private var heldTVAudioDebug = MicTuning.loadTVAudioDebug()
+    private var heldPictureBrightness = MicTuning.loadPictureBrightness()
     private var applyingRemote = false
     private var reportedTapFormat = false
     private var lastUI: CFTimeInterval = 0
@@ -125,6 +129,7 @@ final class MicCapture: ObservableObject {
     private var controlConnection: NWConnection?
     private var pcmConnection: NWConnection?
     private var connectedName = ""
+    private var peerEndpoint: NWEndpoint?
     private var pendingAudio: Data?
     private var pendingCommands: [Data] = []
     private var pendingSettings: Data?
@@ -135,6 +140,7 @@ final class MicCapture: ObservableObject {
     private var lastSettings: Data?
     private var lastBoost: Data?
     private var lastDim: Data?
+    private var lastCycle: Data?
     private var controlSending = false
     private var pcmInFlight = 0
     private let maxPCMInFlight = 24
@@ -149,6 +155,7 @@ final class MicCapture: ObservableObject {
     private var epoch = 0
     private var confirmed = false
     private var lastAck: CFTimeInterval = 0
+    private var lastAckStateRevision: UInt16 = 0
     private var sendToken = 0
     /// After a tap, ignore acks that still name the pre-tap picture for this long.
     private var tapIgnoreUntil: CFTimeInterval = 0
@@ -674,6 +681,7 @@ final class MicCapture: ObservableObject {
         let seq = cycleSequence
         flag.unlock()
         let packet = MicWire.encodeCycle(sequence: seq, autoAdvance: auto, intervalSeconds: seconds)
+        lastCycle = packet
         pendingCommands.append(packet)
         if pendingCommands.count > 8 {
             pendingCommands.removeFirst(pendingCommands.count - 8)
@@ -784,6 +792,7 @@ final class MicCapture: ObservableObject {
         let control = NWConnection(to: endpoint, using: params)
         let pcm = NWConnection(to: endpoint, using: params)
         connectedName = name
+        peerEndpoint = endpoint
         controlConnection = control
         pcmConnection = pcm
         control.stateUpdateHandler = { [weak self] state in
@@ -810,6 +819,9 @@ final class MicCapture: ObservableObject {
             }
             if pendingCommands.isEmpty, let lastCommand {
                 pendingCommands.append(lastCommand)
+            }
+            if pendingCommands.isEmpty, let lastCycle {
+                pendingCommands.append(lastCycle)
             }
             if pendingSettings == nil, let lastSettings {
                 pendingSettings = lastSettings
@@ -846,11 +858,24 @@ final class MicCapture: ObservableObject {
 
     private func pcmConnectionState(_ state: NWConnection.State, name: String) {
         guard linkWanted(), connectedName == name else { return }
-        if case .ready = state {
+        switch state {
+        case .ready:
             pumpPCM()
-        } else if case .failed = state {
+        case .failed:
             pcmConnection?.cancel()
             pcmConnection = nil
+            guard let endpoint = peerEndpoint else { return }
+            let params = NWParameters.udp
+            params.includePeerToPeer = true
+            params.serviceClass = .interactiveVoice
+            let pcm = NWConnection(to: endpoint, using: params)
+            pcm.stateUpdateHandler = { [weak self] state in
+                self?.pcmConnectionState(state, name: name)
+            }
+            pcmConnection = pcm
+            pcm.start(queue: network)
+        default:
+            break
         }
     }
 
@@ -861,10 +886,23 @@ final class MicCapture: ObservableObject {
                 guard let self, self.receiving else { return }
                 if let data {
                     if let packet = MicWire.decode(data) {
-                        if case .ack(let preset, let cycling, let latency, let sensitivity, _) = packet {
-                            self.log.debug("ack received preset=\(preset) cycling=\(cycling)")
-                            self.noteAck(preset: preset, cycling: cycling)
+                        if case .ack(
+                            let preset,
+                            let cycling,
+                            let latency,
+                            let sensitivity,
+                            _,
+                            let brightness,
+                            let revision
+                        ) = packet {
+                            self.log.debug("ack received preset=\(preset) cycling=\(cycling) rev=\(revision ?? 0)")
+                            self.noteAck(
+                                preset: preset,
+                                cycling: cycling,
+                                stateRevision: revision
+                            )
                             self.noteRemoteTuning(latency: latency, sensitivity: sensitivity)
+                            self.noteRemoteBrightness(brightness)
                         }
                     } else if data.count >= 6, MicWire.peekKind(data) == MicWire.kindAck {
                         self.log.error("ack decode failed (\(data.count) bytes)")
@@ -885,19 +923,29 @@ final class MicCapture: ObservableObject {
         }
     }
 
-    private func noteAck(preset: Int16, cycling ackCycling: Bool) {
+    private func noteAck(preset: Int16, cycling ackCycling: Bool, stateRevision: UInt16?) {
         guard linkWanted() else { return }
         lastAck = CACurrentMediaTime()
         confirmed = true
         scheduleTVAudioDebug()
         let name = connectedName.isEmpty ? "Apple TV" : connectedName
+        let duplicateHeartbeat = stateRevision.map { $0 > 0 && $0 == lastAckStateRevision } ?? false
+        if duplicateHeartbeat {
+            publish(status: nil, tv: name, linked: true)
+            return
+        }
+        let tvStateChanged = stateRevision.map { $0 > 0 && $0 != lastAckStateRevision } ?? false
+        if let stateRevision, stateRevision > 0 {
+            lastAckStateRevision = stateRevision
+        }
         let index = Int(preset)
         guard MilkPresetCatalog.presets.indices.contains(index) else {
             log.error("ack ignored invalid preset index \(index)")
             return
         }
         let now = CACurrentMediaTime()
-        if now < tapIgnoreUntil,
+        if !tvStateChanged,
+           now < tapIgnoreUntil,
            index == tapStalePreset,
            ackCycling == tapStaleCycling {
             log.debug("ack ignored stale preset=\(index) cycling=\(ackCycling)")
@@ -933,6 +981,16 @@ final class MicCapture: ObservableObject {
             if let nextLat {
                 self.latencyMs = nextLat
             }
+            self.applyingRemote = false
+        }
+    }
+
+    private func noteRemoteBrightness(_ percent: Int?) {
+        guard let percent else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.applyingRemote = true
+            self.pictureBrightness = percent
             self.applyingRemote = false
         }
     }
@@ -1032,7 +1090,9 @@ final class MicCapture: ObservableObject {
     }
 
     private func scheduleDim() {
-        let pct = pictureBrightness
+        flag.lock()
+        let pct = heldPictureBrightness
+        flag.unlock()
         dimDebounceWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             self?.emitDim(percent: pct)
@@ -1068,7 +1128,10 @@ final class MicCapture: ObservableObject {
         dimSyncHeartbeat?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.running, self.linkWanted() else { return }
-            self.emitDim(percent: MicTuning.loadPictureBrightness())
+            self.flag.lock()
+            let pct = self.heldPictureBrightness
+            self.flag.unlock()
+            self.emitDim(percent: pct)
             self.scheduleDimSyncHeartbeat()
         }
         dimSyncHeartbeat = work
@@ -1092,14 +1155,14 @@ final class MicCapture: ObservableObject {
         var batch = 0
         while batch < 4, !controlSending {
             let control: Data?
-            if let debug = pendingDebug {
+            if !pendingCommands.isEmpty {
+                control = pendingCommands.removeFirst()
+            } else if let debug = pendingDebug {
                 pendingDebug = nil
                 control = debug
             } else if let dim = pendingDim {
                 pendingDim = nil
                 control = dim
-            } else if !pendingCommands.isEmpty {
-                control = pendingCommands.removeFirst()
             } else if let boost = pendingBoost {
                 pendingBoost = nil
                 control = boost
@@ -1159,6 +1222,7 @@ final class MicCapture: ObservableObject {
         controlConnection = nil
         pcmConnection = nil
         connectedName = ""
+        peerEndpoint = nil
         pendingAudio = nil
         pendingPCM.removeAll()
         pendingCommands.removeAll()
@@ -1166,6 +1230,7 @@ final class MicCapture: ObservableObject {
         receiving = false
         confirmed = false
         lastAck = 0
+        lastAckStateRevision = 0
         tapIgnoreUntil = 0
     }
 
