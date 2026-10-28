@@ -25,7 +25,6 @@ final class ProjectMAudioHub: @unchecked Sendable {
         var agcGain: Float
         /// UDP PCM still arriving (hysteresis — see `transportDropTimeout`).
         var streamLive: Bool
-        var accentOnset: Float
         var feedState: ProjectMAudioFeedState
         var micSource: MicInputSource
         var pcmPacketsPerSec: Float
@@ -52,10 +51,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
 
     private var lastFeed: CFTimeInterval = 0
     private var meanSquare: Float = 0
-    private var agcGain: Float = 6
-    private var fastEnv: Float = 0
-    private var slowEnv: Float = 0
-    private var accentEnvelope: Float = 0
+    private var agcGain: Float = ProjectMAudioHub.defaultAgcGain
     private var lastSample: Float = 0
     private var underrunDecay: Float = 0
     private var underrunTotal: UInt32 = 0
@@ -67,25 +63,27 @@ final class ProjectMAudioHub: @unchecked Sendable {
     private var gapCount = 0
     private var gapMaxMs: Float = 0
     private var lastEnqueueRms: Float = 0
-    private var streamRmsEma: Float = 0
     private var feedWindowBegin: CFTimeInterval = 0
     private var feedWindowSamples = 0
     private var displayedFeedSps: Float = 0
 
     private var lastMetrics = Metrics(
-        fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: 6,
-        streamLive: false, accentOnset: 0, feedState: .fallback,
+        fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: ProjectMAudioHub.defaultAgcGain,
+        streamLive: false, feedState: .fallback,
         micSource: .phone, pcmPacketsPerSec: 0, gapAvgMs: 0, gapMaxMs: 0,
         underrunTotal: 0, pcmInRms: 0, projectMFeedSps: 0
     )
 
+    static let defaultAgcGain: Float = 2.8
     static let primeFrameCount: Float = 2
     /// Jitter absorption — larger than phone burst spacing.
     static let maxFifoSeconds: Float = 0.85
     static let targetJitterMs: Float = 70
     static let minPrimeMs: Float = 20
-    static let targetRMS: Float = 0.28
-    static let maxGain: Float = 80
+    /// Steady PCM peaks for MilkDrop bass_att — motion, not white flashes.
+    static let targetRMS: Float = 0.58
+    static let softPeak: Float = 0.68
+    static let maxGain: Float = 12
     static let noiseFloorRMS: Float = 1e-7
     /// No PCM this long ⇒ stream dead (silence drain).
     static let transportDropTimeout: CFTimeInterval = 2.35
@@ -140,16 +138,8 @@ final class ProjectMAudioHub: @unchecked Sendable {
 
         fifo.reserveCapacity(fifo.count + samples.count)
         for s in samples { fifo.append(Float(s) / 32768) }
-        let batchRms = MicPCM.rmsInt16(samples)
-        lastEnqueueRms = batchRms
-        if batchRms > 1e-8 {
-            if streamRmsEma < 1e-8 {
-                streamRmsEma = batchRms
-            } else {
-                streamRmsEma = streamRmsEma * 0.88 + batchRms * 0.12
-            }
-        }
-        let cap = Int(Self.maxFifoSeconds * rate)
+        lastEnqueueRms = MicPCM.rmsInt16(samples)
+        let cap = Int(ProjectMAudioHub.maxFifoSeconds * rate)
         if fifo.count > cap { fifo.removeFirst(fifo.count - cap) }
         lock.unlock()
     }
@@ -163,7 +153,6 @@ final class ProjectMAudioHub: @unchecked Sendable {
 
     /// Hands this frame's audio to `sink` (mono floats in -1...1). Call once per frame.
     func feed(
-        accent: MicDrive,
         micSource: MicInputSource,
         now: CFTimeInterval = CACurrentMediaTime(),
         into sink: ([Float]) -> Void
@@ -175,12 +164,11 @@ final class ProjectMAudioHub: @unchecked Sendable {
         let r = rate
         let sens = sensitivity
         let latency = latencyMs
-        if lastArrival > 0, now - lastArrival > Self.transportDropTimeout {
+        if lastArrival > 0, now - lastArrival > ProjectMAudioHub.transportDropTimeout {
             transportUp = false
             fifo.removeAll(keepingCapacity: true)
             softenShapingState()
             lastArrival = 0
-            streamRmsEma = 0
             if streamDropGraceUntil == 0 {
                 streamDropGraceUntil = now + 0.55
             }
@@ -195,14 +183,14 @@ final class ProjectMAudioHub: @unchecked Sendable {
             streamDropGraceUntil = 0
             transportLive = false
         }
-        let paceDt = min(dt, 1.0 / 55.0)
+        let paceDt = min(dt, 1.0 / 50.0)
         let frameSamples = max(1, Int((r * paceDt).rounded()))
         var due = frameSamples
         if latency < 0 {
             let boost = min(frameSamples / 4, max(0, -latency) * Int(r) / 1000 / 16)
             due += boost
         }
-        let maxDue = max(1, Int(Float(frameSamples) * Self.maxConsumeFrameFactor))
+        let maxDue = max(1, Int(Float(frameSamples) * ProjectMAudioHub.maxConsumeFrameFactor))
         due = min(due, maxDue)
         var chunk: [Float] = []
         var feedState: ProjectMAudioFeedState = .fallback
@@ -249,7 +237,6 @@ final class ProjectMAudioHub: @unchecked Sendable {
         let gapMax = gapMaxMs
         let underruns = underrunTotal
         let pcmIn = lastEnqueueRms
-        let streamRms = streamRmsEma
         lock.unlock()
 
         var out: [Float]
@@ -258,7 +245,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
             if chunk.isEmpty {
                 out = underrunHold(count: due)
             } else {
-                out = shape(chunk, dt: dt, rate: r, sensitivity: sens, streamRms: streamRms)
+                out = shape(chunk, dt: dt, rate: r, sensitivity: sens)
                 if let tail = out.last {
                     lastSample = tail
                     underrunDecay = 1
@@ -273,12 +260,6 @@ final class ProjectMAudioHub: @unchecked Sendable {
             underrunDecay = 0
         }
 
-        let accentActive = feedState == .phonePCM || feedState == .continuityPCM
-        if accentActive {
-            applyAccent(&out, accent: accent)
-        } else {
-            accentEnvelope *= 0.9
-        }
         sink(out)
 
         lock.lock()
@@ -300,7 +281,6 @@ final class ProjectMAudioHub: @unchecked Sendable {
             rms: sqrtf(max(meanSquare, 0)),
             agcGain: agcGain,
             streamLive: transportLive,
-            accentOnset: accentEnvelope,
             feedState: feedState,
             micSource: micSource,
             pcmPacketsPerSec: pps,
@@ -326,9 +306,6 @@ final class ProjectMAudioHub: @unchecked Sendable {
 
     private func softenShapingState() {
         meanSquare *= 0.2
-        fastEnv *= 0.2
-        slowEnv *= 0.2
-        accentEnvelope = 0
         lastSample = 0
         underrunDecay = 0
     }
@@ -336,59 +313,38 @@ final class ProjectMAudioHub: @unchecked Sendable {
     private func decayShapingState(dt: Float) {
         let decay = expf(-dt / 0.12)
         meanSquare *= decay
-        fastEnv *= decay
-        slowEnv *= decay
-        agcGain += (1 - agcGain) * (1 - decay)
+        agcGain += (ProjectMAudioHub.defaultAgcGain - agcGain) * (1 - decay)
     }
 
-    private func applyAccent(_ samples: inout [Float], accent: MicDrive) {
-        guard accent.presence > 0.05 else {
-            accentEnvelope *= 0.9
-            return
-        }
-        let hit = min(
-            accent.onset * Float(1.5) + accent.bass * Float(0.4),
-            Float(2.8)
-        )
-        accentEnvelope = max(accentEnvelope * 0.82, hit)
-        let bump = accentEnvelope * 0.24 * accent.presence
-        guard bump > 0.01 else { return }
-        for i in 0..<samples.count {
-            samples[i] = tanhf(samples[i] + bump)
-        }
-        accentEnvelope *= 0.9
+    private func softLimit(_ x: Float) -> Float {
+        let peak = ProjectMAudioHub.softPeak
+        let ax = abs(x)
+        if ax <= peak { return x }
+        let sign: Float = x >= 0 ? 1 : -1
+        let excess = ax - peak
+        return sign * (peak + excess / (1 + excess * 2.5))
     }
 
-    private func shape(_ input: [Float], dt: Float, rate: Float, sensitivity: Float, streamRms: Float) -> [Float] {
-        let fastAttack = 1 as Float - expf(-1 / (0.0015 as Float * rate))
-        let fastRelease = 1 as Float - expf(-1 / (0.040 as Float * rate))
-        let slowCoef = 1 as Float - expf(-1 / (0.180 as Float * rate))
-        let rmsCoef = 1 as Float - expf(-1 / (0.35 as Float * rate))
-        let punch: Float = 1.15 * sensitivity
-        let streamLevel = max(streamRms, 1e-6)
-        let streamMakeup = min(max(Self.targetRMS / streamLevel, 1), Self.maxGain)
-        let combinedGain = min(agcGain * streamMakeup, Self.maxGain)
+    private func shape(_ input: [Float], dt: Float, rate: Float, sensitivity: Float) -> [Float] {
+        let rmsCoef = 1 as Float - expf(-1 / (0.55 as Float * rate))
+        let sens = min(max(sensitivity, 0.35), 3)
+        let levelGain = 0.88 + sens * 0.08
+        let combinedGain = min(agcGain * levelGain, ProjectMAudioHub.maxGain)
         var out = [Float](repeating: 0, count: input.count)
         for i in 0..<input.count {
             let x = input[i]
-            let a = abs(x)
-            fastEnv += (a - fastEnv) * (a > fastEnv ? fastAttack : fastRelease)
-            slowEnv += (a - slowEnv) * slowCoef
             meanSquare += (x * x - meanSquare) * rmsCoef
-            let ratio = slowEnv > 1e-6 ? fastEnv / slowEnv : 1 as Float
-            let boost = 1 as Float + punch * min(max(ratio - 1, 0), 4)
-            out[i] = tanhf(x * combinedGain * boost)
+            out[i] = softLimit(x * combinedGain)
         }
-        let rms = sqrtf(meanSquare)
-        let level = max(rms, streamRms * 0.35)
-        let desired = min(max(Self.targetRMS / max(level, 1e-6), 1), Self.maxGain)
+        let rms = sqrtf(max(meanSquare, ProjectMAudioHub.noiseFloorRMS))
+        let desired = min(max(ProjectMAudioHub.targetRMS / rms, 1), ProjectMAudioHub.maxGain)
         let attack: Float
-        if level < Self.targetRMS * 0.08 {
-            attack = 0.045 as Float
-        } else if level > Self.targetRMS * 0.85 {
-            attack = 0.10 as Float
+        if rms < ProjectMAudioHub.targetRMS * 0.06 {
+            attack = 0.38
+        } else if rms > ProjectMAudioHub.targetRMS * 1.05 {
+            attack = 0.72
         } else {
-            attack = 0.22 as Float
+            attack = 0.55
         }
         agcGain += (desired - agcGain) * (1 as Float - expf(-dt / attack))
         return out

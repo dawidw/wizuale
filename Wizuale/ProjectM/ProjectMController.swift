@@ -72,12 +72,25 @@ final class ProjectMController {
         projectm_opengl_render_frame_fbo(handle, UInt32(fbo))
     }
 
+    func setRenderFPS(_ fps: Float) {
+        guard let handle else { return }
+        let clamped = min(max(fps, 24), 120)
+        projectm_set_fps(handle, Int32(clamped.rounded()))
+    }
+
     /// Mono floats in -1...1 (already paced and levelled by ProjectMAudioHub).
+    /// Duplicated to stereo interleaved — matches MilkDrop's PCM path for bass_att / motion.
     func addPCM(floats: [Float]) {
         guard let handle, !floats.isEmpty else { return }
-        floats.withUnsafeBufferPointer { ptr in
+        var stereo = [Float]()
+        stereo.reserveCapacity(floats.count * 2)
+        for sample in floats {
+            stereo.append(sample)
+            stereo.append(sample)
+        }
+        stereo.withUnsafeBufferPointer { ptr in
             guard let base = ptr.baseAddress else { return }
-            projectm_pcm_add_float(handle, base, UInt32(ptr.count), PROJECTM_MONO)
+            projectm_pcm_add_float(handle, base, UInt32(floats.count), PROJECTM_STEREO)
         }
     }
 

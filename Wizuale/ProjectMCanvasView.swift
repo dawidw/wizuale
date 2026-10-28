@@ -38,6 +38,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private let micReceiver: MicReceiver
     private let onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
     private var lastFrameTime: CFTimeInterval = 0
+    private var renderFpsEma: Float = 60
     private let projectM = ProjectMController()
     private var glView: GLKView!
     private var context: EAGLContext!
@@ -141,6 +142,11 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         let now = CACurrentMediaTime()
         let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : Float(1.0 / 60.0)
         lastFrameTime = now
+        if dt > 1e-4 {
+            let instant = min(max(1 / dt, 24), 120)
+            renderFpsEma = renderFpsEma * 0.9 + instant * 0.1
+            projectM.setRenderFPS(renderFpsEma)
+        }
         let drive = micReceiver.sample(dt: dt)
         let snap = renderState.snapshot()
         projectM.setBeatSensitivity(snap.beatSensitivity)
@@ -148,7 +154,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
             projectM.loadPreset(index: snap.targetIndex, smooth: lastIndex >= 0)
             lastIndex = snap.targetIndex
         }
-        audioHub.feed(accent: drive, micSource: micSource, now: now) { projectM.addPCM(floats: $0) }
+        audioHub.feed(micSource: micSource, now: now) { projectM.addPCM(floats: $0) }
         onAudioFrame?(drive, audioHub.metricsSnapshot())
         glClearColor(0, 0, 0, 1)
         glClear(UInt32(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT))

@@ -28,7 +28,6 @@ struct MicAudioDebugOverlay: View {
             row("Onset", String(format: "%.2f  Bass %.2f", drive.onset, drive.bass))
             row("Mid/Hi", String(format: "%.2f / %.2f", drive.mid, drive.high))
             row("Presence", String(format: "%.2f  Flux %.2f", drive.presence, drive.flux))
-            row("Accent", String(format: "%.2f", metrics.accentOnset))
             if metrics.micSource == .phone && drive.presence > 0.12 && !metrics.streamLive {
                 row("Anomaly", "feats without PCM")
             }
