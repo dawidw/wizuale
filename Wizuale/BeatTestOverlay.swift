@@ -4,6 +4,7 @@ import SwiftUI
 struct BeatTestOverlay: View {
     var drive: MicDrive
     var metrics: ProjectMAudioHub.Metrics
+    var punchFlash: Bool = false
 
     var body: some View {
         HStack {
@@ -41,6 +42,7 @@ struct BeatTestOverlay: View {
     }
 
     private var beatIndicatorOpacity: Double {
+        if punchFlash { return 1 }
         let hit = max(drive.onset / 2.2, drive.bass * 0.22)
         return Double(min(max(hit, 0.12), 1))
     }
