@@ -37,6 +37,11 @@ struct RootView: View {
                     failure: $failure
                 )
                 .ignoresSafeArea()
+
+                Color.black
+                    .opacity(visuals.pictureDimOpacity)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
             }
 
             if visuals.showAudioDebug {

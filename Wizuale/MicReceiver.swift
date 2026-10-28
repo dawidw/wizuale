@@ -44,6 +44,8 @@ final class MicReceiver: @unchecked Sendable {
     var onCycle: (@Sendable (Bool, Int) -> Void)?
     /// TV audio debug overlay from the phone.
     var onDebugOverlay: (@Sendable (Bool) -> Void)?
+    /// Picture brightness 10…100 from the phone (100 = no dim overlay).
+    var onDimming: (@Sendable (Int) -> Void)?
     /// First phone PCM while TV mic was Off — adopt iPhone app (Wi‑Fi) as source.
     var onAdoptPhoneSource: (@Sendable () -> Void)?
 
@@ -422,6 +424,15 @@ final class MicReceiver: @unchecked Sendable {
             if let handler {
                 DispatchQueue.main.async {
                     handler(show)
+                }
+            }
+        case .dim(_, let brightnessPercent):
+            let clamped = MicTuning.clampPictureBrightness(brightnessPercent)
+            MicTuning.saveTVPictureBrightness(clamped)
+            let handler = onDimming
+            if let handler {
+                DispatchQueue.main.async {
+                    handler(clamped)
                 }
             }
         case .ack:

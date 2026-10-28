@@ -88,6 +88,18 @@ final class MicCapture: ObservableObject {
             scheduleCycle()
         }
     }
+    @Published var pictureBrightness: Int = MicTuning.loadPictureBrightness() {
+        didSet {
+            let clamped = MicTuning.clampPictureBrightness(pictureBrightness)
+            if clamped != pictureBrightness {
+                pictureBrightness = clamped
+                return
+            }
+            guard !applyingRemote, clamped != oldValue else { return }
+            MicTuning.savePictureBrightness(clamped)
+            scheduleDim()
+        }
+    }
 
     private let engine = AVAudioEngine()
     private let network = DispatchQueue(label: "app.wizuale.mic.send")
@@ -102,6 +114,7 @@ final class MicCapture: ObservableObject {
     private var pcmSequence: UInt16 = 0
     private var cycleSequence: UInt16 = 0
     private var debugSequence: UInt16 = 0
+    private var dimSequence: UInt16 = 0
     private var pendingPCM: [Data] = []
     private var heldSensitivity: Float = MicTuning.loadSensitivity()
     private var heldTVAudioDebug = MicTuning.loadTVAudioDebug()
@@ -117,9 +130,11 @@ final class MicCapture: ObservableObject {
     private var pendingSettings: Data?
     private var pendingBoost: Data?
     private var pendingDebug: Data?
+    private var pendingDim: Data?
     private var lastCommand: Data?
     private var lastSettings: Data?
     private var lastBoost: Data?
+    private var lastDim: Data?
     private var controlSending = false
     private var pcmInFlight = 0
     private let maxPCMInFlight = 24
@@ -144,6 +159,8 @@ final class MicCapture: ObservableObject {
     private var sensHoldUntil: CFTimeInterval = 0
     private var latHoldUntil: CFTimeInterval = 0
     private var debugSyncHeartbeat: DispatchWorkItem?
+    private var dimSyncHeartbeat: DispatchWorkItem?
+    private var dimDebounceWork: DispatchWorkItem?
     private var startGeneration = 0
     private var interruption: NSObjectProtocol?
     private var calibrateOn = false
@@ -331,6 +348,7 @@ final class MicCapture: ObservableObject {
             self?.startPCMSender()
             self?.scheduleTVAudioDebug()
             self?.scheduleDebugSyncHeartbeat()
+            self?.primeDimOnNetwork()
         }
         setWantsLink(true)
         let sens = sensitivity
@@ -799,9 +817,13 @@ final class MicCapture: ObservableObject {
             if let lastBoost {
                 pendingBoost = lastBoost
             }
+            if pendingDim == nil, let lastDim {
+                pendingDim = lastDim
+            }
             startPCMSender()
             scheduleTVAudioDebug()
             scheduleDebugSyncHeartbeat()
+            scheduleDimSyncHeartbeat()
             pumpControl()
             pumpPCM()
         case .failed(let error):
@@ -952,6 +974,10 @@ final class MicCapture: ObservableObject {
     private func stopPCMSender() {
         debugSyncHeartbeat?.cancel()
         debugSyncHeartbeat = nil
+        dimSyncHeartbeat?.cancel()
+        dimSyncHeartbeat = nil
+        dimDebounceWork?.cancel()
+        dimDebounceWork = nil
         pcmSendTimer?.cancel()
         pcmSendTimer = nil
         pcmRingLock.lock()
@@ -1005,6 +1031,50 @@ final class MicCapture: ObservableObject {
         }
     }
 
+    private func scheduleDim() {
+        let pct = pictureBrightness
+        dimDebounceWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.emitDim(percent: pct)
+        }
+        dimDebounceWork = work
+        network.asyncAfter(deadline: .now() + 0.12, execute: work)
+    }
+
+    private func primeDimOnNetwork() {
+        let pct = MicTuning.loadPictureBrightness()
+        if lastDim == nil {
+            emitDim(percent: pct)
+        }
+        scheduleDimSyncHeartbeat()
+    }
+
+    private func emitDim(percent: Int) {
+        flag.lock()
+        dimSequence &+= 1
+        if dimSequence == 0 { dimSequence = 1 }
+        let seq = dimSequence
+        flag.unlock()
+        let packet = MicWire.encodeDim(sequence: seq, brightnessPercent: percent)
+        network.async { [weak self] in
+            guard let self else { return }
+            self.pendingDim = packet
+            self.lastDim = packet
+            self.pumpControl()
+        }
+    }
+
+    private func scheduleDimSyncHeartbeat() {
+        dimSyncHeartbeat?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.running, self.linkWanted() else { return }
+            self.emitDim(percent: MicTuning.loadPictureBrightness())
+            self.scheduleDimSyncHeartbeat()
+        }
+        dimSyncHeartbeat = work
+        network.asyncAfter(deadline: .now() + 2.5, execute: work)
+    }
+
     private func scheduleDebugSyncHeartbeat() {
         debugSyncHeartbeat?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -1025,6 +1095,9 @@ final class MicCapture: ObservableObject {
             if let debug = pendingDebug {
                 pendingDebug = nil
                 control = debug
+            } else if let dim = pendingDim {
+                pendingDim = nil
+                control = dim
             } else if !pendingCommands.isEmpty {
                 control = pendingCommands.removeFirst()
             } else if let boost = pendingBoost {

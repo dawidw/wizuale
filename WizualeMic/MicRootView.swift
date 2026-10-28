@@ -55,6 +55,7 @@ struct MicRootView: View {
                         }
                         sensitivitySlider
                         latencySlider
+                        brightnessSlider
                         tvDebugToggle
                         autoCycleControls
                         calibrateControl
@@ -128,6 +129,29 @@ struct MicRootView: View {
                 value: $mic.sensitivity,
                 in: MicTuning.sensitivityMin...MicTuning.sensitivityMax,
                 step: 0.05
+            )
+        }
+    }
+
+    private var brightnessSlider: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("JASNOŚĆ")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Text("\(mic.pictureBrightness)%")
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            MiniSlider(
+                value: Binding(
+                    get: { Double(mic.pictureBrightness) },
+                    set: { mic.pictureBrightness = Int($0.rounded()) }
+                ),
+                in: Double(MicTuning.pictureBrightnessMin)...Double(MicTuning.pictureBrightnessMax),
+                step: 1
             )
         }
     }

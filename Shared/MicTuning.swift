@@ -26,6 +26,12 @@ enum MicTuning {
     static let autoCycleKey = "wizuale.mic.autoCycle"
     static let cycleSecondsKey = "wizuale.mic.cycleSeconds"
     static let tvAudioDebugKey = "wizuale.mic.tvAudioDebug"
+    static let pictureBrightnessKey = "wizuale.mic.pictureBrightness"
+    static let tvPictureBrightnessKey = "wizuale.tv.pictureBrightness"
+
+    static let pictureBrightnessMin = 10
+    static let pictureBrightnessMax = 100
+    static let pictureBrightnessDefault = 100
 
     static let sensitivityMin: Float = 0.25
     static let sensitivityMax: Float = 3
@@ -106,6 +112,32 @@ enum MicTuning {
 
     static func saveTVAudioDebug(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: tvAudioDebugKey)
+    }
+
+    static func clampPictureBrightness(_ percent: Int) -> Int {
+        min(max(percent, pictureBrightnessMin), pictureBrightnessMax)
+    }
+
+    static func loadPictureBrightness() -> Int {
+        guard UserDefaults.standard.object(forKey: pictureBrightnessKey) != nil else {
+            return pictureBrightnessDefault
+        }
+        return clampPictureBrightness(UserDefaults.standard.integer(forKey: pictureBrightnessKey))
+    }
+
+    static func savePictureBrightness(_ percent: Int) {
+        UserDefaults.standard.set(clampPictureBrightness(percent), forKey: pictureBrightnessKey)
+    }
+
+    static func loadTVPictureBrightness() -> Int {
+        guard UserDefaults.standard.object(forKey: tvPictureBrightnessKey) != nil else {
+            return pictureBrightnessDefault
+        }
+        return clampPictureBrightness(UserDefaults.standard.integer(forKey: tvPictureBrightnessKey))
+    }
+
+    static func saveTVPictureBrightness(_ percent: Int) {
+        UserDefaults.standard.set(clampPictureBrightness(percent), forKey: tvPictureBrightnessKey)
     }
 }
 
