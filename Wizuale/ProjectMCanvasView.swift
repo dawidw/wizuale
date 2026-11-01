@@ -9,9 +9,9 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
     var micReceiver: MicReceiver
     var micSource: MicInputSource
     var paused: Bool
-    var beatPunchScale: CGFloat = CGFloat(BeatPunchState.baseOverscan)
-    var beatPunchRotation: Angle = .zero
-    var onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
+    var beatPunch: BeatPunchState
+    var beatStrength: Int
+    var onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame) -> Void)?
     @Binding var failure: String?
 
     func makeUIViewController(context: Context) -> ProjectMViewController {
@@ -20,6 +20,7 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
             audioHub: audioHub,
             micReceiver: micReceiver,
             micSource: micSource,
+            beatPunch: beatPunch,
             onAudioFrame: onAudioFrame
         )
         controller.onFailure = { message in
@@ -31,8 +32,7 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: ProjectMViewController, context: Context) {
         controller.paused = paused
         controller.micSource = micSource
-        controller.beatPunchScale = beatPunchScale
-        controller.beatPunchRotation = CGFloat(beatPunchRotation.radians)
+        controller.beatStrength = beatStrength
     }
 }
 
@@ -40,7 +40,8 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private let renderState: ProjectMRenderState
     private let audioHub: ProjectMAudioHub
     private let micReceiver: MicReceiver
-    private let onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
+    private let beatPunch: BeatPunchState
+    private let onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame) -> Void)?
     private var lastFrameTime: CFTimeInterval = 0
     private var renderFpsEma: Float = 60
     private let projectM = ProjectMController()
@@ -51,8 +52,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
 
     var paused = false
     var micSource: MicInputSource = .phone
-    var beatPunchScale: CGFloat = CGFloat(BeatPunchState.baseOverscan)
-    var beatPunchRotation: CGFloat = 0
+    var beatStrength: Int = MicTuning.loadTVBeatStrength()
     var onFailure: ((String) -> Void)?
 
     init(
@@ -60,12 +60,14 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         audioHub: ProjectMAudioHub,
         micReceiver: MicReceiver,
         micSource: MicInputSource,
-        onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics) -> Void)?
+        beatPunch: BeatPunchState,
+        onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame) -> Void)?
     ) {
         self.renderState = renderState
         self.audioHub = audioHub
         self.micReceiver = micReceiver
         self.micSource = micSource
+        self.beatPunch = beatPunch
         self.onAudioFrame = onAudioFrame
         super.init(nibName: nil, bundle: nil)
     }
@@ -80,17 +82,14 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
             return
         }
         context = ctx
-        let punchHost = UIView(frame: view.bounds)
-        punchHost.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        punchHost.backgroundColor = .black
-        view.addSubview(punchHost)
-        glView = GLKView(frame: punchHost.bounds, context: ctx)
+        glView = GLKView(frame: view.bounds, context: ctx)
         glView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         glView.drawableColorFormat = .RGBA8888
         glView.drawableDepthFormat = .format24
         glView.enableSetNeedsDisplay = false
         glView.delegate = self
-        punchHost.addSubview(glView)
+        glView.backgroundColor = .black
+        view.addSubview(glView)
 
         EAGLContext.setCurrent(ctx)
         projectM.create(in: ctx, size: pixelSize)
@@ -141,8 +140,6 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     /// enableSetNeedsDisplay is false, so setNeedsDisplay() would be ignored; draw explicitly.
     @objc private func tick() {
         guard !paused else { return }
-        // The Metal renderer used to call sample() every frame; projectM does not.
-        // sample() is what reports mic liveness (the green "Mic" chip) to VisualSession.
         glView.display()
     }
 
@@ -158,26 +155,24 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
             projectM.setRenderFPS(renderFpsEma)
         }
         let drive = micReceiver.sample(dt: dt)
+        beatPunch.setStrengthPercent(beatStrength)
+        let punchFrame = beatPunch.advance(drive: drive, dt: dt, now: now)
         let snap = renderState.snapshot()
-        projectM.setBeatSensitivity(snap.beatSensitivity)
+        let sceneBoost = punchFrame.sceneEnvelope * 0.42 * Float(beatStrength) / 100
+        let sceneSens = snap.beatSensitivity + sceneBoost
+        projectM.setBeatSensitivity(sceneSens)
         if snap.targetIndex != lastIndex {
             projectM.loadPreset(index: snap.targetIndex, smooth: lastIndex >= 0)
             lastIndex = snap.targetIndex
         }
-        audioHub.feed(micSource: micSource, now: now) { projectM.addPCM(floats: $0) }
-        onAudioFrame?(drive, audioHub.metricsSnapshot())
+        audioHub.feed(
+            micSource: micSource,
+            scenePunch: punchFrame.sceneEnvelope,
+            now: now
+        ) { projectM.addPCM(floats: $0) }
+        onAudioFrame?(drive, audioHub.metricsSnapshot(), punchFrame)
         glClearColor(0, 0, 0, 1)
         glClear(UInt32(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT))
         projectM.render()
-        applyBeatPunchTransform(on: glView.superview)
-    }
-
-    /// Geometry-only punch after libprojectM draws; debug overlays sit above this view.
-    private func applyBeatPunchTransform(on host: UIView?) {
-        guard let host else { return }
-        var transform = CGAffineTransform.identity
-        transform = transform.rotated(by: beatPunchRotation)
-        transform = transform.scaledBy(x: beatPunchScale, y: beatPunchScale)
-        host.transform = transform
     }
 }
