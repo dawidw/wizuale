@@ -1,4 +1,5 @@
 import GLKit
+import OpenGLES
 import SwiftUI
 import UIKit
 
@@ -153,6 +154,8 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     func glkView(_ view: GLKView, drawIn rect: CGRect) {
         guard !paused, let context else { return }
         EAGLContext.setCurrent(context)
+        var drawableFBO: GLint = 0
+        glGetIntegerv(GLenum(GL_FRAMEBUFFER_BINDING), &drawableFBO)
         let now = CACurrentMediaTime()
         let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : Float(1.0 / 60.0)
         lastFrameTime = now
@@ -196,7 +199,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         glClear(UInt32(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT))
         projectM.render(toFramebuffer: kickWaveCompositor.sceneFramebuffer)
 
-        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), GLuint(view.defaultFramebufferObject))
+        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), GLuint(drawableFBO))
         glViewport(0, 0, GLsizei(view.drawableWidth), GLsizei(view.drawableHeight))
         glClearColor(0, 0, 0, 1)
         glClear(UInt32(GL_COLOR_BUFFER_BIT))

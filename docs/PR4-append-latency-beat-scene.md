@@ -126,7 +126,28 @@ Siła bitu skaluje envelope (`triggerPeak`), compositor i PCM kick — **Intensy
 - **Kick env**: wartość envelope + etykieta `ONSET` przy flashu + Siła bitu %.
 - **BEAT TEST**: słupek KICK z envelope; kropka = flash onsetu.
 
-### Pliki
-`BeatPunchState.swift`, `ProjectMKickWaveCompositor.swift`, `ProjectMCanvasView.swift`, `ProjectMController.swift`, `ProjectMAudioHub.swift`, `MicTuning.swift`, `MicAudioDebugOverlay.swift`, `BeatTestOverlay.swift`, `RootView.swift`.
+(Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)
+
+---
+
+## Kompilacja tvOS + onset kick (40–120 Hz) — build 1.1(5)+ fix
+
+### Kompilacja (Xcode / Dawid)
+- **ProjectMCanvasView**: `GLKView.defaultFramebufferObject` nie istnieje na tvOS → na początku `drawIn` zapis FBO przez `glGetIntegerv(GL_FRAMEBUFFER_BINDING)` po bindzie GLKView; blit tsunami na ten FBO zamiast `defaultFramebufferObject`.
+- **MicRootView**: operator `...` w `in:` suwaka Intensywność nie może być rozdzielony na linie → `sceneIntensitySliderRange` (`ClosedRange<Double>`).
+
+Brak nowego kind UDP — onset nadal w pakiecie audio (40 B, pole `onset` f32).
+
+### Onset (telefon + Continuity, `BandAnalyzer`)
+| Parametr | Było | Jest |
+|----------|------|------|
+| Pasmo kick | LP bass 110 Hz + błędny Δ (zawsze 0 po `previousEnergy = energy`) | **HP 40 Hz + LP 120 Hz**, flux **tylko dodatni** Δ energii kick |
+| Próg adaptacyjny | μ + **1.35·σ** | μ + **1.05·σ** |
+| Refractory analizatora | 75 ms | **120 ms** |
+| Pasmo bass / Intensywność (continuous) | bez zmian | **bez zmian** (LP 110 Hz, normalizer) |
+
+### TV (`MicReceiver` + `BeatPunchState`)
+- Przy **nowym** datagramie cech: `onset = max(smooth, target.onset)` — zero dodatkowego opóźnienia transiente vs telefon.
+- Trigger tsunami: próg onset **0.30** (było 0.34); refractory punch **120 ms** bez zmian.
 
 (Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)

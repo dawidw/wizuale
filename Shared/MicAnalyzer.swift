@@ -110,26 +110,29 @@ struct BandAnalyzer {
     private(set) var lastRaw = MicBandEnergy.zero
 
     private var filters: [Biquad] = []
+    private var kickHigh: Biquad = Biquad()
+    private var kickLow: Biquad = Biquad()
     private var builtRate: Double = 0
     private var gains = [Normalizer(), Normalizer(), Normalizer(), Normalizer()]
     private var loudGain = Normalizer()
     private var fluxGain = Normalizer()
     private var previousEnergy = [Float](repeating: 0, count: 4)
-    private var previousBassPeak: Float = 0
-    private var bassFluxMean: Float = 0
-    private var bassFluxMeanSq: Float = 0
+    private var previousKickEnergy: Float = 0
+    private var kickFluxMean: Float = 0
+    private var kickFluxMeanSq: Float = 0
     private var onset: Float = 0
     private var refractory: Float = 0
 
-    /// Adaptive onset gate: mean + k·σ over ~1 s on bass spectral flux.
+    /// Adaptive onset gate: mean + k·σ over ~1 s on kick-band (40–120 Hz) spectral flux.
     static let onsetAdaptiveWindowSeconds: Float = 1.0
-    static let onsetAdaptiveK: Float = 1.35
-    static let onsetRefractorySeconds: Float = 0.075
+    static let onsetAdaptiveK: Float = 1.05
+    static let onsetRefractorySeconds: Float = 0.12
     static let onsetReleaseTau: Float = 0.042
     static let onsetBassLevelMin: Float = 0.18
     static let onsetLoudnessMin: Float = 0.08
     static let onsetGateFloor: Float = 0.00004
     private var havePrevious = false
+    private var havePreviousKick = false
     private var noise = MicNoiseFloor.zero
 
     mutating func apply(floor: MicNoiseFloor) {
@@ -152,27 +155,30 @@ struct BandAnalyzer {
                 Biquad.bandpass(cutoff: 1400, sampleRate: rate, q: 0.8),
                 Biquad.highpass(cutoff: 5000, sampleRate: rate, q: 0.707)
             ]
+            kickHigh = Biquad.highpass(cutoff: 40, sampleRate: rate, q: 0.707)
+            kickLow = Biquad.lowpass(cutoff: 120, sampleRate: rate, q: 0.707)
             builtRate = rate
             havePrevious = false
+            havePreviousKick = false
         }
 
         var energy = [Float](repeating: 0, count: 4)
-        var bassPeak: Float = 0
+        var kickEnergy: Float = 0
         var loudSum: Float = 0
         for sample in samples {
             loudSum += sample * sample
+            let kickSample = kickLow.process(kickHigh.process(sample))
+            kickEnergy += kickSample * kickSample
             for band in 0..<4 {
                 let shaped = filters[band].process(sample)
                 energy[band] += shaped * shaped
-                if band == 0 {
-                    bassPeak = max(bassPeak, abs(shaped))
-                }
             }
         }
         let inv = 1 / Float(count)
         for band in 0..<4 {
             energy[band] *= inv
         }
+        kickEnergy *= inv
         let loudRaw = loudSum * inv
         lastRaw = MicBandEnergy(
             bass: energy[0],
@@ -188,11 +194,16 @@ struct BandAnalyzer {
             for band in 0..<4 {
                 fluxRaw += max(0, energy[band] - previousEnergy[band])
             }
-        } else {
-            previousBassPeak = bassPeak
         }
         previousEnergy = energy
         havePrevious = true
+
+        var kickFlux: Float = 0
+        if havePreviousKick {
+            kickFlux = max(0, kickEnergy - previousKickEnergy)
+        }
+        previousKickEnergy = kickEnergy
+        havePreviousKick = true
 
         energy[0] = max(0, energy[0] - noise.bass)
         energy[1] = max(0, energy[1] - noise.lowMid)
@@ -207,24 +218,19 @@ struct BandAnalyzer {
         let loudness = loudGain.normalize(loudClean, dt: dt)
         let flux = fluxGain.normalize(fluxRaw, dt: dt)
 
-        let bassEnergyFlux = havePrevious ? max(0, energy[0] - previousEnergy[0]) : 0
-        let bassPeakFlux = max(0, bassPeak - previousBassPeak)
-        let bassFlux = max(bassEnergyFlux, bassPeakFlux)
-        previousBassPeak = bassPeak
-
         let adaptCoef = 1 - expf(-dt / Self.onsetAdaptiveWindowSeconds)
-        bassFluxMean += (bassFlux - bassFluxMean) * adaptCoef
-        bassFluxMeanSq += (bassFlux * bassFlux - bassFluxMeanSq) * adaptCoef
-        let variance = max(bassFluxMeanSq - bassFluxMean * bassFluxMean, 1e-12)
-        let gate = bassFluxMean + Self.onsetAdaptiveK * sqrtf(variance)
+        kickFluxMean += (kickFlux - kickFluxMean) * adaptCoef
+        kickFluxMeanSq += (kickFlux * kickFlux - kickFluxMeanSq) * adaptCoef
+        let variance = max(kickFluxMeanSq - kickFluxMean * kickFluxMean, 1e-12)
+        let gate = kickFluxMean + Self.onsetAdaptiveK * sqrtf(variance)
         let threshold = max(gate, Self.onsetGateFloor)
 
-        if bassFlux > threshold
+        if kickFlux > threshold
             && shaped[0] > Self.onsetBassLevelMin
             && loudness > Self.onsetLoudnessMin
             && refractory <= 0
         {
-            let over = min(bassFlux / threshold, 3.5)
+            let over = min(kickFlux / threshold, 3.5)
             onset = min(1.7, 0.72 + 0.32 * over)
             refractory = Self.onsetRefractorySeconds
         } else {

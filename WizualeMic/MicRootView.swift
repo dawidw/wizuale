@@ -181,6 +181,12 @@ struct MicRootView: View {
         }
     }
 
+    private var sceneIntensitySliderRange: ClosedRange<Double> {
+        let lo = Double(MicTuning.sceneIntensityMinPermille) / 100.0
+        let hi = Double(MicTuning.sceneIntensityMaxPermille) / 100.0
+        return lo...hi
+    }
+
     private var sceneIntensitySlider: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -198,8 +204,7 @@ struct MicRootView: View {
                     get: { Double(mic.sceneIntensity) / 100.0 },
                     set: { mic.sceneIntensity = Int(($0 * 100).rounded()) }
                 ),
-                in: Double(MicTuning.sceneIntensityMinPermille) / 100.0
-                    ...Double(MicTuning.sceneIntensityMaxPermille) / 100.0,
+                in: sceneIntensitySliderRange,
                 step: 0.5
             )
         }

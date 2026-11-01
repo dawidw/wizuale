@@ -17,7 +17,7 @@ final class BeatPunchState {
     static let attackSeconds: Float = 1.0 / 60.0
     static let releaseTau: Float = MicTuning.kickWaveReleaseTau
     static let refractorySeconds: Float = 0.12
-    static let onsetTriggerThreshold: Float = 0.34
+    static let onsetTriggerThreshold: Float = 0.30
     static let onsetRearmThreshold: Float = 0.16
 
     private var kickArmed = true
