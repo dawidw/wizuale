@@ -79,7 +79,7 @@ enum PresetWire {
 /// Boost, 12 bytes: magic, kind = 5, sequence u16, amount f32 (0...1).
 /// Dim, 12 bytes: kind = 9, sequence u16, brightnessPercent u16 (10…100), reserved u16.
 /// Beat strength, 12 bytes: kind = 10, sequence u16, strengthPercent u16 (0…100), reserved u16.
-/// Scene intensity, 12 bytes: kind = 11, sequence u16, permille u16 (0…2000, 100 = 1× f301047), reserved u16.
+/// Scene intensity, 12 bytes: kind = 11, sequence u16, permille u16 (0…4000, 100 = 1× f301047), reserved u16.
 /// Ack, 16 bytes: magic, kind = 3, preset i16, cycling u16, latency i16, sensitivity f32.
 /// 18 bytes adds showAudioDebug u16. 22 bytes adds pictureBrightness u16 and stateRevision u16.
 /// 24 bytes adds beatStrength u16 (0…100). 26 bytes adds sceneIntensity permille u16 at offset 24.

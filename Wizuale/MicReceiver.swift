@@ -271,7 +271,7 @@ final class MicReceiver: @unchecked Sendable {
 
         let target = fresh ? packet : MicFeatures.zero
         // Faster attack/release than pre-1.1(2) — less “averaged” motion lag on TV (see ProjectMAudioHub latency note).
-        onset = follow(onset, target.onset, dt: dtSafe, attack: 0.010, release: 0.085)
+        onset = follow(onset, target.onset, dt: dtSafe, attack: 0.002, release: 0.052)
         bass = follow(bass, target.bass, dt: dtSafe, attack: 0.005, release: 0.105)
         lowMid = follow(lowMid, target.lowMid, dt: dtSafe, attack: 0.014, release: 0.18)
         mid = follow(mid, target.mid, dt: dtSafe, attack: 0.016, release: 0.11)

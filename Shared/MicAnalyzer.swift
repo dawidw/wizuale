@@ -116,9 +116,19 @@ struct BandAnalyzer {
     private var fluxGain = Normalizer()
     private var previousEnergy = [Float](repeating: 0, count: 4)
     private var previousBassPeak: Float = 0
-    private var meanBassFlux: Float = 0
+    private var bassFluxMean: Float = 0
+    private var bassFluxMeanSq: Float = 0
     private var onset: Float = 0
     private var refractory: Float = 0
+
+    /// Adaptive onset gate: mean + k·σ over ~1 s on bass spectral flux.
+    static let onsetAdaptiveWindowSeconds: Float = 1.0
+    static let onsetAdaptiveK: Float = 1.35
+    static let onsetRefractorySeconds: Float = 0.075
+    static let onsetReleaseTau: Float = 0.042
+    static let onsetBassLevelMin: Float = 0.18
+    static let onsetLoudnessMin: Float = 0.08
+    static let onsetGateFloor: Float = 0.00004
     private var havePrevious = false
     private var noise = MicNoiseFloor.zero
 
@@ -197,16 +207,28 @@ struct BandAnalyzer {
         let loudness = loudGain.normalize(loudClean, dt: dt)
         let flux = fluxGain.normalize(fluxRaw, dt: dt)
 
-        let bassFlux = max(0, bassPeak - previousBassPeak)
+        let bassEnergyFlux = havePrevious ? max(0, energy[0] - previousEnergy[0]) : 0
+        let bassPeakFlux = max(0, bassPeak - previousBassPeak)
+        let bassFlux = max(bassEnergyFlux, bassPeakFlux)
         previousBassPeak = bassPeak
-        meanBassFlux += (bassFlux - meanBassFlux) * 0.06
-        let gate = max(meanBassFlux * 1.7, 0.00008)
-        if bassFlux > gate && shaped[0] > 0.28 && loudness > 0.12 && refractory <= 0 {
-            let over = min(bassFlux / gate, 3)
-            onset = min(1.7, 0.85 + 0.28 * over)
-            refractory = 0.09
+
+        let adaptCoef = 1 - expf(-dt / Self.onsetAdaptiveWindowSeconds)
+        bassFluxMean += (bassFlux - bassFluxMean) * adaptCoef
+        bassFluxMeanSq += (bassFlux * bassFlux - bassFluxMeanSq) * adaptCoef
+        let variance = max(bassFluxMeanSq - bassFluxMean * bassFluxMean, 1e-12)
+        let gate = bassFluxMean + Self.onsetAdaptiveK * sqrtf(variance)
+        let threshold = max(gate, Self.onsetGateFloor)
+
+        if bassFlux > threshold
+            && shaped[0] > Self.onsetBassLevelMin
+            && loudness > Self.onsetLoudnessMin
+            && refractory <= 0
+        {
+            let over = min(bassFlux / threshold, 3.5)
+            onset = min(1.7, 0.72 + 0.32 * over)
+            refractory = Self.onsetRefractorySeconds
         } else {
-            onset *= expf(-dt / 0.07)
+            onset *= expf(-dt / Self.onsetReleaseTau)
             refractory = max(0, refractory - dt)
         }
 

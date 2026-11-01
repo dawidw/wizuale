@@ -334,7 +334,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
             punchPhase += omega
             if punchPhase > 2 * Float.pi { punchPhase -= 2 * Float.pi }
             let kick = sinf(punchPhase) * mix
-            samples[i] = softLimit(samples[i] + kick)
+            samples[i] = MicTuning.scenePCMSoftLimit(samples[i] + kick, peak: ProjectMAudioHub.softPeak)
         }
     }
 

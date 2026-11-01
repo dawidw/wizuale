@@ -39,12 +39,12 @@ enum MicTuning {
 
     static let beatStrengthMin = 0
     static let beatStrengthMax = 100
-    static let beatStrengthDefault = 70
+    static let beatStrengthDefault = 85
 
-    /// Permille of f301047 scene-modulation baseline: 100 = 1×, 1000 = 10× (default), 2000 = 20×.
+    /// Permille of f301047 scene-modulation baseline: 100 = 1×, 2000 = 20× (default), 4000 = 40× max.
     static let sceneIntensityMinPermille = 0
-    static let sceneIntensityMaxPermille = 2000
-    static let sceneIntensityDefaultPermille = 1000
+    static let sceneIntensityMaxPermille = 4000
+    static let sceneIntensityDefaultPermille = 2000
 
     /// PCM kick mix and beat-sensitivity punch boost at 1× intensity (f301047).
     static let scenePunchPCMSMixBaseline: Float = 0.38
@@ -224,10 +224,23 @@ enum MicTuning {
         return String(format: "%.1f×", mul)
     }
 
+    /// Tanh soft ceiling — keeps motion at high intensity without a hard clip knee.
+    static func sceneSoftSaturate(_ value: Float, at ceiling: Float = sceneBeatSensitivityCeiling) -> Float {
+        guard value.isFinite, ceiling > 0 else { return sensitivityDefault }
+        if value <= 0 { return clampSensitivity(value) }
+        return ceiling * tanhf(value / ceiling)
+    }
+
     static func clampSceneBeatSensitivity(base: Float, punchBoost: Float) -> Float {
         let baseClamped = clampSensitivity(base)
         let boost = punchBoost.isFinite ? max(0, punchBoost) : 0
-        return min(baseClamped + boost, sceneBeatSensitivityCeiling)
+        return sceneSoftSaturate(baseClamped + boost)
+    }
+
+    /// PCM after scene punch — tanh limiter (avoids blowout / NaN-ish whites).
+    static func scenePCMSoftLimit(_ sample: Float, peak: Float = 0.78) -> Float {
+        guard sample.isFinite, peak > 0 else { return 0 }
+        return peak * tanhf(sample / peak)
     }
 }
 

@@ -54,3 +54,38 @@ Przy domyślnej **Intensywność 10×** i Siła bitu 70%: efektywnie ~**10×** m
 DEBUG TV: wiersz **Intensywność** (np. `10×`).
 
 (Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)
+
+---
+
+## Intensywniej i czulej na bit — build 1.1(4)+
+
+### Domyślne suwaki
+| Parametr | Było | Jest |
+|----------|------|------|
+| **Intensywność** | 1000 (‰) = 10×, max 2000 | **2000 = 20×**, max **4000 = 40×** |
+| **Siła bitu** | 70% | **85%** |
+
+Wire kind 11: permille **0…4000** (100 = 1× f301047). Ack bez zmian (26 B).
+
+### Saturacja (bez twardego clipu)
+- Boost `projectm_set_beat_sensitivity`: **tanh** względem sufitu 10.0 (`MicTuning.sceneSoftSaturate`).
+- PCM po kicku w `applyScenePunch`: **tanh** @ `softPeak` (0.68), zamiast segmentowego limitera.
+
+### Detekcja onsetu (`BandAnalyzer` — telefon + Continuity)
+- **Flux basowy**: max(Δ energii pasma bass, Δ szczytu bass po filtrze LP 110 Hz).
+- **Próg adaptacyjny**: średnia + **1.35·σ** fluxu, okno EMA **~1 s** (`onsetAdaptiveWindowSeconds`).
+- **Bramki**: bass shaped > **0.18**, loudness > **0.08**, refractory analizatora **75 ms**.
+- **Zanik onsetu**: τ_release **42 ms** (szybsze rozdzielenie kicków @ 120–130 BPM).
+- TV `MicReceiver`: follow onset attack **~2 ms** (~1 klatka), release **52 ms**.
+
+### `BeatPunchState` (punch sceny)
+- Trigger onset > **0.34**, re-arm < **0.16** (było 0.48 / 0.26).
+- Attack envelope **1/60 s** (~1 klatka GL), refractory **120 ms** bez zmian.
+
+### DEBUG TV
+- Wiersz **Detekcja bitu**: `X.XX/s  ~YYY bpm` (okno triggerów punch, zsynchronizowane z BEAT TEST).
+- **Scene punch**: envelope + Siła bitu % (BPM przeniesione do Detekcja bitu).
+
+Pliki: `MicTuning`, `MicAnalyzer`, `BeatPunchState`, `MicReceiver`, `ProjectMAudioHub`, `MicFrame`, `MicAudioDebugOverlay`, `MicRootView` (zakres suwaka z `MicTuning`).
+
+(Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)

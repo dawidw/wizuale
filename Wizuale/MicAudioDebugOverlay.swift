@@ -31,8 +31,12 @@ struct MicAudioDebugOverlay: View {
             row("Feat age", String(format: "%.0f ms", drive.featureAgeMs))
             row("Onset", String(format: "%.2f  Bass %.2f", drive.onset, drive.bass))
             row(
+                "Detekcja bitu",
+                String(format: "%.2f/s  ~%d bpm", Float(punchesPerMinute) / 60, punchesPerMinute)
+            )
+            row(
                 "Scene punch",
-                String(format: "%.2f  %d%%  ~%d bpm", metrics.scenePunch, beatStrength, punchesPerMinute)
+                String(format: "%.2f  %d%%", metrics.scenePunch, beatStrength)
             )
             row("Intensywność", MicTuning.formatSceneIntensity(sceneIntensity))
             row("Mid/Hi", String(format: "%.2f / %.2f", drive.mid, drive.high))

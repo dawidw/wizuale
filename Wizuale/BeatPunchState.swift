@@ -11,9 +11,12 @@ struct BeatPunchFrame: Equatable {
 
 /// Detects kicks from `MicDrive.onset` (same path as the TV mic receiver) and animates punch envelope.
 final class BeatPunchState {
-    static let attackSeconds: Float = 0.028
+    /// ~1 display frame attack on scene envelope.
+    static let attackSeconds: Float = 1.0 / 60.0
     static let releaseTau: Float = 0.19
     static let refractorySeconds: Float = 0.12
+    static let onsetTriggerThreshold: Float = 0.34
+    static let onsetRearmThreshold: Float = 0.16
 
     private var kickArmed = true
     private var lastTrigger: CFTimeInterval = 0
@@ -32,7 +35,7 @@ final class BeatPunchState {
         let strength = Float(strengthPercent) / 100
         var flash = false
 
-        if strength > 0, kickArmed, onset > 0.48 {
+        if strength > 0, kickArmed, onset > Self.onsetTriggerThreshold {
             let since = now - lastTrigger
             if since >= Double(Self.refractorySeconds) {
                 let magnitude = min(max(onset / 2.0, 0), 1)
@@ -45,7 +48,7 @@ final class BeatPunchState {
                 }
             }
         }
-        if onset < 0.26 {
+        if onset < Self.onsetRearmThreshold {
             kickArmed = true
         }
 
@@ -80,6 +83,13 @@ final class BeatPunchState {
         let span = now - recentTriggers[0]
         guard span > 0.25 else { return 0 }
         return Int((Double(recentTriggers.count - 1) / span * 60).rounded())
+    }
+
+    /// Rolling rate from punch triggers (same window as `punchesPerMinute`).
+    var beatsPerSecond: Float {
+        let bpm = Float(punchesPerMinute)
+        guard bpm > 0 else { return 0 }
+        return bpm / 60
     }
 
     private func recordTrigger(_ now: CFTimeInterval) {
