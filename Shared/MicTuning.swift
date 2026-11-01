@@ -30,6 +30,8 @@ enum MicTuning {
     static let tvPictureBrightnessKey = "wizuale.tv.pictureBrightness"
     static let beatStrengthKey = "wizuale.mic.beatStrength"
     static let tvBeatStrengthKey = "wizuale.tv.beatStrength"
+    static let sceneIntensityKey = "wizuale.mic.sceneIntensity"
+    static let tvSceneIntensityKey = "wizuale.tv.sceneIntensity"
 
     static let pictureBrightnessMin = 10
     static let pictureBrightnessMax = 100
@@ -38,6 +40,17 @@ enum MicTuning {
     static let beatStrengthMin = 0
     static let beatStrengthMax = 100
     static let beatStrengthDefault = 70
+
+    /// Permille of f301047 scene-modulation baseline: 100 = 1×, 1000 = 10× (default), 2000 = 20×.
+    static let sceneIntensityMinPermille = 0
+    static let sceneIntensityMaxPermille = 2000
+    static let sceneIntensityDefaultPermille = 1000
+
+    /// PCM kick mix and beat-sensitivity punch boost at 1× intensity (f301047).
+    static let scenePunchPCMSMixBaseline: Float = 0.38
+    static let scenePunchSensitivityBoostBaseline: Float = 0.42
+    /// Caps `projectm_set_beat_sensitivity` during a punch so presets stay stable at max slider.
+    static let sceneBeatSensitivityCeiling: Float = 10
 
     static let sensitivityMin: Float = 0.25
     static let sensitivityMax: Float = 3
@@ -170,6 +183,51 @@ enum MicTuning {
 
     static func saveTVBeatStrength(_ percent: Int) {
         UserDefaults.standard.set(clampBeatStrength(percent), forKey: tvBeatStrengthKey)
+    }
+
+    static func clampSceneIntensity(_ permille: Int) -> Int {
+        min(max(permille, sceneIntensityMinPermille), sceneIntensityMaxPermille)
+    }
+
+    /// Multiplier vs f301047 scene path (100 permille → 1.0).
+    static func sceneIntensityMultiplier(_ permille: Int) -> Float {
+        Float(clampSceneIntensity(permille)) / 100
+    }
+
+    static func loadSceneIntensity() -> Int {
+        guard UserDefaults.standard.object(forKey: sceneIntensityKey) != nil else {
+            return sceneIntensityDefaultPermille
+        }
+        return clampSceneIntensity(UserDefaults.standard.integer(forKey: sceneIntensityKey))
+    }
+
+    static func saveSceneIntensity(_ permille: Int) {
+        UserDefaults.standard.set(clampSceneIntensity(permille), forKey: sceneIntensityKey)
+    }
+
+    static func loadTVSceneIntensity() -> Int {
+        guard UserDefaults.standard.object(forKey: tvSceneIntensityKey) != nil else {
+            return sceneIntensityDefaultPermille
+        }
+        return clampSceneIntensity(UserDefaults.standard.integer(forKey: tvSceneIntensityKey))
+    }
+
+    static func saveTVSceneIntensity(_ permille: Int) {
+        UserDefaults.standard.set(clampSceneIntensity(permille), forKey: tvSceneIntensityKey)
+    }
+
+    static func formatSceneIntensity(_ permille: Int) -> String {
+        let mul = Double(clampSceneIntensity(permille)) / 100
+        if abs(mul - mul.rounded()) < 0.05 {
+            return "\(Int(mul.rounded()))×"
+        }
+        return String(format: "%.1f×", mul)
+    }
+
+    static func clampSceneBeatSensitivity(base: Float, punchBoost: Float) -> Float {
+        let baseClamped = clampSensitivity(base)
+        let boost = punchBoost.isFinite ? max(0, punchBoost) : 0
+        return min(baseClamped + boost, sceneBeatSensitivityCeiling)
     }
 }
 
