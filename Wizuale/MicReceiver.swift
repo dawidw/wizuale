@@ -20,10 +20,12 @@ struct MicDrive: Sendable {
     var presence: Float
     var drop: Float
     var dropPunch: Float
+    /// Age of the Wi‑Fi feature stamp used this frame (ms since arrival at TV).
+    var featureAgeMs: Float
 
     static let silent = MicDrive(
         onset: 0, bass: 0, lowMid: 0, mid: 0, high: 0, loudness: 0, flux: 0,
-        presence: 0, drop: 0, dropPunch: 0
+        presence: 0, drop: 0, dropPunch: 0, featureAgeMs: 0
     )
 }
 
@@ -223,6 +225,7 @@ final class MicReceiver: @unchecked Sendable {
         }
         let arriving = packetFresh || (sourceNow != .off && now < liveHoldUntil)
         var chosen: Stamp?
+        var featureAgeMs: Float = 0
         if sourceNow != .off {
             let delay = latency < 0 ? 0.0 : Double(latency) / 1000
             let readTime = now - delay
@@ -230,6 +233,7 @@ final class MicReceiver: @unchecked Sendable {
                 if stamp.time <= readTime {
                     if readTime - stamp.time <= 0.30 {
                         chosen = stamp
+                        featureAgeMs = Float((now - stamp.time) * 1000)
                     }
                     break
                 }
@@ -242,7 +246,6 @@ final class MicReceiver: @unchecked Sendable {
         let fresh = arriving || chosen != nil
         let isNew = chosen != nil && (!haveApplied || sequence != appliedSequence)
         if isNew {
-            if packet.onset > onset { onset = packet.onset }
             haveApplied = true
             appliedSequence = sequence
         }
@@ -251,13 +254,14 @@ final class MicReceiver: @unchecked Sendable {
         }
 
         let target = fresh ? packet : MicFeatures.zero
-        onset *= expf(-dtSafe / 0.14)
-        bass = follow(bass, target.bass, dt: dtSafe, attack: 0.006, release: 0.22)
-        lowMid = follow(lowMid, target.lowMid, dt: dtSafe, attack: 0.018, release: 0.24)
-        mid = follow(mid, target.mid, dt: dtSafe, attack: 0.02, release: 0.16)
-        high = follow(high, target.high, dt: dtSafe, attack: 0.015, release: 0.09)
-        loudness = follow(loudness, target.loudness, dt: dtSafe, attack: 0.02, release: 0.22)
-        flux = follow(flux, target.flux, dt: dtSafe, attack: 0.015, release: 0.10)
+        // Faster attack/release than pre-1.1(2) — less “averaged” motion lag on TV (see ProjectMAudioHub latency note).
+        onset = follow(onset, target.onset, dt: dtSafe, attack: 0.010, release: 0.085)
+        bass = follow(bass, target.bass, dt: dtSafe, attack: 0.005, release: 0.105)
+        lowMid = follow(lowMid, target.lowMid, dt: dtSafe, attack: 0.014, release: 0.18)
+        mid = follow(mid, target.mid, dt: dtSafe, attack: 0.016, release: 0.11)
+        high = follow(high, target.high, dt: dtSafe, attack: 0.012, release: 0.075)
+        loudness = follow(loudness, target.loudness, dt: dtSafe, attack: 0.018, release: 0.16)
+        flux = follow(flux, target.flux, dt: dtSafe, attack: 0.012, release: 0.08)
 
         let presenceTarget: Float = fresh ? 1 : 0
         let presenceTau: Float = fresh ? 0.05 : 0.40
@@ -307,7 +311,8 @@ final class MicReceiver: @unchecked Sendable {
             flux: hit(flux, sens),
             presence: min(max(presence, 0), 1),
             drop: min(max(dropLevel, 0), 1),
-            dropPunch: min(max(dropPunch, 0), 1.5)
+            dropPunch: min(max(dropPunch, 0), 1.5),
+            featureAgeMs: featureAgeMs
         )
     }
 
