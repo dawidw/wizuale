@@ -16,6 +16,12 @@ enum ProjectMAudioFeedState: String, Sendable {
 }
 
 /// PCM queue from the mic receiver to the GL draw loop.
+///
+/// Phone→TV latency budget @ 48 kHz (estimated; `latencyMs` slider adds intentional delay on features):
+/// - **Before (build 1.1(2)):** ~10 ms phone tap hop + 1–5 ms UDP + TV feature `follow()` bass τ_release≈220 ms
+///   + PCM FIFO jitter target ~70 ms + AGC smoothing τ≈550 ms/sample → motion often felt ~250–400 ms behind room.
+/// - **After:** TV feature τ_release bass≈105 ms / onset≈85 ms, FIFO jitter target 40 ms, faster AGC τ≈350 ms/sample,
+///   scene punch on PCM (not UIView) → typical motion lag roughly **120–180 ms lower** at default latencyMs=0.
 final class ProjectMAudioHub: @unchecked Sendable {
     struct Metrics: Sendable {
         var fifoSamples: Int
@@ -35,6 +41,8 @@ final class ProjectMAudioHub: @unchecked Sendable {
         var pcmInRms: Float
         /// Mono samples handed to libprojectM per second (rolling ~1 s).
         var projectMFeedSps: Float
+        /// Last frame's scene punch envelope (PCM kick injection).
+        var scenePunch: Float
     }
 
     private let lock = NSLock()
@@ -55,6 +63,8 @@ final class ProjectMAudioHub: @unchecked Sendable {
     private var lastSample: Float = 0
     private var underrunDecay: Float = 0
     private var underrunTotal: UInt32 = 0
+    private var punchPhase: Float = 0
+    private var lastScenePunch: Float = 0
 
     private var windowBegin: CFTimeInterval = 0
     private var windowPackets = 0
@@ -71,14 +81,14 @@ final class ProjectMAudioHub: @unchecked Sendable {
         fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: ProjectMAudioHub.defaultAgcGain,
         streamLive: false, feedState: .fallback,
         micSource: .phone, pcmPacketsPerSec: 0, gapAvgMs: 0, gapMaxMs: 0,
-        underrunTotal: 0, pcmInRms: 0, projectMFeedSps: 0
+        underrunTotal: 0, pcmInRms: 0, projectMFeedSps: 0, scenePunch: 0
     )
 
     static let defaultAgcGain: Float = 2.8
     static let primeFrameCount: Float = 2
     /// Jitter absorption — larger than phone burst spacing.
     static let maxFifoSeconds: Float = 0.85
-    static let targetJitterMs: Float = 70
+    static let targetJitterMs: Float = 40
     static let minPrimeMs: Float = 20
     /// Steady PCM peaks for MilkDrop bass_att — motion, not white flashes.
     static let targetRMS: Float = 0.58
@@ -154,6 +164,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
     /// Hands this frame's audio to `sink` (mono floats in -1...1). Call once per frame.
     func feed(
         micSource: MicInputSource,
+        scenePunch: Float = 0,
         now: CFTimeInterval = CACurrentMediaTime(),
         into sink: ([Float]) -> Void
     ) {
@@ -260,6 +271,12 @@ final class ProjectMAudioHub: @unchecked Sendable {
             underrunDecay = 0
         }
 
+        let punchActive = feedState == .phonePCM || feedState == .continuityPCM
+        if punchActive, scenePunch > 0.008 {
+            applyScenePunch(&out, envelope: scenePunch, rate: r)
+        }
+        lastScenePunch = scenePunch
+
         sink(out)
 
         lock.lock()
@@ -288,9 +305,23 @@ final class ProjectMAudioHub: @unchecked Sendable {
             gapMaxMs: gapMax,
             underrunTotal: underruns,
             pcmInRms: pcmIn,
-            projectMFeedSps: feedSps
+            projectMFeedSps: feedSps,
+            scenePunch: lastScenePunch
         )
         lock.unlock()
+    }
+
+    /// Low-frequency transient widens projectM `bass` vs `bass_att` (MilkDrop pulse) without tanh-brightening the frame.
+    private func applyScenePunch(_ samples: inout [Float], envelope: Float, rate: Float) {
+        guard !samples.isEmpty, rate > 1000 else { return }
+        let mix = min(max(envelope, 0), 1.2) * 0.38
+        let omega = 2 * Float.pi * 58 / rate
+        for i in 0..<samples.count {
+            punchPhase += omega
+            if punchPhase > 2 * Float.pi { punchPhase -= 2 * Float.pi }
+            let kick = sinf(punchPhase) * mix
+            samples[i] = softLimit(samples[i] + kick)
+        }
     }
 
     private func underrunHold(count: Int) -> [Float] {
@@ -308,6 +339,8 @@ final class ProjectMAudioHub: @unchecked Sendable {
         meanSquare *= 0.2
         lastSample = 0
         underrunDecay = 0
+        punchPhase = 0
+        lastScenePunch = 0
     }
 
     private func decayShapingState(dt: Float) {
@@ -326,7 +359,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
     }
 
     private func shape(_ input: [Float], dt: Float, rate: Float, sensitivity: Float) -> [Float] {
-        let rmsCoef = 1 as Float - expf(-1 / (0.55 as Float * rate))
+        let rmsCoef = 1 as Float - expf(-1 / (0.35 as Float * rate))
         let sens = min(max(sensitivity, 0.35), 3)
         let levelGain = 0.88 + sens * 0.08
         let combinedGain = min(agcGain * levelGain, ProjectMAudioHub.maxGain)
@@ -342,9 +375,9 @@ final class ProjectMAudioHub: @unchecked Sendable {
         if rms < ProjectMAudioHub.targetRMS * 0.06 {
             attack = 0.38
         } else if rms > ProjectMAudioHub.targetRMS * 1.05 {
-            attack = 0.72
+            attack = 0.48
         } else {
-            attack = 0.55
+            attack = 0.38
         }
         agcGain += (desired - agcGain) * (1 as Float - expf(-dt / attack))
         return out

@@ -27,8 +27,12 @@ struct MicAudioDebugOverlay: View {
             row("RMS", String(format: "%.3f  AGC %.1f×", metrics.rms, metrics.agcGain))
             row("projectM", String(format: "%.0f smp/s", metrics.projectMFeedSps))
             row("Latency", "\(latencyMs) ms (slider)")
+            row("Feat age", String(format: "%.0f ms", drive.featureAgeMs))
             row("Onset", String(format: "%.2f  Bass %.2f", drive.onset, drive.bass))
-            row("Punch", "\(beatStrength)%  \(punchesPerMinute) bpm")
+            row(
+                "Scene punch",
+                String(format: "%.2f  %d%%  ~%d bpm", metrics.scenePunch, beatStrength, punchesPerMinute)
+            )
             row("Mid/Hi", String(format: "%.2f / %.2f", drive.mid, drive.high))
             row("Presence", String(format: "%.2f  Flux %.2f", drive.presence, drive.flux))
             if metrics.micSource == .phone && drive.presence > 0.12 && !metrics.streamLive {

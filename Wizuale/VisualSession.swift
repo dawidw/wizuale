@@ -32,8 +32,7 @@ final class VisualSession: ObservableObject {
         for: MicTuning.loadTVPictureBrightness()
     )
     @Published private(set) var beatStrength = MicTuning.loadTVBeatStrength()
-    @Published private(set) var beatPunchScale: CGFloat = CGFloat(BeatPunchState.baseOverscan)
-    @Published private(set) var beatPunchRotation: Angle = .zero
+    @Published private(set) var beatSceneEnvelope: Float = 0
     @Published private(set) var beatPunchFlash = false
     @Published private(set) var beatPunchesPerMinute = 0
     @Published private(set) var audioDebugDrive = MicDrive.silent
@@ -41,7 +40,7 @@ final class VisualSession: ObservableObject {
         fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: ProjectMAudioHub.defaultAgcGain,
         streamLive: false, feedState: .fallback, micSource: .phone,
         pcmPacketsPerSec: 0, gapAvgMs: 0, gapMaxMs: 0, underrunTotal: 0, pcmInRms: 0,
-        projectMFeedSps: 0
+        projectMFeedSps: 0, scenePunch: 0
     )
     @Published var micSource = MicTuning.loadSource()
     @Published var sensitivity = MicTuning.loadSensitivity()
@@ -61,7 +60,7 @@ final class VisualSession: ObservableObject {
     private var hintToken = UUID()
     private var dimAnimToken = UUID()
     private let beatPunch = BeatPunchState()
-    private var lastAudioFrameTime: CFTimeInterval = 0
+    var beatPunchState: BeatPunchState { beatPunch }
 
     var currentPresetName: String {
         MilkPresetCatalog.preset(at: presetIndex)?.displayName ?? "Preset"
@@ -141,20 +140,9 @@ final class VisualSession: ObservableObject {
         }
     }
 
-    func noteAudioFrame(drive: MicDrive, metrics: ProjectMAudioHub.Metrics) {
-        let now = CACurrentMediaTime()
-        let dt: Float
-        if lastAudioFrameTime > 0 {
-            dt = Float(now - lastAudioFrameTime)
-        } else {
-            dt = 1.0 / 60.0
-        }
-        lastAudioFrameTime = now
-        beatPunch.setStrengthPercent(beatStrength)
-        let frame = beatPunch.advance(drive: drive, dt: dt, now: now)
-        beatPunchScale = frame.scale
-        beatPunchRotation = .radians(Double(frame.rotationRadians))
-        beatPunchFlash = frame.flash
+    func noteAudioFrame(drive: MicDrive, metrics: ProjectMAudioHub.Metrics, punch: BeatPunchFrame) {
+        beatSceneEnvelope = punch.sceneEnvelope
+        beatPunchFlash = punch.flash
         beatPunchesPerMinute = beatPunch.punchesPerMinute
         guard showAudioDebug else { return }
         audioDebugDrive = drive

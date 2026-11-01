@@ -1,29 +1,24 @@
-import CoreGraphics
 import Foundation
 import QuartzCore
 
-/// Geometry-only beat punch on the projectM frame (scale + slight rotation, no brightness).
+/// Scene punch envelope fed into libprojectM (PCM / sensitivity), not a UIView transform.
 struct BeatPunchFrame: Equatable {
-    var scale: CGFloat
-    var rotationRadians: CGFloat
+    /// 0…1-ish kick envelope for preset motion (zoom/rot/warp via MilkDrop inputs).
+    var sceneEnvelope: Float
     /// True for one frame when a punch was triggered (syncs BEAT TEST dot).
     var flash: Bool
 }
 
 /// Detects kicks from `MicDrive.onset` (same path as the TV mic receiver) and animates punch envelope.
 final class BeatPunchState {
-    static let baseOverscan: Float = 1.03
-    static let maxExtraScale: Float = 0.09
     static let attackSeconds: Float = 0.028
     static let releaseTau: Float = 0.19
     static let refractorySeconds: Float = 0.12
-    static let maxRotationDegrees: Float = 1.6
 
     private var kickArmed = true
     private var lastTrigger: CFTimeInterval = 0
     private var triggerPeak: Float = 0
     private var envelope: Float = 0
-    private var rotationSign: Float = 1
     private var recentTriggers: [CFTimeInterval] = []
     private(set) var strengthPercent: Int = MicTuning.loadTVBeatStrength()
 
@@ -45,7 +40,6 @@ final class BeatPunchState {
                 if triggerPeak > 0.04 {
                     lastTrigger = now
                     kickArmed = false
-                    rotationSign = Bool.random() ? 1 : -1
                     recordTrigger(now)
                     flash = true
                 }
@@ -76,10 +70,7 @@ final class BeatPunchState {
             if envelope < 0.008 { envelope = 0 }
         }
 
-        let extra = envelope * Self.maxExtraScale
-        let scale = CGFloat(Self.baseOverscan + extra)
-        let rot = CGFloat(envelope * Self.maxRotationDegrees * rotationSign * (Float.pi / 180))
-        return BeatPunchFrame(scale: scale, rotationRadians: rot, flash: flash)
+        return BeatPunchFrame(sceneEnvelope: envelope, flash: flash)
     }
 
     var punchesPerMinute: Int {

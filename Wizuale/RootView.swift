@@ -31,10 +31,10 @@ struct RootView: View {
                     micReceiver: visuals.micReceiver,
                     micSource: visuals.micSource,
                     paused: scenePhase != .active,
-                    beatPunchScale: visuals.beatPunchScale,
-                    beatPunchRotation: visuals.beatPunchRotation,
-                    onAudioFrame: { drive, metrics in
-                        visuals.noteAudioFrame(drive: drive, metrics: metrics)
+                    beatPunch: visuals.beatPunchState,
+                    beatStrength: visuals.beatStrength,
+                    onAudioFrame: { drive, metrics, punch in
+                        visuals.noteAudioFrame(drive: drive, metrics: metrics, punch: punch)
                     },
                     failure: $failure
                 )
