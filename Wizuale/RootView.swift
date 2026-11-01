@@ -33,6 +33,7 @@ struct RootView: View {
                     paused: scenePhase != .active,
                     beatPunch: visuals.beatPunchState,
                     beatStrength: visuals.beatStrength,
+                    sceneIntensity: visuals.sceneIntensity,
                     onAudioFrame: { drive, metrics, punch in
                         visuals.noteAudioFrame(drive: drive, metrics: metrics, punch: punch)
                     },
@@ -58,6 +59,7 @@ struct RootView: View {
                     metrics: visuals.audioDebugMetrics,
                     latencyMs: visuals.latencyMs,
                     beatStrength: visuals.beatStrength,
+                    sceneIntensity: visuals.sceneIntensity,
                     punchesPerMinute: visuals.beatPunchesPerMinute
                 )
                 .zIndex(400)

@@ -50,6 +50,8 @@ final class MicReceiver: @unchecked Sendable {
     var onDimming: (@Sendable (Int) -> Void)?
     /// Beat punch strength 0…100 from the phone.
     var onBeatStrength: (@Sendable (Int) -> Void)?
+    /// Scene modulation intensity (permille of f301047 baseline) from the phone.
+    var onSceneIntensity: (@Sendable (Int) -> Void)?
     /// First phone PCM while TV mic was Off — adopt iPhone app (Wi‑Fi) as source.
     var onAdoptPhoneSource: (@Sendable () -> Void)?
 
@@ -99,6 +101,7 @@ final class MicReceiver: @unchecked Sendable {
     private var ackAudioDebug = false
     private var ackPictureBrightness: Int
     private var ackBeatStrength: Int
+    private var ackSceneIntensity: Int
     private var stateRevision: UInt16 = 0
 
     private let hitCap: Float = 3.5
@@ -110,6 +113,7 @@ final class MicReceiver: @unchecked Sendable {
         ackAudioDebug = UserDefaults.standard.bool(forKey: "wizuale.tv.audioDebug")
         ackPictureBrightness = MicTuning.loadTVPictureBrightness()
         ackBeatStrength = MicTuning.loadTVBeatStrength()
+        ackSceneIntensity = MicTuning.loadTVSceneIntensity()
     }
 
     /// Echoed in acks so the phone toggle stays in sync with the TV overlay.
@@ -138,6 +142,18 @@ final class MicReceiver: @unchecked Sendable {
         let clamped = MicTuning.clampBeatStrength(percent)
         lock.lock()
         ackBeatStrength = clamped
+        stateRevision &+= 1
+        if stateRevision == 0 { stateRevision = 1 }
+        lock.unlock()
+        queue.async { [weak self] in
+            self?.sendAck(force: true)
+        }
+    }
+
+    func setAckSceneIntensity(_ permille: Int) {
+        let clamped = MicTuning.clampSceneIntensity(permille)
+        lock.lock()
+        ackSceneIntensity = clamped
         stateRevision &+= 1
         if stateRevision == 0 { stateRevision = 1 }
         lock.unlock()
@@ -503,6 +519,21 @@ final class MicReceiver: @unchecked Sendable {
                     handler(clamped)
                 }
             }
+        case .sceneIntensity(_, let permille):
+            let clamped = MicTuning.clampSceneIntensity(permille)
+            MicTuning.saveTVSceneIntensity(clamped)
+            lock.lock()
+            ackSceneIntensity = clamped
+            stateRevision &+= 1
+            if stateRevision == 0 { stateRevision = 1 }
+            lock.unlock()
+            sendAck(force: true)
+            let handler = onSceneIntensity
+            if let handler {
+                DispatchQueue.main.async {
+                    handler(clamped)
+                }
+            }
         case .ack:
             break
         }
@@ -575,6 +606,7 @@ final class MicReceiver: @unchecked Sendable {
         let debug = ackAudioDebug
         let brightness = ackPictureBrightness
         let beat = ackBeatStrength
+        let intensity = ackSceneIntensity
         let revision = stateRevision
         lock.unlock()
         let packet = MicWire.encodeAck(
@@ -585,6 +617,7 @@ final class MicReceiver: @unchecked Sendable {
             showAudioDebug: debug,
             pictureBrightness: brightness,
             beatStrength: beat,
+            sceneIntensity: intensity,
             stateRevision: revision
         )
         let targets: [NWConnection]

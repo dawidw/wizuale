@@ -11,6 +11,7 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
     var paused: Bool
     var beatPunch: BeatPunchState
     var beatStrength: Int
+    var sceneIntensity: Int
     var onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame) -> Void)?
     @Binding var failure: String?
 
@@ -33,6 +34,7 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
         controller.paused = paused
         controller.micSource = micSource
         controller.beatStrength = beatStrength
+        controller.sceneIntensity = sceneIntensity
     }
 }
 
@@ -53,6 +55,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     var paused = false
     var micSource: MicInputSource = .phone
     var beatStrength: Int = MicTuning.loadTVBeatStrength()
+    var sceneIntensity: Int = MicTuning.loadTVSceneIntensity()
     var onFailure: ((String) -> Void)?
 
     init(
@@ -158,8 +161,12 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         beatPunch.setStrengthPercent(beatStrength)
         let punchFrame = beatPunch.advance(drive: drive, dt: dt, now: now)
         let snap = renderState.snapshot()
-        let sceneBoost = punchFrame.sceneEnvelope * 0.42 * Float(beatStrength) / 100
-        let sceneSens = snap.beatSensitivity + sceneBoost
+        let intensity = MicTuning.sceneIntensityMultiplier(sceneIntensity)
+        let sceneBoost = punchFrame.sceneEnvelope
+            * MicTuning.scenePunchSensitivityBoostBaseline
+            * Float(beatStrength) / 100
+            * intensity
+        let sceneSens = MicTuning.clampSceneBeatSensitivity(base: snap.beatSensitivity, punchBoost: sceneBoost)
         projectM.setBeatSensitivity(sceneSens)
         if snap.targetIndex != lastIndex {
             projectM.loadPreset(index: snap.targetIndex, smooth: lastIndex >= 0)
@@ -168,6 +175,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         audioHub.feed(
             micSource: micSource,
             scenePunch: punchFrame.sceneEnvelope,
+            sceneIntensityPermille: sceneIntensity,
             now: now
         ) { projectM.addPCM(floats: $0) }
         onAudioFrame?(drive, audioHub.metricsSnapshot(), punchFrame)

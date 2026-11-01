@@ -6,6 +6,7 @@ struct MicAudioDebugOverlay: View {
     var metrics: ProjectMAudioHub.Metrics
     var latencyMs: Int
     var beatStrength: Int
+    var sceneIntensity: Int
     var punchesPerMinute: Int
 
     var body: some View {
@@ -33,6 +34,7 @@ struct MicAudioDebugOverlay: View {
                 "Scene punch",
                 String(format: "%.2f  %d%%  ~%d bpm", metrics.scenePunch, beatStrength, punchesPerMinute)
             )
+            row("Intensywność", MicTuning.formatSceneIntensity(sceneIntensity))
             row("Mid/Hi", String(format: "%.2f / %.2f", drive.mid, drive.high))
             row("Presence", String(format: "%.2f  Flux %.2f", drive.presence, drive.flux))
             if metrics.micSource == .phone && drive.presence > 0.12 && !metrics.streamLive {

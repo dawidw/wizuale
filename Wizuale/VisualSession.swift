@@ -32,6 +32,7 @@ final class VisualSession: ObservableObject {
         for: MicTuning.loadTVPictureBrightness()
     )
     @Published private(set) var beatStrength = MicTuning.loadTVBeatStrength()
+    @Published private(set) var sceneIntensity = MicTuning.loadTVSceneIntensity()
     @Published private(set) var beatSceneEnvelope: Float = 0
     @Published private(set) var beatPunchFlash = false
     @Published private(set) var beatPunchesPerMinute = 0
@@ -113,9 +114,15 @@ final class VisualSession: ObservableObject {
                     self?.applyBeatStrength(percent)
                 }
             }
+            micReceiver.onSceneIntensity = { [weak self] permille in
+                Task { @MainActor in
+                    self?.applySceneIntensity(permille)
+                }
+            }
             micReceiver.setAckAudioDebug(showAudioDebug)
             micReceiver.setAckPictureBrightness(MicTuning.loadTVPictureBrightness())
             micReceiver.setAckBeatStrength(MicTuning.loadTVBeatStrength())
+            micReceiver.setAckSceneIntensity(MicTuning.loadTVSceneIntensity())
             micReceiver.onAdoptPhoneSource = { [weak self] in
                 Task { @MainActor in
                     self?.micSource = .phone
@@ -178,6 +185,13 @@ final class VisualSession: ObservableObject {
         MicTuning.saveTVBeatStrength(clamped)
         micReceiver.setAckBeatStrength(clamped)
         beatPunch.setStrengthPercent(clamped)
+    }
+
+    func applySceneIntensity(_ permille: Int) {
+        let clamped = MicTuning.clampSceneIntensity(permille)
+        sceneIntensity = clamped
+        MicTuning.saveTVSceneIntensity(clamped)
+        micReceiver.setAckSceneIntensity(clamped)
     }
 
     private func animatePictureDim(to target: Double) {

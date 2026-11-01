@@ -165,6 +165,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
     func feed(
         micSource: MicInputSource,
         scenePunch: Float = 0,
+        sceneIntensityPermille: Int = MicTuning.sceneIntensityDefaultPermille,
         now: CFTimeInterval = CACurrentMediaTime(),
         into sink: ([Float]) -> Void
     ) {
@@ -273,7 +274,12 @@ final class ProjectMAudioHub: @unchecked Sendable {
 
         let punchActive = feedState == .phonePCM || feedState == .continuityPCM
         if punchActive, scenePunch > 0.008 {
-            applyScenePunch(&out, envelope: scenePunch, rate: r)
+            applyScenePunch(
+                &out,
+                envelope: scenePunch,
+                intensityPermille: sceneIntensityPermille,
+                rate: r
+            )
         }
         lastScenePunch = scenePunch
 
@@ -312,9 +318,17 @@ final class ProjectMAudioHub: @unchecked Sendable {
     }
 
     /// Low-frequency transient widens projectM `bass` vs `bass_att` (MilkDrop pulse) without tanh-brightening the frame.
-    private func applyScenePunch(_ samples: inout [Float], envelope: Float, rate: Float) {
+    private func applyScenePunch(
+        _ samples: inout [Float],
+        envelope: Float,
+        intensityPermille: Int,
+        rate: Float
+    ) {
         guard !samples.isEmpty, rate > 1000 else { return }
-        let mix = min(max(envelope, 0), 1.2) * 0.38
+        let intensity = MicTuning.sceneIntensityMultiplier(intensityPermille)
+        let env = min(max(envelope, 0), 1.2)
+        let mix = env * MicTuning.scenePunchPCMSMixBaseline * intensity
+        guard mix.isFinite, mix > 0 else { return }
         let omega = 2 * Float.pi * 58 / rate
         for i in 0..<samples.count {
             punchPhase += omega
