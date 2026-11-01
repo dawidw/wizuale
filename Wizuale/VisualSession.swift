@@ -36,6 +36,18 @@ final class VisualSession: ObservableObject {
     @Published private(set) var beatSceneEnvelope: Float = 0
     @Published private(set) var beatPunchFlash = false
     @Published private(set) var beatPunchesPerMinute = 0
+    @Published private(set) var sceneModTrace = SceneModulationTrace(
+        beatStrengthPercent: MicTuning.loadTVBeatStrength(),
+        sceneIntensityPermille: MicTuning.loadTVSceneIntensity(),
+        intensityMultiplier: MicTuning.sceneIntensityMultiplier(MicTuning.loadTVSceneIntensity()),
+        strengthScale: Float(MicTuning.loadTVBeatStrength()) / 100,
+        kickEnvelope: 0,
+        kickSensitivityBoost: 0,
+        continuousSensitivityBoost: 0,
+        projectMBeatSensitivity: MicTuning.sensitivityDefault,
+        pcmKickMix: 0,
+        tsunamiMaxDisplacement: 0
+    )
     @Published private(set) var audioDebugDrive = MicDrive.silent
     @Published private(set) var audioDebugMetrics = ProjectMAudioHub.Metrics(
         fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: ProjectMAudioHub.defaultAgcGain,
@@ -147,10 +159,16 @@ final class VisualSession: ObservableObject {
         }
     }
 
-    func noteAudioFrame(drive: MicDrive, metrics: ProjectMAudioHub.Metrics, punch: BeatPunchFrame) {
+    func noteAudioFrame(
+        drive: MicDrive,
+        metrics: ProjectMAudioHub.Metrics,
+        punch: BeatPunchFrame,
+        modulation: SceneModulationTrace
+    ) {
         beatSceneEnvelope = punch.sceneEnvelope
         beatPunchFlash = punch.flash
         beatPunchesPerMinute = beatPunch.punchesPerMinute
+        sceneModTrace = modulation
         guard showAudioDebug else { return }
         audioDebugDrive = drive
         audioDebugMetrics = metrics

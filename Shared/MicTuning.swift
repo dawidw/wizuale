@@ -54,10 +54,12 @@ enum MicTuning {
 
     /// Radial tsunami compositor (UV displacement, brightness-neutral).
     static let kickWaveReleaseTau: Float = 0.20
-    static let kickWaveRingFrequency: Float = 22
-    static let kickWavePhaseSpeed: Float = 16
-    /// Max outward UV shift at envelope=1, Siła bitu=100%.
-    static let kickWaveMaxDisplacement: Float = 0.042
+    static let kickWaveRingFrequency: Float = 18
+    static let kickWavePhaseSpeed: Float = 18
+    /// Radial falloff in compositor shader (`exp(-r * falloff)`).
+    static let kickWaveRingFalloff: Float = 0.85
+    /// Max outward UV shift at envelope=1, Siła bitu=100% (visible tsunami on TV).
+    static let kickWaveMaxDisplacement: Float = 0.12
     /// Caps `projectm_set_beat_sensitivity` during a punch so presets stay stable at max slider.
     static let sceneBeatSensitivityCeiling: Float = 10
 
@@ -240,10 +242,28 @@ enum MicTuning {
         return ceiling * tanhf(value / ceiling)
     }
 
+    /// libprojectM beat sensitivity during scene modulation (user slider stays 0.25…3 in UI state).
+    static func clampProjectMBeatSensitivity(_ value: Float) -> Float {
+        guard value.isFinite else { return sensitivityDefault }
+        return min(max(value, sensitivityMin), sceneBeatSensitivityCeiling)
+    }
+
     static func clampSceneBeatSensitivity(base: Float, punchBoost: Float) -> Float {
         let baseClamped = clampSensitivity(base)
         let boost = punchBoost.isFinite ? max(0, punchBoost) : 0
-        return sceneSoftSaturate(baseClamped + boost)
+        let combined = baseClamped + sceneSoftSaturate(boost)
+        return clampProjectMBeatSensitivity(combined)
+    }
+
+    /// `uMaxDisp` uniform: Siła bitu × peak UV (envelope applied once in the shader).
+    static func kickWaveShaderMaxDisplacement(strengthScale: Float) -> Float {
+        min(max(strengthScale, 0), 1) * kickWaveMaxDisplacement
+    }
+
+    /// Peak outward UV shift at this envelope (for DEBUG readout).
+    static func kickWaveEffectiveDisplacement(envelope: Float, strengthScale: Float) -> Float {
+        let env = min(max(envelope, 0), 1.4)
+        return env * kickWaveShaderMaxDisplacement(strengthScale: strengthScale)
     }
 
     /// PCM after scene punch — tanh limiter (avoids blowout / NaN-ish whites).

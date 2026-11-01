@@ -10,6 +10,7 @@ struct MicAudioDebugOverlay: View {
     var punchesPerMinute: Int
     var kickEnvelope: Float
     var kickFlash: Bool
+    var modulation: SceneModulationTrace
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -45,6 +46,36 @@ struct MicAudioDebugOverlay: View {
                 String(format: "PCM %.2f", metrics.scenePunch)
             )
             row("Intensywność", MicTuning.formatSceneIntensity(sceneIntensity))
+            row(
+                "RX suwaki",
+                String(
+                    format: "Siła %d%%  ‰ %d",
+                    modulation.beatStrengthPercent,
+                    modulation.sceneIntensityPermille
+                )
+            )
+            row(
+                "Mnożniki",
+                String(
+                    format: "N %.1f×  siła %.2f  env %.2f",
+                    modulation.intensityMultiplier,
+                    modulation.strengthScale,
+                    modulation.kickEnvelope
+                )
+            )
+            row(
+                "→ projectM",
+                String(
+                    format: "sens %.2f  kick+%.2f  cont+%.2f",
+                    modulation.projectMBeatSensitivity,
+                    modulation.kickSensitivityBoost,
+                    modulation.continuousSensitivityBoost
+                )
+            )
+            row(
+                "Tsunami UV",
+                String(format: "peak %.3f  PCM mix %.2f", modulation.tsunamiMaxDisplacement, modulation.pcmKickMix)
+            )
             row("Mid/Hi", String(format: "%.2f / %.2f", drive.mid, drive.high))
             row("Presence", String(format: "%.2f  Flux %.2f", drive.presence, drive.flux))
             if metrics.micSource == .phone && drive.presence > 0.12 && !metrics.streamLive {

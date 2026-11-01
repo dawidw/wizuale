@@ -31,16 +31,36 @@ final class BeatPunchState {
         strengthPercent = MicTuning.clampBeatStrength(percent)
     }
 
-    func advance(drive: MicDrive, dt: Float, now: CFTimeInterval) -> BeatPunchFrame {
+    private var lastSyntheticKick: CFTimeInterval = 0
+
+    /// DEBUG: 500 ms synthetic full kick when AUDIO DEBUG is on (no room music required).
+    func injectSyntheticKickIfDue(now: CFTimeInterval, enabled: Bool) -> Bool {
+        guard enabled else { return false }
+        guard now - lastSyntheticKick >= 0.5 else { return false }
+        lastSyntheticKick = now
+        let strength = Float(strengthPercent) / 100
+        guard strength > 0 else { return false }
+        triggerPeak = strength
+        lastTrigger = now
+        kickArmed = false
+        recordTrigger(now)
+        return true
+    }
+
+    func advance(drive: MicDrive, dt: Float, now: CFTimeInterval, syntheticKickDebug: Bool = false) -> BeatPunchFrame {
         let dtSafe = min(max(dt, 0), 0.1)
         let onset = drive.onset
         let strength = Float(strengthPercent) / 100
         var flash = false
 
+        if injectSyntheticKickIfDue(now: now, enabled: syntheticKickDebug) {
+            flash = true
+        }
+
         if strength > 0, kickArmed, onset > Self.onsetTriggerThreshold {
             let since = now - lastTrigger
             if since >= Double(Self.refractorySeconds) {
-                let magnitude = min(max(onset / 2.0, 0), 1)
+                let magnitude = min(max(onset, 0), 1)
                 triggerPeak = magnitude * strength
                 if triggerPeak > 0.04 {
                     lastTrigger = now

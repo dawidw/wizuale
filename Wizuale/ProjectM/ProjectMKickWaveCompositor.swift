@@ -14,7 +14,6 @@ final class ProjectMKickWaveCompositor {
     private var locTex = GLint(-1)
     private var locEnvelope = GLint(-1)
     private var locKickAge = GLint(-1)
-    private var locStrength = GLint(-1)
     private var locAspect = GLint(-1)
     private var locRingFreq = GLint(-1)
     private var locWaveSpeed = GLint(-1)
@@ -29,7 +28,6 @@ final class ProjectMKickWaveCompositor {
         locTex = glGetUniformLocation(program, "uScene")
         locEnvelope = glGetUniformLocation(program, "uEnvelope")
         locKickAge = glGetUniformLocation(program, "uKickAge")
-        locStrength = glGetUniformLocation(program, "uStrength")
         locAspect = glGetUniformLocation(program, "uAspect")
         locRingFreq = glGetUniformLocation(program, "uRingFreq")
         locWaveSpeed = glGetUniformLocation(program, "uWaveSpeed")
@@ -92,25 +90,50 @@ final class ProjectMKickWaveCompositor {
     func drawKickWave(
         envelope: Float,
         kickAgeSeconds: Float,
-        strengthPercent: Int,
+        strengthScale: Float,
         drawableSize: CGSize
     ) {
         guard program != 0, sceneColor != 0 else { return }
-        let strength = Float(MicTuning.clampBeatStrength(strengthPercent)) / 100
+        let env = min(max(envelope, 0), 1.4)
+        let strength = min(max(strengthScale, 0), 1)
+        let maxDisp = MicTuning.kickWaveShaderMaxDisplacement(strengthScale: strength)
+        guard env > 1e-4, maxDisp > 1e-5 else {
+            blitScenePassthrough(drawableSize: drawableSize)
+            return
+        }
 
         glUseProgram(program)
         glActiveTexture(GLenum(GL_TEXTURE0))
         glBindTexture(GLenum(GL_TEXTURE_2D), sceneColor)
         glUniform1i(locTex, 0)
-        glUniform1f(locEnvelope, min(max(envelope, 0), 1.4))
+        glUniform1f(locEnvelope, env)
         glUniform1f(locKickAge, max(0, kickAgeSeconds))
-        glUniform1f(locStrength, strength)
         let aspect = drawableSize.height > 1 ? Float(drawableSize.width / drawableSize.height) : 1
         glUniform1f(locAspect, aspect)
         glUniform1f(locRingFreq, MicTuning.kickWaveRingFrequency)
         glUniform1f(locWaveSpeed, MicTuning.kickWavePhaseSpeed)
-        glUniform1f(locMaxDisp, MicTuning.kickWaveMaxDisplacement)
+        glUniform1f(locMaxDisp, maxDisp)
 
+        glDisable(GLenum(GL_DEPTH_TEST))
+        glBindVertexArray(vao)
+        glDrawArrays(GLenum(GL_TRIANGLES), 0, 3)
+        glBindVertexArray(0)
+    }
+
+    /// When envelope is ~0, still copy projectM texture to the drawable (no-op warp was invisible).
+    private func blitScenePassthrough(drawableSize: CGSize) {
+        guard program != 0, sceneColor != 0 else { return }
+        glUseProgram(program)
+        glActiveTexture(GLenum(GL_TEXTURE0))
+        glBindTexture(GLenum(GL_TEXTURE_2D), sceneColor)
+        glUniform1i(locTex, 0)
+        glUniform1f(locEnvelope, 0)
+        glUniform1f(locKickAge, 0)
+        let aspect = drawableSize.height > 1 ? Float(drawableSize.width / drawableSize.height) : 1
+        glUniform1f(locAspect, aspect)
+        glUniform1f(locRingFreq, MicTuning.kickWaveRingFrequency)
+        glUniform1f(locWaveSpeed, MicTuning.kickWavePhaseSpeed)
+        glUniform1f(locMaxDisp, 0)
         glDisable(GLenum(GL_DEPTH_TEST))
         glBindVertexArray(vao)
         glDrawArrays(GLenum(GL_TRIANGLES), 0, 3)
@@ -185,7 +208,6 @@ final class ProjectMKickWaveCompositor {
     uniform sampler2D uScene;
     uniform float uEnvelope;
     uniform float uKickAge;
-    uniform float uStrength;
     uniform float uAspect;
     uniform float uRingFreq;
     uniform float uWaveSpeed;
@@ -198,8 +220,8 @@ final class ProjectMKickWaveCompositor {
         vec2 dir = (r > 1e-5) ? p / r : vec2(0.0, 1.0);
         float phase = uKickAge * uWaveSpeed;
         float ring = sin(r * uRingFreq - phase);
-        ring *= exp(-r * 1.35);
-        ring *= uEnvelope * uStrength;
+        ring *= exp(-r * 0.85);
+        ring *= uEnvelope;
         float disp = ring * uMaxDisp;
         vec2 warped = vUV + dir * disp / vec2(uAspect, 1.0);
         warped = clamp(warped, 0.001, 0.999);

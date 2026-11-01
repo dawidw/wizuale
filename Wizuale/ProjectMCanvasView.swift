@@ -13,7 +13,8 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
     var beatPunch: BeatPunchState
     var beatStrength: Int
     var sceneIntensity: Int
-    var onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame) -> Void)?
+    var audioDebugSyntheticKick: Bool
+    var onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame, SceneModulationTrace) -> Void)?
     @Binding var failure: String?
 
     func makeUIViewController(context: Context) -> ProjectMViewController {
@@ -36,6 +37,7 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
         controller.micSource = micSource
         controller.beatStrength = beatStrength
         controller.sceneIntensity = sceneIntensity
+        controller.audioDebugSyntheticKick = audioDebugSyntheticKick
     }
 }
 
@@ -44,7 +46,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private let audioHub: ProjectMAudioHub
     private let micReceiver: MicReceiver
     private let beatPunch: BeatPunchState
-    private let onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame) -> Void)?
+    private let onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame, SceneModulationTrace) -> Void)?
     private var lastFrameTime: CFTimeInterval = 0
     private var renderFpsEma: Float = 60
     private let projectM = ProjectMController()
@@ -58,6 +60,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     var micSource: MicInputSource = .phone
     var beatStrength: Int = MicTuning.loadTVBeatStrength()
     var sceneIntensity: Int = MicTuning.loadTVSceneIntensity()
+    var audioDebugSyntheticKick = false
     var onFailure: ((String) -> Void)?
 
     init(
@@ -66,7 +69,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         micReceiver: MicReceiver,
         micSource: MicInputSource,
         beatPunch: BeatPunchState,
-        onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame) -> Void)?
+        onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame, SceneModulationTrace) -> Void)?
     ) {
         self.renderState = renderState
         self.audioHub = audioHub
@@ -166,21 +169,21 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         }
         let drive = micReceiver.sample(dt: dt)
         beatPunch.setStrengthPercent(beatStrength)
-        let punchFrame = beatPunch.advance(drive: drive, dt: dt, now: now)
-        let snap = renderState.snapshot()
-        let intensity = MicTuning.sceneIntensityMultiplier(sceneIntensity)
-        let strengthScale = Float(beatStrength) / 100
-        let kickBoost = punchFrame.sceneEnvelope
-            * MicTuning.scenePunchSensitivityBoostBaseline
-            * strengthScale
-        let continuousBoost = min(max(drive.bass, 0), 2.2)
-            * MicTuning.sceneContinuousSensitivityBaseline
-            * intensity
-        let sceneSens = MicTuning.clampSceneBeatSensitivity(
-            base: snap.beatSensitivity,
-            punchBoost: kickBoost + continuousBoost
+        let punchFrame = beatPunch.advance(
+            drive: drive,
+            dt: dt,
+            now: now,
+            syntheticKickDebug: audioDebugSyntheticKick
         )
-        projectM.setBeatSensitivity(sceneSens)
+        let snap = renderState.snapshot()
+        let modulation = MicSceneModulation.compute(
+            baseBeatSensitivity: snap.beatSensitivity,
+            kickEnvelope: punchFrame.sceneEnvelope,
+            beatStrengthPercent: beatStrength,
+            sceneIntensityPermille: sceneIntensity,
+            bass: drive.bass
+        )
+        projectM.setBeatSensitivity(modulation.projectMSensitivity)
         if snap.targetIndex != lastIndex {
             projectM.loadPreset(index: snap.targetIndex, smooth: lastIndex >= 0)
             lastIndex = snap.targetIndex
@@ -191,7 +194,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
             beatStrengthPercent: beatStrength,
             now: now
         ) { projectM.addPCM(floats: $0) }
-        onAudioFrame?(drive, audioHub.metricsSnapshot(), punchFrame)
+        onAudioFrame?(drive, audioHub.metricsSnapshot(), punchFrame, modulation.trace)
         kickWaveCompositor.resizeIfNeeded(pixelSize, context: context)
         glBindFramebuffer(GLenum(GL_FRAMEBUFFER), kickWaveCompositor.sceneFramebuffer)
         glViewport(0, 0, GLsizei(pixelSize.width), GLsizei(pixelSize.height))
@@ -206,7 +209,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         kickWaveCompositor.drawKickWave(
             envelope: punchFrame.sceneEnvelope,
             kickAgeSeconds: punchFrame.kickAgeSeconds,
-            strengthPercent: beatStrength,
+            strengthScale: modulation.trace.strengthScale,
             drawableSize: pixelSize
         )
     }

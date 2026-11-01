@@ -61,7 +61,7 @@ final class ProjectMController {
 
     func setBeatSensitivity(_ value: Float) {
         guard let handle else { return }
-        projectm_set_beat_sensitivity(handle, MicTuning.clampSensitivity(value))
+        projectm_set_beat_sensitivity(handle, MicTuning.clampProjectMBeatSensitivity(value))
     }
 
     /// GLKView draws into its own framebuffer (not 0), so render into whatever is bound.

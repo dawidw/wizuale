@@ -34,8 +34,14 @@ struct RootView: View {
                     beatPunch: visuals.beatPunchState,
                     beatStrength: visuals.beatStrength,
                     sceneIntensity: visuals.sceneIntensity,
-                    onAudioFrame: { drive, metrics, punch in
-                        visuals.noteAudioFrame(drive: drive, metrics: metrics, punch: punch)
+                    audioDebugSyntheticKick: visuals.showAudioDebug,
+                    onAudioFrame: { drive, metrics, punch, modulation in
+                        visuals.noteAudioFrame(
+                            drive: drive,
+                            metrics: metrics,
+                            punch: punch,
+                            modulation: modulation
+                        )
                     },
                     failure: $failure
                 )
@@ -63,7 +69,8 @@ struct RootView: View {
                     sceneIntensity: visuals.sceneIntensity,
                     punchesPerMinute: visuals.beatPunchesPerMinute,
                     kickEnvelope: visuals.beatSceneEnvelope,
-                    kickFlash: visuals.beatPunchFlash
+                    kickFlash: visuals.beatPunchFlash,
+                    modulation: visuals.sceneModTrace
                 )
                 .zIndex(400)
                 .allowsHitTesting(false)

@@ -151,3 +151,22 @@ Brak nowego kind UDP — onset nadal w pakiecie audio (40 B, pole `onset` f32).
 - Trigger tsunami: próg onset **0.30** (było 0.34); refractory punch **120 ms** bez zmian.
 
 (Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)
+
+---
+
+## Build 1.1(4) — suwaki + tsunami (ROOT CAUSE) — fix agent
+
+### Przyczyny (PL)
+1. **`ProjectMController.setBeatSensitivity`** wołało `MicTuning.clampSensitivity` (**max 3.0**), podczas gdy ścieżka sceny liczy boost do **~10** (`sceneBeatSensitivityCeiling`) — każda klatka **obcinała** efekt suwaków; przy domyślnej Intensywności 20× wyjście i tak siedziało na **3.0** → suwaki „martwe”.
+2. **`clampSceneBeatSensitivity`** stosowało **tanh(base+boost)** — przy wysokim boostcie saturacja **zjadała** rozdzielczość Intensywności (continuous); poprawka: **base + tanh(boost)**.
+3. **Tsunami**: podwójne mnożenie **Siły bitu** (envelope w `BeatPunchState` × `uStrength` w shaderze) + **`uMaxDisp` z pełnym envelope** (potrójne) + niski **`kickWaveMaxDisplacement` (0.042)** → fala prawie niewidoczna.
+4. **Intensywność (‰)** dotyczy tylko **continuous** (`drive.bass` → boost sensitivity); **Siła bitu** — kick/tsunami/PCM — to oczekiwane po rozdzieleniu ścieżek, ale bez (1–3) oba suwaki wyglądały na bezużyteczne.
+
+### Naprawa
+- `clampProjectMBeatSensitivity` (0.25…**10**) w `projectm_set_beat_sensitivity`.
+- `MicSceneModulation` + DEBUG: **RX suwaki**, **mnożniki**, **→ projectM**, **Tsunami UV**.
+- Kompozytor: jedno mnożenie envelope, **`kickWaveMaxDisplacement = 0.12`**, łagodniejszy falloff pierścieni.
+- **AUDIO DEBUG**: syntetyczny kick co **500 ms** (bez muzyki w sali).
+- Offline: `scripts/render_kick_envelope_test.py` → `docs/kick-envelope-test/envelope_{0,0.5,1.0}.png`.
+
+(Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)
