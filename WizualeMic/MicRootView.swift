@@ -57,6 +57,7 @@ struct MicRootView: View {
                         latencySlider
                         brightnessSlider
                         beatStrengthSlider
+                        sceneIntensitySlider
                         tvDebugToggle
                         autoCycleControls
                         calibrateControl
@@ -176,6 +177,30 @@ struct MicRootView: View {
                 ),
                 in: Double(MicTuning.beatStrengthMin)...Double(MicTuning.beatStrengthMax),
                 step: 1
+            )
+        }
+    }
+
+    private var sceneIntensitySlider: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("INTENSYWNOŚĆ")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Text(MicTuning.formatSceneIntensity(mic.sceneIntensity))
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            MiniSlider(
+                value: Binding(
+                    get: { Double(mic.sceneIntensity) / 100.0 },
+                    set: { mic.sceneIntensity = Int(($0 * 100).rounded()) }
+                ),
+                in: Double(MicTuning.sceneIntensityMinPermille) / 100.0
+                    ...Double(MicTuning.sceneIntensityMaxPermille) / 100.0,
+                step: 0.5
             )
         }
     }

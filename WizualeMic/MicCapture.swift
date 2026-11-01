@@ -118,6 +118,21 @@ final class MicCapture: ObservableObject {
             scheduleBeatStrength()
         }
     }
+    @Published var sceneIntensity: Int = MicTuning.loadSceneIntensity() {
+        didSet {
+            let clamped = MicTuning.clampSceneIntensity(sceneIntensity)
+            if clamped != sceneIntensity {
+                sceneIntensity = clamped
+                return
+            }
+            guard !applyingRemote, clamped != oldValue else { return }
+            MicTuning.saveSceneIntensity(clamped)
+            flag.lock()
+            heldSceneIntensity = clamped
+            flag.unlock()
+            scheduleSceneIntensity()
+        }
+    }
 
     private let engine = AVAudioEngine()
     private let network = DispatchQueue(label: "app.wizuale.mic.send")
@@ -134,11 +149,13 @@ final class MicCapture: ObservableObject {
     private var debugSequence: UInt16 = 0
     private var dimSequence: UInt16 = 0
     private var beatStrengthSequence: UInt16 = 0
+    private var sceneIntensitySequence: UInt16 = 0
     private var pendingPCM: [Data] = []
     private var heldSensitivity: Float = MicTuning.loadSensitivity()
     private var heldTVAudioDebug = MicTuning.loadTVAudioDebug()
     private var heldPictureBrightness = MicTuning.loadPictureBrightness()
     private var heldBeatStrength = MicTuning.loadBeatStrength()
+    private var heldSceneIntensity = MicTuning.loadSceneIntensity()
     private var applyingRemote = false
     private var reportedTapFormat = false
     private var lastUI: CFTimeInterval = 0
@@ -154,11 +171,13 @@ final class MicCapture: ObservableObject {
     private var pendingDebug: Data?
     private var pendingDim: Data?
     private var pendingBeatStrength: Data?
+    private var pendingSceneIntensity: Data?
     private var lastCommand: Data?
     private var lastSettings: Data?
     private var lastBoost: Data?
     private var lastDim: Data?
     private var lastBeatStrength: Data?
+    private var lastSceneIntensity: Data?
     private var lastCycle: Data?
     private var controlSending = false
     private var pcmInFlight = 0
@@ -188,6 +207,8 @@ final class MicCapture: ObservableObject {
     private var dimSyncHeartbeat: DispatchWorkItem?
     private var beatStrengthSyncHeartbeat: DispatchWorkItem?
     private var beatStrengthDebounceWork: DispatchWorkItem?
+    private var sceneIntensitySyncHeartbeat: DispatchWorkItem?
+    private var sceneIntensityDebounceWork: DispatchWorkItem?
     private var dimDebounceWork: DispatchWorkItem?
     private var startGeneration = 0
     private var interruption: NSObjectProtocol?
@@ -856,11 +877,15 @@ final class MicCapture: ObservableObject {
             if pendingBeatStrength == nil, let lastBeatStrength {
                 pendingBeatStrength = lastBeatStrength
             }
+            if pendingSceneIntensity == nil, let lastSceneIntensity {
+                pendingSceneIntensity = lastSceneIntensity
+            }
             startPCMSender()
             scheduleTVAudioDebug()
             scheduleDebugSyncHeartbeat()
             scheduleDimSyncHeartbeat()
             primeBeatStrengthOnNetwork()
+            primeSceneIntensityOnNetwork()
             pumpControl()
             pumpPCM()
         case .failed(let error):
@@ -919,6 +944,7 @@ final class MicCapture: ObservableObject {
                             _,
                             let brightness,
                             let beat,
+                            let intensity,
                             let revision
                         ) = packet {
                             self.log.debug("ack received preset=\(preset) cycling=\(cycling) rev=\(revision ?? 0)")
@@ -930,6 +956,7 @@ final class MicCapture: ObservableObject {
                             self.noteRemoteTuning(latency: latency, sensitivity: sensitivity)
                             self.noteRemoteBrightness(brightness)
                             self.noteRemoteBeatStrength(beat)
+                            self.noteRemoteSceneIntensity(intensity)
                         }
                     } else if data.count >= 6, MicWire.peekKind(data) == MicWire.kindAck {
                         self.log.error("ack decode failed (\(data.count) bytes)")
@@ -1032,6 +1059,16 @@ final class MicCapture: ObservableObject {
         }
     }
 
+    private func noteRemoteSceneIntensity(_ permille: Int?) {
+        guard let permille else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.applyingRemote = true
+            self.sceneIntensity = permille
+            self.applyingRemote = false
+        }
+    }
+
     private func refreshLink() {
         guard confirmed else { return }
         if CACurrentMediaTime() - lastAck > 1.1 {
@@ -1077,6 +1114,10 @@ final class MicCapture: ObservableObject {
         beatStrengthSyncHeartbeat = nil
         beatStrengthDebounceWork?.cancel()
         beatStrengthDebounceWork = nil
+        sceneIntensitySyncHeartbeat?.cancel()
+        sceneIntensitySyncHeartbeat = nil
+        sceneIntensityDebounceWork?.cancel()
+        sceneIntensityDebounceWork = nil
         pcmSendTimer?.cancel()
         pcmSendTimer = nil
         pcmRingLock.lock()
@@ -1228,6 +1269,55 @@ final class MicCapture: ObservableObject {
         network.asyncAfter(deadline: .now() + 2.5, execute: work)
     }
 
+    private func scheduleSceneIntensity() {
+        flag.lock()
+        let permille = heldSceneIntensity
+        flag.unlock()
+        sceneIntensityDebounceWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.emitSceneIntensity(permille: permille)
+        }
+        sceneIntensityDebounceWork = work
+        network.asyncAfter(deadline: .now() + 0.12, execute: work)
+    }
+
+    private func primeSceneIntensityOnNetwork() {
+        let permille = MicTuning.loadSceneIntensity()
+        if lastSceneIntensity == nil {
+            emitSceneIntensity(permille: permille)
+        }
+        scheduleSceneIntensitySyncHeartbeat()
+    }
+
+    private func emitSceneIntensity(permille: Int) {
+        flag.lock()
+        sceneIntensitySequence &+= 1
+        if sceneIntensitySequence == 0 { sceneIntensitySequence = 1 }
+        let seq = sceneIntensitySequence
+        flag.unlock()
+        let packet = MicWire.encodeSceneIntensity(sequence: seq, permille: permille)
+        network.async { [weak self] in
+            guard let self else { return }
+            self.pendingSceneIntensity = packet
+            self.lastSceneIntensity = packet
+            self.pumpControl()
+        }
+    }
+
+    private func scheduleSceneIntensitySyncHeartbeat() {
+        sceneIntensitySyncHeartbeat?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.running, self.linkWanted() else { return }
+            self.flag.lock()
+            let permille = self.heldSceneIntensity
+            self.flag.unlock()
+            self.emitSceneIntensity(permille: permille)
+            self.scheduleSceneIntensitySyncHeartbeat()
+        }
+        sceneIntensitySyncHeartbeat = work
+        network.asyncAfter(deadline: .now() + 2.5, execute: work)
+    }
+
     private func scheduleDebugSyncHeartbeat() {
         debugSyncHeartbeat?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -1256,6 +1346,9 @@ final class MicCapture: ObservableObject {
             } else if let beat = pendingBeatStrength {
                 pendingBeatStrength = nil
                 control = beat
+            } else if let intensity = pendingSceneIntensity {
+                pendingSceneIntensity = nil
+                control = intensity
             } else if let boost = pendingBoost {
                 pendingBoost = nil
                 control = boost
