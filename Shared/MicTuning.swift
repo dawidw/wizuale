@@ -49,6 +49,15 @@ enum MicTuning {
     /// PCM kick mix and beat-sensitivity punch boost at 1× intensity (f301047).
     static let scenePunchPCMSMixBaseline: Float = 0.38
     static let scenePunchSensitivityBoostBaseline: Float = 0.42
+    /// Continuous room-energy → beat sensitivity (Intensywność only, not kick envelope).
+    static let sceneContinuousSensitivityBaseline: Float = 0.55
+
+    /// Radial tsunami compositor (UV displacement, brightness-neutral).
+    static let kickWaveReleaseTau: Float = 0.20
+    static let kickWaveRingFrequency: Float = 22
+    static let kickWavePhaseSpeed: Float = 16
+    /// Max outward UV shift at envelope=1, Siła bitu=100%.
+    static let kickWaveMaxDisplacement: Float = 0.042
     /// Caps `projectm_set_beat_sensitivity` during a punch so presets stay stable at max slider.
     static let sceneBeatSensitivityCeiling: Float = 10
 

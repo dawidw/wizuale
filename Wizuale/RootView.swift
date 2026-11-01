@@ -51,7 +51,8 @@ struct RootView: View {
                 BeatTestOverlay(
                     drive: visuals.audioDebugDrive,
                     metrics: visuals.audioDebugMetrics,
-                    punchFlash: visuals.beatPunchFlash
+                    punchFlash: visuals.beatPunchFlash,
+                    kickEnvelope: visuals.beatSceneEnvelope
                 )
                 .zIndex(399)
                 MicAudioDebugOverlay(
@@ -60,7 +61,9 @@ struct RootView: View {
                     latencyMs: visuals.latencyMs,
                     beatStrength: visuals.beatStrength,
                     sceneIntensity: visuals.sceneIntensity,
-                    punchesPerMinute: visuals.beatPunchesPerMinute
+                    punchesPerMinute: visuals.beatPunchesPerMinute,
+                    kickEnvelope: visuals.beatSceneEnvelope,
+                    kickFlash: visuals.beatPunchFlash
                 )
                 .zIndex(400)
                 .allowsHitTesting(false)

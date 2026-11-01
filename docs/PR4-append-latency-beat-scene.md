@@ -89,3 +89,44 @@ Wire kind 11: permille **0…4000** (100 = 1× f301047). Ack bez zmian (26 B).
 Pliki: `MicTuning`, `MicAnalyzer`, `BeatPunchState`, `MicReceiver`, `ProjectMAudioHub`, `MicFrame`, `MicAudioDebugOverlay`, `MicRootView` (zakres suwaka z `MicTuning`).
 
 (Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)
+
+---
+
+## Tsunami radialne na kick (osobno od Intensywności) — build 1.1(5)+
+
+### Dlaczego nie A/C
+- **A)** `ProjectMController` nie wystawia mostu do `per_frame` / custom vars — tylko PCM, sensitivity, render FBO.
+- **C)** Sam PCM kick daje głównie globalny `pulse`/zoom w presetach (Study of Space) — odrzucone jako jedyny efekt (mechaniczny), bez edycji `.milk`.
+
+### Podejście **B** — kompozytor po projectM
+- libprojectM renderuje do **offscreen FBO**; pełnoekranowy **GLES3** pass próbkuje teksturę z **radialnym przesunięciem UV** (fala wychodząca od środka, faza ∝ czas od onsetu).
+- **Jasność neutralna** — tylko warp UV, bez skali UIView i bez brighteningu audio.
+
+### Kick envelope vs Intensywność
+| Ścieżka | Trigger | Skala suwakiem | Efekt |
+|---------|---------|----------------|--------|
+| **Kick (discrete)** | ten sam onset co BEAT TEST / `BeatPunchState`, **0 klatek opóźnienia** | **Siła bitu** (domyślnie 85%) | envelope → tsunami compositor + opcjonalny krótki PCM kick |
+| **Continuous** | `MicDrive.bass` (płynna energia sali) | **Intensywność** (‰) | boost `projectm_set_beat_sensitivity` (`sceneContinuousSensitivityBaseline × bass × N`) — **bez** mnożenia kick envelope |
+
+### Parametry kick envelope
+- Attack: **1 klatka** (natychmiast `triggerPeak`).
+- Decay: wykładniczy **τ = 200 ms** (`MicTuning.kickWaveReleaseTau`), bez overshootu.
+- Refractory / progi onsetu: bez zmian względem 273d231.
+
+### Parametry fali (tsunami)
+| Stała | Wartość | Znaczenie |
+|-------|---------|-----------|
+| `kickWaveRingFrequency` | 22 | częstotliwość pierścieni w promieniu UV |
+| `kickWavePhaseSpeed` | 16 rad/s | faza fali wychodzącej od onsetu |
+| `kickWaveMaxDisplacement` | 0.042 | max przesunięcie UV @ env=1, Siła=100% |
+
+Siła bitu skaluje envelope (`triggerPeak`), compositor i PCM kick — **Intensywność nie**.
+
+### DEBUG
+- **Kick env**: wartość envelope + etykieta `ONSET` przy flashu + Siła bitu %.
+- **BEAT TEST**: słupek KICK z envelope; kropka = flash onsetu.
+
+### Pliki
+`BeatPunchState.swift`, `ProjectMKickWaveCompositor.swift`, `ProjectMCanvasView.swift`, `ProjectMController.swift`, `ProjectMAudioHub.swift`, `MicTuning.swift`, `MicAudioDebugOverlay.swift`, `BeatTestOverlay.swift`, `RootView.swift`.
+
+(Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)

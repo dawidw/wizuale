@@ -47,6 +47,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private var lastFrameTime: CFTimeInterval = 0
     private var renderFpsEma: Float = 60
     private let projectM = ProjectMController()
+    private let kickWaveCompositor = ProjectMKickWaveCompositor()
     private var glView: GLKView!
     private var context: EAGLContext!
     private var displayLink: CADisplayLink?
@@ -95,6 +96,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         view.addSubview(glView)
 
         EAGLContext.setCurrent(ctx)
+        kickWaveCompositor.createIfNeeded(in: ctx)
         projectM.create(in: ctx, size: pixelSize)
         if !projectM.isReady {
             onFailure?("libprojectM did not start. Run scripts/build-projectm-tvos.sh on a Mac.")
@@ -105,6 +107,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         super.viewDidLayoutSubviews()
         EAGLContext.setCurrent(context)
         projectM.resize(pixelSize)
+        kickWaveCompositor.resizeIfNeeded(pixelSize, context: context)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -120,6 +123,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     deinit {
         stopDisplayLink()
         EAGLContext.setCurrent(context)
+        kickWaveCompositor.destroy(in: context)
         projectM.destroy()
     }
 
@@ -162,11 +166,17 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         let punchFrame = beatPunch.advance(drive: drive, dt: dt, now: now)
         let snap = renderState.snapshot()
         let intensity = MicTuning.sceneIntensityMultiplier(sceneIntensity)
-        let sceneBoost = punchFrame.sceneEnvelope
+        let strengthScale = Float(beatStrength) / 100
+        let kickBoost = punchFrame.sceneEnvelope
             * MicTuning.scenePunchSensitivityBoostBaseline
-            * Float(beatStrength) / 100
+            * strengthScale
+        let continuousBoost = min(max(drive.bass, 0), 2.2)
+            * MicTuning.sceneContinuousSensitivityBaseline
             * intensity
-        let sceneSens = MicTuning.clampSceneBeatSensitivity(base: snap.beatSensitivity, punchBoost: sceneBoost)
+        let sceneSens = MicTuning.clampSceneBeatSensitivity(
+            base: snap.beatSensitivity,
+            punchBoost: kickBoost + continuousBoost
+        )
         projectM.setBeatSensitivity(sceneSens)
         if snap.targetIndex != lastIndex {
             projectM.loadPreset(index: snap.targetIndex, smooth: lastIndex >= 0)
@@ -175,12 +185,26 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         audioHub.feed(
             micSource: micSource,
             scenePunch: punchFrame.sceneEnvelope,
-            sceneIntensityPermille: sceneIntensity,
+            beatStrengthPercent: beatStrength,
             now: now
         ) { projectM.addPCM(floats: $0) }
         onAudioFrame?(drive, audioHub.metricsSnapshot(), punchFrame)
+        kickWaveCompositor.resizeIfNeeded(pixelSize, context: context)
+        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), kickWaveCompositor.sceneFramebuffer)
+        glViewport(0, 0, GLsizei(pixelSize.width), GLsizei(pixelSize.height))
         glClearColor(0, 0, 0, 1)
         glClear(UInt32(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT))
-        projectM.render()
+        projectM.render(toFramebuffer: kickWaveCompositor.sceneFramebuffer)
+
+        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), GLuint(view.defaultFramebufferObject))
+        glViewport(0, 0, GLsizei(view.drawableWidth), GLsizei(view.drawableHeight))
+        glClearColor(0, 0, 0, 1)
+        glClear(UInt32(GL_COLOR_BUFFER_BIT))
+        kickWaveCompositor.drawKickWave(
+            envelope: punchFrame.sceneEnvelope,
+            kickAgeSeconds: punchFrame.kickAgeSeconds,
+            strengthPercent: beatStrength,
+            drawableSize: pixelSize
+        )
     }
 }

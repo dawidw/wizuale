@@ -48,6 +48,7 @@
 		C100000000000000000001A /* MilkPresetCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001A /* MilkPresetCatalog.swift */; };
 		F20000000000000000000012 /* MilkPresetCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001A /* MilkPresetCatalog.swift */; };
 		C100000000000000000001B /* ProjectMController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001B /* ProjectMController.swift */; };
+		C100000000000000000002C /* ProjectMKickWaveCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000002C /* ProjectMKickWaveCompositor.swift */; };
 		C100000000000000000001C /* ProjectMAudioHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001C /* ProjectMAudioHub.swift */; };
 		C100000000000000000001D /* ProjectMRenderState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001D /* ProjectMRenderState.swift */; };
 		C100000000000000000001E /* ProjectMCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000001E /* ProjectMCanvasView.swift */; };
@@ -100,6 +101,7 @@
 		E2000000000000000000000A /* Wizuale Mic.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Wizuale Mic.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B100000000000000000001A /* MilkPresetCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MilkPresetCatalog.swift; sourceTree = "<group>"; };
 		B100000000000000000001B /* ProjectMController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMController.swift; sourceTree = "<group>"; };
+		B100000000000000000002C /* ProjectMKickWaveCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMKickWaveCompositor.swift; sourceTree = "<group>"; };
 		B100000000000000000001C /* ProjectMAudioHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMAudioHub.swift; sourceTree = "<group>"; };
 		B100000000000000000001D /* ProjectMRenderState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMRenderState.swift; sourceTree = "<group>"; };
 		B100000000000000000001E /* ProjectMCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectMCanvasView.swift; sourceTree = "<group>"; };
@@ -160,6 +162,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000000000000000001B /* ProjectMController.swift */,
+				B100000000000000000002C /* ProjectMKickWaveCompositor.swift */,
 				B100000000000000000001C /* ProjectMAudioHub.swift */,
 				B100000000000000000001D /* ProjectMRenderState.swift */,
 			);
@@ -340,6 +343,7 @@
 				C10000000000000000000003 /* VisualSession.swift in Sources */,
 				C100000000000000000001E /* ProjectMCanvasView.swift in Sources */,
 				C100000000000000000001B /* ProjectMController.swift in Sources */,
+				C100000000000000000002C /* ProjectMKickWaveCompositor.swift in Sources */,
 				C100000000000000000001C /* ProjectMAudioHub.swift in Sources */,
 				C100000000000000000001D /* ProjectMRenderState.swift in Sources */,
 				C10000000000000000000006 /* MusicSession.swift in Sources */,

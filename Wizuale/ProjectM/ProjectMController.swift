@@ -65,11 +65,9 @@ final class ProjectMController {
     }
 
     /// GLKView draws into its own framebuffer (not 0), so render into whatever is bound.
-    func render() {
+    func render(toFramebuffer fbo: UInt32) {
         guard let handle else { return }
-        var fbo: GLint = 0
-        glGetIntegerv(GLenum(GL_FRAMEBUFFER_BINDING), &fbo)
-        projectm_opengl_render_frame_fbo(handle, UInt32(fbo))
+        projectm_opengl_render_frame_fbo(handle, fbo)
     }
 
     func setRenderFPS(_ fps: Float) {

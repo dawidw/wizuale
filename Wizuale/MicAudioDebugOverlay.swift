@@ -8,6 +8,8 @@ struct MicAudioDebugOverlay: View {
     var beatStrength: Int
     var sceneIntensity: Int
     var punchesPerMinute: Int
+    var kickEnvelope: Float
+    var kickFlash: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -35,8 +37,12 @@ struct MicAudioDebugOverlay: View {
                 String(format: "%.2f/s  ~%d bpm", Float(punchesPerMinute) / 60, punchesPerMinute)
             )
             row(
+                "Kick env",
+                String(format: "%.2f  %@  Siła %d%%", kickEnvelope, kickFlash ? "ONSET" : "—", beatStrength)
+            )
+            row(
                 "Scene punch",
-                String(format: "%.2f  %d%%", metrics.scenePunch, beatStrength)
+                String(format: "PCM %.2f", metrics.scenePunch)
             )
             row("Intensywność", MicTuning.formatSceneIntensity(sceneIntensity))
             row("Mid/Hi", String(format: "%.2f / %.2f", drive.mid, drive.high))

@@ -5,6 +5,7 @@ struct BeatTestOverlay: View {
     var drive: MicDrive
     var metrics: ProjectMAudioHub.Metrics
     var punchFlash: Bool = false
+    var kickEnvelope: Float = 0
 
     var body: some View {
         HStack {
@@ -23,12 +24,12 @@ struct BeatTestOverlay: View {
                 HStack(alignment: .bottom, spacing: 14) {
                     bar(label: "PCM", level: CGFloat(min(metrics.rms * 1.4, 1)))
                     bar(label: "BASS", level: CGFloat(min(drive.bass / 2.5, 1)))
-                    bar(label: "KICK", level: CGFloat(min(drive.onset / 2.0, 1)))
+                    bar(label: "KICK", level: CGFloat(min(max(kickEnvelope, drive.onset / 2.0), 1)))
                 }
                 Text(String(format: "→ projectM %.0f smp/s", metrics.projectMFeedSps))
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.85))
-                Text(String(format: "RMS %.3f  onset %.2f", metrics.rms, drive.onset))
+                Text(String(format: "env %.2f  onset %.2f", kickEnvelope, drive.onset))
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.65))
             }

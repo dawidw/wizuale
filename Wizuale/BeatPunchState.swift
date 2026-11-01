@@ -3,17 +3,19 @@ import QuartzCore
 
 /// Scene punch envelope fed into libprojectM (PCM / sensitivity), not a UIView transform.
 struct BeatPunchFrame: Equatable {
-    /// 0…1-ish kick envelope for preset motion (zoom/rot/warp via MilkDrop inputs).
+    /// 0…1 kick envelope (Siła bitu × onset); drives tsunami compositor + optional PCM kick.
     var sceneEnvelope: Float
+    /// Seconds since the last kick trigger (for outward wave phase).
+    var kickAgeSeconds: Float
     /// True for one frame when a punch was triggered (syncs BEAT TEST dot).
     var flash: Bool
 }
 
 /// Detects kicks from `MicDrive.onset` (same path as the TV mic receiver) and animates punch envelope.
 final class BeatPunchState {
-    /// ~1 display frame attack on scene envelope.
+    /// Instant attack (~1 GL frame), exponential release ~200 ms.
     static let attackSeconds: Float = 1.0 / 60.0
-    static let releaseTau: Float = 0.19
+    static let releaseTau: Float = MicTuning.kickWaveReleaseTau
     static let refractorySeconds: Float = 0.12
     static let onsetTriggerThreshold: Float = 0.34
     static let onsetRearmThreshold: Float = 0.16
@@ -53,19 +55,18 @@ final class BeatPunchState {
         }
 
         let age = Float(now - lastTrigger)
+        var kickAge: Float = 0
         if age >= 0, triggerPeak > 0 {
-            if age < Self.attackSeconds {
-                let t = age / Self.attackSeconds
-                let eased = t * t * (3 - 2 * t)
-                envelope = triggerPeak * eased
+            kickAge = age
+            if age <= Self.attackSeconds {
+                envelope = triggerPeak
             } else {
                 let release = age - Self.attackSeconds
-                let decay = expf(-release / Self.releaseTau)
-                let overshoot = 1 + 0.1 * expf(-release / 0.045)
-                envelope = triggerPeak * decay * overshoot
+                envelope = triggerPeak * expf(-release / Self.releaseTau)
                 if envelope < 0.008 {
                     envelope = 0
                     triggerPeak = 0
+                    kickAge = 0
                 }
             }
         } else {
@@ -73,7 +74,7 @@ final class BeatPunchState {
             if envelope < 0.008 { envelope = 0 }
         }
 
-        return BeatPunchFrame(sceneEnvelope: envelope, flash: flash)
+        return BeatPunchFrame(sceneEnvelope: envelope, kickAgeSeconds: kickAge, flash: flash)
     }
 
     var punchesPerMinute: Int {
