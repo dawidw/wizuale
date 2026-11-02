@@ -110,6 +110,7 @@ final class ProjectMController {
             projectm_load_preset_file(handle, cPath, smooth)
         }
         loadedIndex = index
+        // Preset files reset libprojectM beat sensitivity — caller must re-apply each frame.
     }
 }
 

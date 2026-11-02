@@ -54,6 +54,7 @@ struct MicRootView: View {
                             }
                         }
                         sensitivitySlider
+                        bandGainSliders
                         latencySlider
                         brightnessSlider
                         beatStrengthSlider
@@ -131,6 +132,39 @@ struct MicRootView: View {
                 value: $mic.sensitivity,
                 in: MicTuning.sensitivityMin...MicTuning.sensitivityMax,
                 step: 0.05
+            )
+        }
+    }
+
+    private var bandGainSliders: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            bandGainSlider(title: "WHOLE MIX", value: $mic.wholeMixGain)
+            bandGainSlider(title: "MID", value: $mic.midGain)
+            bandGainSlider(title: "TOP", value: $mic.topGain)
+            bandGainSlider(title: "KICK", value: $mic.kickGain)
+            bandGainSlider(title: "PERCUSSION", value: $mic.percussionGain)
+        }
+    }
+
+    private func bandGainSlider(title: String, value: Binding<Int>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Text("\(value.wrappedValue)%")
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            MiniSlider(
+                value: Binding(
+                    get: { Double(value.wrappedValue) },
+                    set: { value.wrappedValue = Int($0.rounded()) }
+                ),
+                in: Double(MicTuning.bandGainMin)...Double(MicTuning.bandGainMax),
+                step: 1
             )
         }
     }

@@ -228,6 +228,9 @@ Przy basie 0.75 i env kick 0.55: stosunek boostów cont/kick ≈ **7×**; `proje
 | `MicReceiver` | Bass attack **2.5 ms**, perc/high **7.5 ms**, lowMid **10 ms**; `hitBass`/`hitPerc` (pow **0.78** / **0.80**) |
 | `ProjectMAudioHub` AGC | RMS τ **0.28×sr**, gain attack **0.28 s** |
 | Mix bas>kick | bez zmian (`MicSceneModulation` ratio ~7× @ 20×) |
+| **Auto-advance** | `ProjectMCanvasView`: **`loadPreset` → `setBeatSensitivity`** (preset resetuje libprojectM) |
+| **Mic band sliders** | `MicBandGains` WHOLE MIX / MID / TOP / KICK / PERCUSSION → cechy UDP + wire PCM |
+| **Replay wz7 proxy** | `scripts/replay_wz7_motion_proxy.py` + `docs/wz7-motion-proxy.png` (bas vs motion proxy) |
 
 ### Test offline
 ```bash

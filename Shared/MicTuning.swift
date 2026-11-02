@@ -34,6 +34,22 @@ enum MicTuning {
     static let tvBeatStrengthKey = "wizuale.tv.beatStrength"
     static let sceneIntensityKey = "wizuale.mic.sceneIntensity"
     static let tvSceneIntensityKey = "wizuale.tv.sceneIntensity"
+    static let wholeMixGainKey = "wizuale.mic.gain.wholeMix"
+    static let midGainKey = "wizuale.mic.gain.mid"
+    static let topGainKey = "wizuale.mic.gain.top"
+    static let kickGainKey = "wizuale.mic.gain.kick"
+    static let percussionGainKey = "wizuale.mic.gain.percussion"
+
+    static let bandGainMin = 0
+    static let bandGainMax = 100
+    static let wholeMixGainDefault = 60
+    static let midGainDefault = 50
+    static let topGainDefault = 50
+    static let kickGainDefault = 60
+    static let percussionGainDefault = 50
+
+    /// EMA time constant for quiet-room lift on continuous projectM boost (TV).
+    static let adaptiveBassMeanSeconds: Float = 4.0
 
     static let pictureBrightnessMin = 10
     static let pictureBrightnessMax = 100
@@ -321,6 +337,91 @@ enum MicTuning {
     static func scenePCMSoftLimit(_ sample: Float, peak: Float = 0.78) -> Float {
         guard sample.isFinite, peak > 0 else { return 0 }
         return peak * tanhf(sample / peak)
+    }
+
+    /// Phone tap before analysis — prevents AGC/normalizer from pinning on clip bursts.
+    static func captureTapSoftLimit(_ sample: Float, peak: Float = 0.92) -> Float {
+        guard sample.isFinite, peak > 0 else { return 0 }
+        return peak * tanhf(sample / peak)
+    }
+
+    static func clampBandGainPercent(_ percent: Int) -> Int {
+        min(max(percent, bandGainMin), bandGainMax)
+    }
+
+    static func bandGainMultiplier(_ percent: Int) -> Float {
+        let p = Float(clampBandGainPercent(percent))
+        return 0.35 + (p / 100) * 1.05
+    }
+
+    /// Scales continuous `drive.bass` boost when long-term mean is low (quiet passages).
+    static func adaptiveContinuousBassScale(liveBass: Float, slowMean: Float) -> Float {
+        let live = min(max(liveBass, 0), 2.8)
+        let mean = min(max(slowMean, 0), 2.8)
+        guard live.isFinite, mean.isFinite else { return 1 }
+        let reference = max(mean, 0.10)
+        let ratio = reference / max(live, 0.06)
+        return min(max(0.75 + ratio * 0.35, 0.85), 2.35)
+    }
+}
+
+/// Per-band gains on the phone (0…100%). Applied before UDP features + PCM wire gain.
+struct MicBandGains: Equatable, Sendable {
+    var wholeMix: Int
+    var mid: Int
+    var top: Int
+    var kick: Int
+    var percussion: Int
+
+    static let defaults = MicBandGains(
+        wholeMix: MicTuning.wholeMixGainDefault,
+        mid: MicTuning.midGainDefault,
+        top: MicTuning.topGainDefault,
+        kick: MicTuning.kickGainDefault,
+        percussion: MicTuning.percussionGainDefault
+    )
+
+    static func load() -> MicBandGains {
+        func pct(_ key: String, _ defaultValue: Int) -> Int {
+            guard UserDefaults.standard.object(forKey: key) != nil else { return defaultValue }
+            return MicTuning.clampBandGainPercent(UserDefaults.standard.integer(forKey: key))
+        }
+        return MicBandGains(
+            wholeMix: pct(MicTuning.wholeMixGainKey, MicTuning.wholeMixGainDefault),
+            mid: pct(MicTuning.midGainKey, MicTuning.midGainDefault),
+            top: pct(MicTuning.topGainKey, MicTuning.topGainDefault),
+            kick: pct(MicTuning.kickGainKey, MicTuning.kickGainDefault),
+            percussion: pct(MicTuning.percussionGainKey, MicTuning.percussionGainDefault)
+        )
+    }
+
+    func save() {
+        UserDefaults.standard.set(MicTuning.clampBandGainPercent(wholeMix), forKey: MicTuning.wholeMixGainKey)
+        UserDefaults.standard.set(MicTuning.clampBandGainPercent(mid), forKey: MicTuning.midGainKey)
+        UserDefaults.standard.set(MicTuning.clampBandGainPercent(top), forKey: MicTuning.topGainKey)
+        UserDefaults.standard.set(MicTuning.clampBandGainPercent(kick), forKey: MicTuning.kickGainKey)
+        UserDefaults.standard.set(MicTuning.clampBandGainPercent(percussion), forKey: MicTuning.percussionGainKey)
+    }
+
+    func scale(_ features: MicFeatures) -> MicFeatures {
+        let kickM = MicTuning.bandGainMultiplier(kick)
+        let midM = MicTuning.bandGainMultiplier(mid)
+        let topM = MicTuning.bandGainMultiplier(top)
+        let percM = MicTuning.bandGainMultiplier(percussion)
+        let mixM = MicTuning.bandGainMultiplier(wholeMix)
+        return MicFeatures(
+            bass: features.bass * kickM * mixM,
+            lowMid: features.lowMid * percM * mixM,
+            mid: features.mid * midM * mixM,
+            high: features.high * topM * mixM,
+            loudness: features.loudness * mixM,
+            onset: features.onset * kickM * percM,
+            flux: features.flux * percM
+        )
+    }
+
+    func wireGainMultiplier() -> Float {
+        MicTuning.bandGainMultiplier(wholeMix)
     }
 }
 

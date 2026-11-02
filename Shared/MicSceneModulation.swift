@@ -21,7 +21,8 @@ enum MicSceneModulation {
         kickEnvelope: Float,
         beatStrengthPercent: Int,
         sceneIntensityPermille: Int,
-        bass: Float
+        bass: Float,
+        bassSlowMean: Float = 0
     ) -> (trace: SceneModulationTrace, projectMSensitivity: Float, pcmKickMix: Float) {
         let permille = MicTuning.clampSceneIntensity(sceneIntensityPermille)
         let beatPct = MicTuning.clampBeatStrength(beatStrengthPercent)
@@ -30,9 +31,11 @@ enum MicSceneModulation {
         let env = min(max(kickEnvelope, 0), 1.4)
 
         let kickBoost = env * MicTuning.scenePunchSensitivityBoostBaseline * strength * intensity
+        let adaptive = MicTuning.adaptiveContinuousBassScale(liveBass: bass, slowMean: bassSlowMean)
         let continuousBoost = min(max(bass, 0), 2.8)
             * MicTuning.sceneContinuousSensitivityBaseline
             * intensity
+            * adaptive
         let projectMSens = MicTuning.clampSceneBeatSensitivity(
             base: baseBeatSensitivity,
             kickBoost: kickBoost,

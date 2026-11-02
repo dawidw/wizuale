@@ -185,13 +185,14 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
             kickEnvelope: punchFrame.sceneEnvelope,
             beatStrengthPercent: beatStrength,
             sceneIntensityPermille: sceneIntensity,
-            bass: drive.bass
+            bass: drive.bass,
+            bassSlowMean: drive.bassSlowMean
         )
-        projectM.setBeatSensitivity(modulation.projectMSensitivity)
         if snap.targetIndex != lastIndex {
             projectM.loadPreset(index: snap.targetIndex, smooth: lastIndex >= 0)
             lastIndex = snap.targetIndex
         }
+        projectM.setBeatSensitivity(modulation.projectMSensitivity)
         audioHub.feed(
             micSource: micSource,
             scenePunch: punchFrame.sceneEnvelope,

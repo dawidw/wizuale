@@ -36,7 +36,7 @@ struct MicAudioDebugOverlay: View {
             row("projectM", String(format: "%.0f smp/s", metrics.projectMFeedSps))
             row("Latency", "\(latencyMs) ms (slider)")
             row("Feat age", String(format: "%.0f ms", drive.featureAgeMs))
-            row("Onset", String(format: "%.2f  Bass %.2f", drive.onset, drive.bass))
+            row("Onset", String(format: "%.2f  Bass %.2f  slow %.2f", drive.onset, drive.bass, drive.bassSlowMean))
             row(
                 "Próg / czułość",
                 String(format: "%.2f  sens %.2f×", detectionThreshold, phoneSensitivity)

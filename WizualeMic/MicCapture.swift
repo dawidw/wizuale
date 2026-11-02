@@ -144,6 +144,21 @@ final class MicCapture: ObservableObject {
             scheduleSceneIntensity()
         }
     }
+    @Published var wholeMixGain: Int = MicBandGains.load().wholeMix {
+        didSet { applyBandGainChange() }
+    }
+    @Published var midGain: Int = MicBandGains.load().mid {
+        didSet { applyBandGainChange() }
+    }
+    @Published var topGain: Int = MicBandGains.load().top {
+        didSet { applyBandGainChange() }
+    }
+    @Published var kickGain: Int = MicBandGains.load().kick {
+        didSet { applyBandGainChange() }
+    }
+    @Published var percussionGain: Int = MicBandGains.load().percussion {
+        didSet { applyBandGainChange() }
+    }
 
     private let engine = AVAudioEngine()
     private let network = DispatchQueue(label: "app.wizuale.mic.send")
@@ -169,6 +184,7 @@ final class MicCapture: ObservableObject {
     private var heldPictureBrightness = MicTuning.loadPictureBrightness()
     private var heldBeatStrength = MicTuning.loadBeatStrength()
     private var heldSceneIntensity = MicTuning.loadSceneIntensity()
+    private var heldBandGains = MicBandGains.load()
     private var applyingRemote = false
     private var reportedTapFormat = false
     private var lastUI: CFTimeInterval = 0
@@ -538,9 +554,14 @@ final class MicCapture: ObservableObject {
     private func handle(_ buffer: AVAudioPCMBuffer) {
         let rate = buffer.format.sampleRate
         guard rate > 1, buffer.frameLength > 0 else { return }
-        let samples = MicPCM.monoFloats(from: buffer)
+        var samples = MicPCM.monoFloats(from: buffer)
         guard !samples.isEmpty else { return }
-        let features = analyzer.consume(samples, sampleRate: rate)
+        for i in 0..<samples.count {
+            samples[i] = MicTuning.captureTapSoftLimit(samples[i])
+        }
+        let rawFeatures = analyzer.consume(samples, sampleRate: rate)
+        let bandGains = currentBandGains()
+        let features = bandGains.scale(rawFeatures)
         let raw = analyzer.lastRaw
         noteCalibration(raw)
         sequence &+= 1
@@ -570,10 +591,12 @@ final class MicCapture: ObservableObject {
             }
         }
         let tapRms = MicPCM.rms(samples)
+        let wireGain = currentSensitivity() * bandGains.wireGainMultiplier()
         let pcmPacked = MicPCM.monoInt16(
-            from: buffer,
+            from: samples,
+            sampleRate: Float(rate),
             maxFrames: Int.max,
-            wireGain: currentSensitivity()
+            wireGain: wireGain
         )
         let wireRms = MicPCM.rmsInt16(pcmPacked.samples)
         pcmRingLock.lock()
@@ -688,6 +711,31 @@ final class MicCapture: ObservableObject {
         flag.lock()
         defer { flag.unlock() }
         return heldSensitivity
+    }
+
+    private func currentBandGains() -> MicBandGains {
+        flag.lock()
+        defer { flag.unlock() }
+        return heldBandGains
+    }
+
+    private func applyBandGainChange() {
+        let gains = MicBandGains(
+            wholeMix: MicTuning.clampBandGainPercent(wholeMixGain),
+            mid: MicTuning.clampBandGainPercent(midGain),
+            top: MicTuning.clampBandGainPercent(topGain),
+            kick: MicTuning.clampBandGainPercent(kickGain),
+            percussion: MicTuning.clampBandGainPercent(percussionGain)
+        )
+        if gains.wholeMix != wholeMixGain { wholeMixGain = gains.wholeMix; return }
+        if gains.mid != midGain { midGain = gains.mid; return }
+        if gains.top != topGain { topGain = gains.top; return }
+        if gains.kick != kickGain { kickGain = gains.kick; return }
+        if gains.percussion != percussionGain { percussionGain = gains.percussion; return }
+        flag.lock()
+        heldBandGains = gains
+        flag.unlock()
+        gains.save()
     }
 
     private func bumpEpoch() {

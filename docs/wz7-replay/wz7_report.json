@@ -1,5 +1,5 @@
 {
-  "audio": "/workspace/docs/wz7-replay/wz7_mono.f32",
+  "audio": "/tmp/wz7_mono.f32",
   "hop": 512,
   "duration_s": 39.01866666666667,
   "before": {
