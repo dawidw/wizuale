@@ -26,6 +26,8 @@ enum MicTuning {
     static let autoCycleKey = "wizuale.mic.autoCycle"
     static let cycleSecondsKey = "wizuale.mic.cycleSeconds"
     static let tvAudioDebugKey = "wizuale.mic.tvAudioDebug"
+    static let testSyntheticKickKey = "wizuale.mic.testSyntheticKick"
+    static let tvTestSyntheticKickKey = "wizuale.tv.testSyntheticKick"
     static let pictureBrightnessKey = "wizuale.mic.pictureBrightness"
     static let tvPictureBrightnessKey = "wizuale.tv.pictureBrightness"
     static let beatStrengthKey = "wizuale.mic.beatStrength"
@@ -142,6 +144,45 @@ enum MicTuning {
 
     static func saveTVAudioDebug(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: tvAudioDebugKey)
+    }
+
+    static func loadTestSyntheticKick() -> Bool {
+        UserDefaults.standard.bool(forKey: testSyntheticKickKey)
+    }
+
+    static func saveTestSyntheticKick(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: testSyntheticKickKey)
+    }
+
+    static func loadTVTestSyntheticKick() -> Bool {
+        UserDefaults.standard.bool(forKey: tvTestSyntheticKickKey)
+    }
+
+    static func saveTVTestSyntheticKick(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: tvTestSyntheticKickKey)
+    }
+
+    /// Maps phone **Sensitivity** (0.25…3) to kick onset gate on TV — not scene Intensywność.
+    static func kickOnsetTriggerThreshold(sensitivity: Float) -> Float {
+        let s = clampSensitivity(sensitivity)
+        let span = sensitivityMax - sensitivityMin
+        let norm = span > 0 ? (s - sensitivityMin) / span : 0.5
+        let high = 0.44
+        let low = 0.13
+        return high - norm * (high - low)
+    }
+
+    static func kickOnsetRearmThreshold(sensitivity: Float) -> Float {
+        kickOnsetTriggerThreshold(sensitivity: sensitivity) * 0.48
+    }
+
+    /// Proportional tsunami / PCM kick from onset above gate and 40–120 Hz bass energy.
+    static func kickPeakMagnitude(onset: Float, threshold: Float, bass: Float) -> Float {
+        let excess = min(max(onset - threshold, 0), 1.35)
+        guard excess > 0.02 else { return 0 }
+        let bassW = min(max(bass, 0), 1.6)
+        let bassMix = 0.42 + 0.58 * min(bassW, 1)
+        return min(1, excess * bassMix)
     }
 
     static func clampPictureBrightness(_ percent: Int) -> Int {

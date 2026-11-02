@@ -234,17 +234,31 @@ struct MicRootView: View {
     }
 
     private var tvDebugToggle: some View {
-        HStack {
-            Text("TV AUDIO DEBUG")
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(1.4)
-                .foregroundStyle(.white.opacity(0.5))
-            Spacer()
-            Toggle("Show audio debug on Apple TV", isOn: $mic.tvAudioDebug)
-                .labelsHidden()
-                .tint(.white.opacity(0.4))
-                .scaleEffect(0.75, anchor: .trailing)
-                .frame(height: 24)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("TV AUDIO DEBUG")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Toggle("Show audio debug on Apple TV", isOn: $mic.tvAudioDebug)
+                    .labelsHidden()
+                    .tint(.white.opacity(0.4))
+                    .scaleEffect(0.75, anchor: .trailing)
+                    .frame(height: 24)
+            }
+            HStack {
+                Text("TESTOWY KICK")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                Toggle("Synthetic kick on TV", isOn: $mic.testSyntheticKick)
+                    .labelsHidden()
+                    .tint(.white.opacity(0.4))
+                    .scaleEffect(0.75, anchor: .trailing)
+                    .frame(height: 24)
+            }
         }
     }
 

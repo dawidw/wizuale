@@ -27,6 +27,7 @@ final class VisualSession: ObservableObject {
     @Published private(set) var micLive = false
     @Published private(set) var micName = ""
     @Published private(set) var showAudioDebug = UserDefaults.standard.bool(forKey: VisualSession.audioDebugKey)
+    @Published private(set) var testSyntheticKick = MicTuning.loadTVTestSyntheticKick()
     @Published private(set) var pictureBrightness = MicTuning.loadTVPictureBrightness()
     @Published private(set) var pictureDimOpacity = VisualSession.dimOpacity(
         for: MicTuning.loadTVPictureBrightness()
@@ -35,6 +36,10 @@ final class VisualSession: ObservableObject {
     @Published private(set) var sceneIntensity = MicTuning.loadTVSceneIntensity()
     @Published private(set) var beatSceneEnvelope: Float = 0
     @Published private(set) var beatPunchFlash = false
+    @Published private(set) var beatLastKickPeak: Float = 0
+    @Published private(set) var beatDetectionThreshold: Float = MicTuning.kickOnsetTriggerThreshold(
+        sensitivity: MicTuning.loadSensitivity()
+    )
     @Published private(set) var beatPunchesPerMinute = 0
     @Published private(set) var sceneModTrace = SceneModulationTrace(
         beatStrengthPercent: MicTuning.loadTVBeatStrength(),
@@ -102,6 +107,7 @@ final class VisualSession: ObservableObject {
                     guard let self else { return }
                     self.latencyMs = ms
                     self.sensitivity = sens
+                    self.beatDetectionThreshold = MicTuning.kickOnsetTriggerThreshold(sensitivity: sens)
                     self.beatClock.setVisualLatency(ms: ms)
                     self.audioHub.setLatency(ms)
                     self.projectMState.setBeatSensitivity(sens)
@@ -114,6 +120,11 @@ final class VisualSession: ObservableObject {
             micReceiver.onDebugOverlay = { [weak self] show in
                 Task { @MainActor in
                     self?.applyShowAudioDebug(show, fromPhone: true)
+                }
+            }
+            micReceiver.onTestSyntheticKick = { [weak self] enabled in
+                Task { @MainActor in
+                    self?.applyTestSyntheticKick(enabled, fromPhone: true)
                 }
             }
             micReceiver.onDimming = { [weak self] percent in
@@ -132,6 +143,8 @@ final class VisualSession: ObservableObject {
                 }
             }
             micReceiver.setAckAudioDebug(showAudioDebug)
+            micReceiver.setAckTestSyntheticKick(testSyntheticKick)
+            beatPunch.setSyntheticKickEnabled(testSyntheticKick)
             micReceiver.setAckPictureBrightness(MicTuning.loadTVPictureBrightness())
             micReceiver.setAckBeatStrength(MicTuning.loadTVBeatStrength())
             micReceiver.setAckSceneIntensity(MicTuning.loadTVSceneIntensity())
@@ -167,6 +180,8 @@ final class VisualSession: ObservableObject {
     ) {
         beatSceneEnvelope = punch.sceneEnvelope
         beatPunchFlash = punch.flash
+        beatLastKickPeak = punch.lastKickPeak
+        beatDetectionThreshold = beatPunch.lastDetectionThreshold
         beatPunchesPerMinute = beatPunch.punchesPerMinute
         sceneModTrace = modulation
         guard showAudioDebug else { return }
@@ -178,10 +193,22 @@ final class VisualSession: ObservableObject {
         applyShowAudioDebug(enabled, fromPhone: false)
     }
 
+    func setTestSyntheticKick(_ enabled: Bool) {
+        applyTestSyntheticKick(enabled, fromPhone: false)
+    }
+
     private func applyShowAudioDebug(_ enabled: Bool, fromPhone: Bool) {
         showAudioDebug = enabled
         UserDefaults.standard.set(enabled, forKey: VisualSession.audioDebugKey)
         micReceiver.setAckAudioDebug(enabled)
+        _ = fromPhone
+    }
+
+    private func applyTestSyntheticKick(_ enabled: Bool, fromPhone: Bool) {
+        testSyntheticKick = enabled
+        MicTuning.saveTVTestSyntheticKick(enabled)
+        micReceiver.setAckTestSyntheticKick(enabled)
+        beatPunch.setSyntheticKickEnabled(enabled)
         _ = fromPhone
     }
 
@@ -251,6 +278,7 @@ final class VisualSession: ObservableObject {
     func setSensitivity(_ value: Float) {
         let clamped = MicTuning.clampSensitivity(value)
         sensitivity = clamped
+        beatDetectionThreshold = MicTuning.kickOnsetTriggerThreshold(sensitivity: clamped)
         micReceiver.setSensitivity(clamped)
         projectMState.setBeatSensitivity(clamped)
         audioHub.setBeatSensitivity(clamped)

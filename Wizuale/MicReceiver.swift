@@ -46,6 +46,8 @@ final class MicReceiver: @unchecked Sendable {
     var onCycle: (@Sendable (Bool, Int) -> Void)?
     /// TV audio debug overlay from the phone.
     var onDebugOverlay: (@Sendable (Bool) -> Void)?
+    /// 500 ms synthetic kick test mode (independent of AUDIO DEBUG).
+    var onTestSyntheticKick: (@Sendable (Bool) -> Void)?
     /// Picture brightness 10…100 from the phone (100 = no dim overlay).
     var onDimming: (@Sendable (Int) -> Void)?
     /// Beat punch strength 0…100 from the phone.
@@ -99,6 +101,7 @@ final class MicReceiver: @unchecked Sendable {
     private var lastControlPeerKey: ObjectIdentifier?
     private var ackHeartbeat: DispatchWorkItem?
     private var ackAudioDebug = false
+    private var ackTestSyntheticKick = false
     private var ackPictureBrightness: Int
     private var ackBeatStrength: Int
     private var ackSceneIntensity: Int
@@ -111,6 +114,7 @@ final class MicReceiver: @unchecked Sendable {
         latencyMs = MicTuning.loadLatency()
         source = MicTuning.loadSource()
         ackAudioDebug = UserDefaults.standard.bool(forKey: "wizuale.tv.audioDebug")
+        ackTestSyntheticKick = MicTuning.loadTVTestSyntheticKick()
         ackPictureBrightness = MicTuning.loadTVPictureBrightness()
         ackBeatStrength = MicTuning.loadTVBeatStrength()
         ackSceneIntensity = MicTuning.loadTVSceneIntensity()
@@ -121,6 +125,16 @@ final class MicReceiver: @unchecked Sendable {
         lock.lock()
         ackAudioDebug = show
         lock.unlock()
+        queue.async { [weak self] in
+            self?.sendAck(force: true)
+        }
+    }
+
+    func setAckTestSyntheticKick(_ enabled: Bool) {
+        lock.lock()
+        ackTestSyntheticKick = enabled
+        lock.unlock()
+        MicTuning.saveTVTestSyntheticKick(enabled)
         queue.async { [weak self] in
             self?.sendAck(force: true)
         }
@@ -492,6 +506,20 @@ final class MicReceiver: @unchecked Sendable {
                     handler(show)
                 }
             }
+        case .testSyntheticKick(_, let enabled):
+            MicTuning.saveTVTestSyntheticKick(enabled)
+            lock.lock()
+            ackTestSyntheticKick = enabled
+            stateRevision &+= 1
+            if stateRevision == 0 { stateRevision = 1 }
+            lock.unlock()
+            sendAck(force: true)
+            let handler = onTestSyntheticKick
+            if let handler {
+                DispatchQueue.main.async {
+                    handler(enabled)
+                }
+            }
         case .dim(_, let brightnessPercent):
             let clamped = MicTuning.clampPictureBrightness(brightnessPercent)
             MicTuning.saveTVPictureBrightness(clamped)
@@ -607,6 +635,7 @@ final class MicReceiver: @unchecked Sendable {
         let ms = latencyMs
         let sens = sensitivity
         let debug = ackAudioDebug
+        let testKick = ackTestSyntheticKick
         let brightness = ackPictureBrightness
         let beat = ackBeatStrength
         let intensity = ackSceneIntensity
@@ -621,6 +650,7 @@ final class MicReceiver: @unchecked Sendable {
             pictureBrightness: brightness,
             beatStrength: beat,
             sceneIntensity: intensity,
+            testSyntheticKick: testKick,
             stateRevision: revision
         )
         let targets: [NWConnection]

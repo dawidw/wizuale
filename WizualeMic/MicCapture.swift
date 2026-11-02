@@ -76,6 +76,17 @@ final class MicCapture: ObservableObject {
             scheduleTVAudioDebug()
         }
     }
+    @Published var testSyntheticKick = MicTuning.loadTestSyntheticKick() {
+        didSet {
+            guard testSyntheticKick != oldValue else { return }
+            flag.lock()
+            heldTestSyntheticKick = testSyntheticKick
+            flag.unlock()
+            guard !applyingRemote else { return }
+            MicTuning.saveTestSyntheticKick(testSyntheticKick)
+            scheduleTestSyntheticKick()
+        }
+    }
     @Published var cycleSeconds: Int = MicTuning.loadCycleSeconds() {
         didSet {
             let clamped = MicTuning.clampCycleSeconds(cycleSeconds)
@@ -147,12 +158,14 @@ final class MicCapture: ObservableObject {
     private var pcmSequence: UInt16 = 0
     private var cycleSequence: UInt16 = 0
     private var debugSequence: UInt16 = 0
+    private var testKickSequence: UInt16 = 0
     private var dimSequence: UInt16 = 0
     private var beatStrengthSequence: UInt16 = 0
     private var sceneIntensitySequence: UInt16 = 0
     private var pendingPCM: [Data] = []
     private var heldSensitivity: Float = MicTuning.loadSensitivity()
     private var heldTVAudioDebug = MicTuning.loadTVAudioDebug()
+    private var heldTestSyntheticKick = MicTuning.loadTestSyntheticKick()
     private var heldPictureBrightness = MicTuning.loadPictureBrightness()
     private var heldBeatStrength = MicTuning.loadBeatStrength()
     private var heldSceneIntensity = MicTuning.loadSceneIntensity()
@@ -169,6 +182,7 @@ final class MicCapture: ObservableObject {
     private var pendingSettings: Data?
     private var pendingBoost: Data?
     private var pendingDebug: Data?
+    private var pendingTestKick: Data?
     private var pendingDim: Data?
     private var pendingBeatStrength: Data?
     private var pendingSceneIntensity: Data?
@@ -204,6 +218,7 @@ final class MicCapture: ObservableObject {
     private var sensHoldUntil: CFTimeInterval = 0
     private var latHoldUntil: CFTimeInterval = 0
     private var debugSyncHeartbeat: DispatchWorkItem?
+    private var testKickSyncHeartbeat: DispatchWorkItem?
     private var dimSyncHeartbeat: DispatchWorkItem?
     private var beatStrengthSyncHeartbeat: DispatchWorkItem?
     private var beatStrengthDebounceWork: DispatchWorkItem?
@@ -883,6 +898,8 @@ final class MicCapture: ObservableObject {
             startPCMSender()
             scheduleTVAudioDebug()
             scheduleDebugSyncHeartbeat()
+            scheduleTestSyntheticKick()
+            scheduleTestKickSyncHeartbeat()
             scheduleDimSyncHeartbeat()
             primeBeatStrengthOnNetwork()
             primeSceneIntensityOnNetwork()
@@ -945,6 +962,7 @@ final class MicCapture: ObservableObject {
                             let brightness,
                             let beat,
                             let intensity,
+                            let testKick,
                             let revision
                         ) = packet {
                             self.log.debug("ack received preset=\(preset) cycling=\(cycling) rev=\(revision ?? 0)")
@@ -957,6 +975,7 @@ final class MicCapture: ObservableObject {
                             self.noteRemoteBrightness(brightness)
                             self.noteRemoteBeatStrength(beat)
                             self.noteRemoteSceneIntensity(intensity)
+                            self.noteRemoteTestSyntheticKick(testKick)
                         }
                     } else if data.count >= 6, MicWire.peekKind(data) == MicWire.kindAck {
                         self.log.error("ack decode failed (\(data.count) bytes)")
@@ -982,6 +1001,7 @@ final class MicCapture: ObservableObject {
         lastAck = CACurrentMediaTime()
         confirmed = true
         scheduleTVAudioDebug()
+        scheduleTestSyntheticKick()
         let name = connectedName.isEmpty ? "Apple TV" : connectedName
         let duplicateHeartbeat = stateRevision.map { $0 > 0 && $0 == lastAckStateRevision } ?? false
         if duplicateHeartbeat {
@@ -1069,6 +1089,19 @@ final class MicCapture: ObservableObject {
         }
     }
 
+    private func noteRemoteTestSyntheticKick(_ enabled: Bool?) {
+        guard let enabled else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.applyingRemote = true
+            self.testSyntheticKick = enabled
+            self.flag.lock()
+            self.heldTestSyntheticKick = enabled
+            self.flag.unlock()
+            self.applyingRemote = false
+        }
+    }
+
     private func refreshLink() {
         guard confirmed else { return }
         if CACurrentMediaTime() - lastAck > 1.1 {
@@ -1106,6 +1139,8 @@ final class MicCapture: ObservableObject {
     private func stopPCMSender() {
         debugSyncHeartbeat?.cancel()
         debugSyncHeartbeat = nil
+        testKickSyncHeartbeat?.cancel()
+        testKickSyncHeartbeat = nil
         dimSyncHeartbeat?.cancel()
         dimSyncHeartbeat = nil
         dimDebounceWork?.cancel()
@@ -1167,6 +1202,19 @@ final class MicCapture: ObservableObject {
         let packet = MicWire.encodeDebug(sequence: debugSequence, showAudioOverlay: show)
         network.async { [weak self] in
             self?.pendingDebug = packet
+            self?.pumpControl()
+        }
+    }
+
+    private func scheduleTestSyntheticKick() {
+        testKickSequence &+= 1
+        if testKickSequence == 0 { testKickSequence = 1 }
+        flag.lock()
+        let enabled = heldTestSyntheticKick
+        flag.unlock()
+        let packet = MicWire.encodeTestSyntheticKick(sequence: testKickSequence, enabled: enabled)
+        network.async { [weak self] in
+            self?.pendingTestKick = packet
             self?.pumpControl()
         }
     }
@@ -1329,6 +1377,17 @@ final class MicCapture: ObservableObject {
         network.asyncAfter(deadline: .now() + 2.5, execute: work)
     }
 
+    private func scheduleTestKickSyncHeartbeat() {
+        testKickSyncHeartbeat?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.running, self.linkWanted() else { return }
+            self.scheduleTestSyntheticKick()
+            self.scheduleTestKickSyncHeartbeat()
+        }
+        testKickSyncHeartbeat = work
+        network.asyncAfter(deadline: .now() + 2.5, execute: work)
+    }
+
     private func pumpControl() {
         guard let controlConnection, controlConnection.state == .ready else { return }
         guard !controlSending else { return }
@@ -1340,6 +1399,9 @@ final class MicCapture: ObservableObject {
             } else if let debug = pendingDebug {
                 pendingDebug = nil
                 control = debug
+            } else if let testKick = pendingTestKick {
+                pendingTestKick = nil
+                control = testKick
             } else if let dim = pendingDim {
                 pendingDim = nil
                 control = dim

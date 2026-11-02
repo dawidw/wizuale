@@ -13,7 +13,8 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
     var beatPunch: BeatPunchState
     var beatStrength: Int
     var sceneIntensity: Int
-    var audioDebugSyntheticKick: Bool
+    var testSyntheticKick: Bool
+    var beatSensitivity: Float
     var onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame, SceneModulationTrace) -> Void)?
     @Binding var failure: String?
 
@@ -37,7 +38,8 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
         controller.micSource = micSource
         controller.beatStrength = beatStrength
         controller.sceneIntensity = sceneIntensity
-        controller.audioDebugSyntheticKick = audioDebugSyntheticKick
+        controller.testSyntheticKick = testSyntheticKick
+        controller.beatSensitivity = beatSensitivity
     }
 }
 
@@ -60,7 +62,8 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     var micSource: MicInputSource = .phone
     var beatStrength: Int = MicTuning.loadTVBeatStrength()
     var sceneIntensity: Int = MicTuning.loadTVSceneIntensity()
-    var audioDebugSyntheticKick = false
+    var testSyntheticKick = false
+    var beatSensitivity: Float = MicTuning.loadSensitivity()
     var onFailure: ((String) -> Void)?
 
     init(
@@ -169,11 +172,12 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         }
         let drive = micReceiver.sample(dt: dt)
         beatPunch.setStrengthPercent(beatStrength)
+        beatPunch.setSyntheticKickEnabled(testSyntheticKick)
         let punchFrame = beatPunch.advance(
             drive: drive,
             dt: dt,
             now: now,
-            syntheticKickDebug: audioDebugSyntheticKick
+            beatSensitivity: beatSensitivity
         )
         let snap = renderState.snapshot()
         let modulation = MicSceneModulation.compute(

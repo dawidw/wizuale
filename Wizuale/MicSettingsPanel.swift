@@ -10,7 +10,9 @@ struct MicSettingsPanel: View {
     var latencyMs: Int
     var continuityStatus: String
     var showAudioDebug: Bool
+    var testSyntheticKick: Bool
     var onAudioDebug: (Bool) -> Void
+    var onTestSyntheticKick: (Bool) -> Void
     var onSource: (MicInputSource) -> Void
     var onSensitivity: (Float) -> Void
     var onLatency: (Int) -> Void
@@ -68,6 +70,20 @@ struct MicSettingsPanel: View {
                         isOn: Binding(
                             get: { showAudioDebug },
                             set: { onAudioDebug($0) }
+                        )
+                    )
+                    .labelsHidden()
+                }
+
+                HStack {
+                    Text("TESTOWY KICK")
+                        .font(.system(size: 24, weight: .medium))
+                    Spacer()
+                    Toggle(
+                        "Synthetic kick every 500 ms",
+                        isOn: Binding(
+                            get: { testSyntheticKick },
+                            set: { onTestSyntheticKick($0) }
                         )
                     )
                     .labelsHidden()
