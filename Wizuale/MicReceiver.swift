@@ -22,10 +22,12 @@ struct MicDrive: Sendable {
     var dropPunch: Float
     /// Age of the Wi‑Fi feature stamp used this frame (ms since arrival at TV).
     var featureAgeMs: Float
+    /// ~4 s EMA of shaped bass on TV — lifts continuous boost when the room is quiet.
+    var bassSlowMean: Float
 
     static let silent = MicDrive(
         onset: 0, bass: 0, lowMid: 0, mid: 0, high: 0, loudness: 0, flux: 0,
-        presence: 0, drop: 0, dropPunch: 0, featureAgeMs: 0
+        presence: 0, drop: 0, dropPunch: 0, featureAgeMs: 0, bassSlowMean: 0
     )
 }
 
@@ -88,6 +90,7 @@ final class MicReceiver: @unchecked Sendable {
     private var presence: Float = 0
     private var dropLevel: Float = 0
     private var dropPunch: Float = 0
+    private var bassSlow: Float = 0
     private var punchArmed = true
     private var appliedSequence: UInt16 = 0
     private var haveApplied = false
@@ -191,6 +194,7 @@ final class MicReceiver: @unchecked Sendable {
         havePacket = false
         haveApplied = false
         localSequence = 0
+        bassSlow = 0
         lock.unlock()
         MicTuning.saveSource(next)
     }
@@ -289,10 +293,12 @@ final class MicReceiver: @unchecked Sendable {
         if isNew, target.onset > onset {
             onset = target.onset
         }
-        bass = follow(bass, target.bass, dt: dtSafe, attack: 0.006, release: 0.24)
-        lowMid = follow(lowMid, target.lowMid, dt: dtSafe, attack: 0.014, release: 0.18)
-        mid = follow(mid, target.mid, dt: dtSafe, attack: 0.016, release: 0.11)
-        high = follow(high, target.high, dt: dtSafe, attack: 0.012, release: 0.075)
+        bass = follow(bass, target.bass, dt: dtSafe, attack: 0.0035, release: 0.14)
+        let slowCoef = 1 - expf(-dtSafe / MicTuning.adaptiveBassMeanSeconds)
+        bassSlow += (bass - bassSlow) * slowCoef
+        lowMid = follow(lowMid, target.lowMid, dt: dtSafe, attack: 0.010, release: 0.18)
+        mid = follow(mid, target.mid, dt: dtSafe, attack: 0.014, release: 0.11)
+        high = follow(high, target.high, dt: dtSafe, attack: 0.0075, release: 0.075)
         loudness = follow(loudness, target.loudness, dt: dtSafe, attack: 0.018, release: 0.16)
         flux = follow(flux, target.flux, dt: dtSafe, attack: 0.012, release: 0.08)
 
@@ -336,16 +342,17 @@ final class MicReceiver: @unchecked Sendable {
 
         return MicDrive(
             onset: hit(onset, sens),
-            bass: hit(bass, sens),
+            bass: hitBass(bass, sens),
             lowMid: hit(lowMid, sens),
             mid: shaped(mid),
-            high: hit(high, sens),
+            high: hitPerc(high, sens),
             loudness: shaped(loudness),
             flux: hit(flux, sens),
             presence: min(max(presence, 0), 1),
             drop: min(max(dropLevel, 0), 1),
             dropPunch: min(max(dropPunch, 0), 1.5),
-            featureAgeMs: featureAgeMs
+            featureAgeMs: featureAgeMs,
+            bassSlowMean: min(max(bassSlow, 0), 2.8)
         )
     }
 
@@ -357,8 +364,17 @@ final class MicReceiver: @unchecked Sendable {
         min(shaped(value) * max(sensitivity, 0), hitCap)
     }
 
-    private func shaped(_ value: Float) -> Float {
-        powf(min(max(value, 0), MicWire.gainCeiling), 0.85)
+    /// Slightly opener curve on bass and highs so max sensitivity moves quiet material.
+    private func hitBass(_ value: Float, _ sensitivity: Float) -> Float {
+        min(shaped(value, power: 0.78) * max(sensitivity, 0), hitCap)
+    }
+
+    private func hitPerc(_ value: Float, _ sensitivity: Float) -> Float {
+        min(shaped(value, power: 0.80) * max(sensitivity, 0), hitCap)
+    }
+
+    private func shaped(_ value: Float, power: Float = 0.85) -> Float {
+        powf(min(max(value, 0), MicWire.gainCeiling), power)
     }
 
     private func follow(_ current: Float, _ target: Float, dt: Float, attack: Float, release: Float) -> Float {

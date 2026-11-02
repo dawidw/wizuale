@@ -74,9 +74,33 @@ struct Biquad {
 
 /// Slow attack, slow release. A short kick can rise above the running peak
 /// instead of being pinned at 1, so the TV still hears the transient.
+/// Band level vs a slow mean — less peak-chasing than `Normalizer` (continuous bass path).
+struct MeanEnergyNormalizer {
+    var mean: Float = 1e-4
+
+    mutating func seed(noise: Float) {
+        mean = max(noise, 1e-5)
+    }
+
+    mutating func normalize(_ energy: Float, dt: Float) -> Float {
+        let dtSafe = max(dt, 0.0001)
+        mean += (energy - mean) * (1 - expf(-dtSafe / 3.8))
+        mean = max(mean, 1e-8)
+        let scaled = sqrtf(max(energy, 0) / mean)
+        return min(max(scaled, 0), 1.85)
+    }
+}
+
 struct Normalizer {
     var peak: Float = 1e-4
     var floor: Float = 1e-6
+    /// ~4 s room level — adaptive span so quiet music still moves at max sensitivity.
+    var slowMean: Float = 1e-4
+    /// Faster peak tracking for bass transients (1 = default).
+    var peakAttackScale: Float = 1
+
+    static let slowMeanTau: Float = 4.0
+    static let slowMeanSpanScale: Float = 0.14
 
     /// Start the gain from a measured noise level so the first notes are not
     /// either silent or slammed against the ceiling.
@@ -84,12 +108,14 @@ struct Normalizer {
         let base = max(noise, 0)
         floor = 0
         peak = max(base * 8, 1e-5)
+        slowMean = peak
     }
 
     mutating func normalize(_ energy: Float, dt: Float) -> Float {
         let dtSafe = max(dt, 0.0001)
+        let peakAttack = max(0.45 * peakAttackScale, 0.08)
         if energy > peak {
-            peak += (energy - peak) * (1 - expf(-dtSafe / 0.45))
+            peak += (energy - peak) * (1 - expf(-dtSafe / peakAttack))
         } else {
             peak += (energy - peak) * (1 - expf(-dtSafe / 5.5))
         }
@@ -100,7 +126,17 @@ struct Normalizer {
             floor += (energy - floor) * (1 - expf(-dtSafe / 8))
         }
         floor = min(floor, peak * 0.5)
-        let span = max(peak - floor, peak * 0.22, 1e-8)
+        let slowCoef = 1 - expf(-dtSafe / Self.slowMeanTau)
+        slowMean += (energy - slowMean) * slowCoef
+        slowMean = max(slowMean, 1e-8)
+        let adaptiveFloor = min(floor, slowMean * 0.55)
+        let adaptivePeak = max(peak, slowMean * 1.35)
+        let span = max(
+            adaptivePeak - adaptiveFloor,
+            slowMean * Self.slowMeanSpanScale,
+            peak * 0.22,
+            1e-8
+        )
         return min(max((energy - floor) / span, 0), 1.8)
     }
 }
@@ -113,6 +149,7 @@ struct BandAnalyzer {
     private var kickHigh: Biquad = Biquad()
     private var kickLow: Biquad = Biquad()
     private var builtRate: Double = 0
+    private var bassMeanGain = MeanEnergyNormalizer()
     private var gains = [Normalizer(), Normalizer(), Normalizer(), Normalizer()]
     private var loudGain = Normalizer()
     private var fluxGain = Normalizer()
@@ -125,13 +162,13 @@ struct BandAnalyzer {
 
     /// Adaptive onset gate: mean + k·σ over ~1 s on kick-band (40–120 Hz) spectral flux.
     static let onsetAdaptiveWindowSeconds: Float = 1.0
-    static let onsetAdaptiveK: Float = 1.12
+    static let onsetAdaptiveK: Float = 1.06
     static let onsetRefractorySeconds: Float = 0.12
-    static let onsetReleaseTau: Float = 0.038
-    static let onsetBassLevelMin: Float = 0.20
-    static let onsetLoudnessMin: Float = 0.10
+    static let onsetReleaseTau: Float = 0.032
+    static let onsetBassLevelMin: Float = 0.15
+    static let onsetLoudnessMin: Float = 0.065
     static let onsetGateFloor: Float = 0.00006
-    static let onsetFluxMargin: Float = 1.18
+    static let onsetFluxMargin: Float = 1.10
     static let silenceLoudnessMax: Float = 0.055
     static let silenceBassMax: Float = 0.07
     private var havePrevious = false
@@ -140,7 +177,11 @@ struct BandAnalyzer {
 
     mutating func apply(floor: MicNoiseFloor) {
         noise = floor
-        if floor.bass > 0 { gains[0].seed(noise: floor.bass) }
+        if floor.bass > 0 {
+            gains[0].seed(noise: floor.bass)
+            gains[0].peakAttackScale = 0.55
+            bassMeanGain.seed(noise: floor.bass)
+        }
         if floor.lowMid > 0 { gains[1].seed(noise: floor.lowMid) }
         if floor.mid > 0 { gains[2].seed(noise: floor.mid) }
         if floor.high > 0 { gains[3].seed(noise: floor.high) }
@@ -161,6 +202,9 @@ struct BandAnalyzer {
             kickHigh = Biquad.highpass(cutoff: 40, sampleRate: rate, q: 0.707)
             kickLow = Biquad.lowpass(cutoff: 120, sampleRate: rate, q: 0.707)
             builtRate = rate
+            gains = [Normalizer(), Normalizer(), Normalizer(), Normalizer()]
+            gains[0].peakAttackScale = 0.55
+            bassMeanGain = MeanEnergyNormalizer()
             havePrevious = false
             havePreviousKick = false
         }
@@ -215,7 +259,8 @@ struct BandAnalyzer {
         let loudClean = max(0, loudRaw - noise.loudness)
 
         var shaped = [Float](repeating: 0, count: 4)
-        for band in 0..<4 {
+        shaped[0] = bassMeanGain.normalize(energy[0], dt: dt)
+        for band in 1..<4 {
             shaped[band] = gains[band].normalize(energy[band], dt: dt)
         }
         let loudness = loudGain.normalize(loudClean, dt: dt)
@@ -337,7 +382,7 @@ enum MicPCM {
         return Array(UnsafeBufferPointer(start: channels[0], count: got))
     }
 
-    /// Mono int16 for the Wi-Fi PCM side channel. Linear encode — TV AGC brings quiet room mics up.
+    /// Mono int16 for the Wi‑Fi PCM side channel. Linear encode — TV AGC brings quiet room mics up.
     static func monoInt16(
         from buffer: AVAudioPCMBuffer,
         maxFrames: Int = 512,
@@ -345,15 +390,25 @@ enum MicPCM {
     ) -> (samples: [Int16], sampleRate: Float) {
         let floats = monoFloats(from: buffer)
         let rate = Float(buffer.format.sampleRate)
-        guard !floats.isEmpty else { return ([], rate) }
+        return monoInt16(from: floats, sampleRate: rate, maxFrames: maxFrames, wireGain: wireGain)
+    }
+
+    static func monoInt16(
+        from floats: [Float],
+        sampleRate: Float,
+        maxFrames: Int = 512,
+        wireGain: Float = 1
+    ) -> (samples: [Int16], sampleRate: Float) {
+        guard !floats.isEmpty else { return ([], sampleRate) }
         let count = min(floats.count, maxFrames)
         let gain = min(max(wireGain, 0.25), 3)
         var out = [Int16](repeating: 0, count: count)
         for i in 0..<count {
-            let scaled = min(max(floats[i] * gain, -1), 1)
+            let limited = MicTuning.captureTapSoftLimit(floats[i] * gain)
+            let scaled = min(max(limited, -1), 1)
             let quantized = scaled * 32767
             out[i] = Int16(clamping: Int(quantized.rounded()))
         }
-        return (out, rate)
+        return (out, sampleRate)
     }
 }

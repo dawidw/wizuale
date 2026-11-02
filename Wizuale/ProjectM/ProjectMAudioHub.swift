@@ -20,7 +20,7 @@ enum ProjectMAudioFeedState: String, Sendable {
 /// Phone→TV latency budget @ 48 kHz (estimated; `latencyMs` slider adds intentional delay on features):
 /// - **Before (build 1.1(2)):** ~10 ms phone tap hop + 1–5 ms UDP + TV feature `follow()` bass τ_release≈220 ms
 ///   + PCM FIFO jitter target ~70 ms + AGC smoothing τ≈550 ms/sample → motion often felt ~250–400 ms behind room.
-/// - **After:** TV feature τ_release bass≈105 ms / onset≈85 ms, FIFO jitter target 40 ms, faster AGC τ≈350 ms/sample,
+/// - **After:** TV feature τ_release bass≈240 ms / onset≈52 ms, FIFO jitter target 40 ms, faster AGC τ≈280 ms/sample,
 ///   scene punch on PCM (not UIView) → typical motion lag roughly **120–180 ms lower** at default latencyMs=0.
 final class ProjectMAudioHub: @unchecked Sendable {
     struct Metrics: Sendable {
@@ -360,7 +360,7 @@ final class ProjectMAudioHub: @unchecked Sendable {
     }
 
     private func shape(_ input: [Float], dt: Float, rate: Float, sensitivity: Float) -> [Float] {
-        let rmsCoef = 1 as Float - expf(-1 / (0.35 as Float * rate))
+        let rmsCoef = 1 as Float - expf(-1 / (0.28 as Float * rate))
         let sens = min(max(sensitivity, 0.35), 3)
         let levelGain = 0.88 + sens * 0.08
         let combinedGain = min(agcGain * levelGain, ProjectMAudioHub.maxGain)
@@ -374,11 +374,11 @@ final class ProjectMAudioHub: @unchecked Sendable {
         let desired = min(max(ProjectMAudioHub.targetRMS / rms, 1), ProjectMAudioHub.maxGain)
         let attack: Float
         if rms < ProjectMAudioHub.targetRMS * 0.06 {
-            attack = 0.38
+            attack = 0.28
         } else if rms > ProjectMAudioHub.targetRMS * 1.05 {
-            attack = 0.48
+            attack = 0.36
         } else {
-            attack = 0.38
+            attack = 0.28
         }
         agcGain += (desired - agcGain) * (1 as Float - expf(-dt / attack))
         return out

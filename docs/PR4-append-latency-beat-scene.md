@@ -210,3 +210,30 @@ Przy basie 0.75 i env kick 0.55: stosunek boostów cont/kick ≈ **7×**; `proje
 `python3 scripts/simulate_scene_modulation_mix.py`
 
 (Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)
+
+---
+
+## Build 1.1(7)+ — wz7 replay, czułość bas/kick/perc
+
+### Root cause (PL, wz7 @ 48 kHz / hop 512)
+1. **Lag ciągłego basu** — `MicReceiver.follow` bass attack ~6 ms + release 240 ms + AGC PCM τ≈350 ms → obraz za salą przy spokojnych partiach (cechy UDP szybsze niż PCM `bass_att`).
+2. **Cicha muzyka przy max Sensitivity** — `Normalizer` bez wolnej średniej 3–5 s → span gain oparty tylko o peak/floor; TV `hit()` z pow=0.85 dodatkowo tłumił bas/perc.
+3. **Miss kicków** — bramka flux μ+k·σ (k≈1.12), `onsetBassLevelMin`/`onsetLoudnessMin`, refractory 120 ms; margines na słabsze uderzenia był wąski.
+4. **Onset/punch** — TV `max(onset)` na nowym pakiecie OK; opóźnienie tsunami to głównie próg `BeatPunchState` + Siła bitu, nie utrata UDP w lokalnym replay.
+
+### Naprawa
+| Warstwa | Zmiana |
+|---------|--------|
+| `BandAnalyzer` / `Normalizer` | EMA **4 s** `slowMean`, span adaptacyjny; szybszy peak basu (×0.55 τ); onset k=**1.06**, margin **1.10**, bass min **0.15**, loud τ **32 ms** |
+| `MicReceiver` | Bass attack **2.5 ms**, perc/high **7.5 ms**, lowMid **10 ms**; `hitBass`/`hitPerc` (pow **0.78** / **0.80**) |
+| `ProjectMAudioHub` AGC | RMS τ **0.28×sr**, gain attack **0.28 s** |
+| Mix bas>kick | bez zmian (`MicSceneModulation` ratio ~7× @ 20×) |
+
+### Test offline
+```bash
+python3 scripts/replay_band_analyzer.py --extract-from wz7_small.mp4
+# → docs/wz7-replay/wz7_before_after.png, wz7_report.json
+./scripts/compile-check-mic-analyzer.sh
+```
+
+(Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)
