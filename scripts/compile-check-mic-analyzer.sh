@@ -13,6 +13,11 @@ python3 scripts/replay_band_analyzer.py --extract-from "${WZ7_VIDEO:-/dev/null}"
   || python3 scripts/replay_band_analyzer.py --audio /tmp/wz7_mono.f32 2>/dev/null \
   || true
 
+if [[ -f /tmp/wz7_mono.f32 ]]; then
+  echo "==> wz7 motion proxy (auto-advance @ ~32 s)"
+  python3 scripts/replay_wz7_motion_proxy.py /tmp/wz7_mono.f32 --plot docs/wz7-motion-proxy.png
+fi
+
 echo "==> Float/Double assignment audit (MicTuning kick thresholds)"
 python3 - <<'PY'
 import re

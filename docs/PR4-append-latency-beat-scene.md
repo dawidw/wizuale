@@ -231,11 +231,20 @@ Przy basie 0.75 i env kick 0.55: stosunek boostów cont/kick ≈ **7×**; `proje
 | **Auto-advance** | `ProjectMCanvasView`: **`loadPreset` → `setBeatSensitivity`** (preset resetuje libprojectM) |
 | **Mic band sliders** | `MicBandGains` WHOLE MIX / MID / TOP / KICK / PERCUSSION → cechy UDP + wire PCM |
 | **Replay wz7 proxy** | `scripts/replay_wz7_motion_proxy.py` + `docs/wz7-motion-proxy.png` (bas vs motion proxy) |
+| **TV DEBUG ≠ fake audio** | Overlay tylko odczytuje PCM/cechy; **TESTOWY KICK** (kind 12) osobno — sam DEBUG nie odpala metronomu |
+| **Zmiana presetu** | Po `loadPreset` (auto-advance / tap) ponowne `setBeatSensitivity` + `clampProjectMBeatSensitivity` w `ProjectMController` |
+
+### Commity (wz7 @ build 1.1(7)+)
+| SHA | Opis |
+|-----|------|
+| **`31af95f`** | Normalizer EMA 4 s, ostrzejszy onset, szybszy follow bas/perc na TV, AGC PCM, `replay_band_analyzer.py` + wz7 before/after |
+| **`fc63b96`** | Auto-advance: preset→sens; suwaki pasm Mic; adaptive continuous boost (`bassSlowMean`); tap soft limit; motion proxy @ t≈32 s |
 
 ### Test offline
 ```bash
 python3 scripts/replay_band_analyzer.py --extract-from wz7_small.mp4
 # → docs/wz7-replay/wz7_before_after.png, wz7_report.json
+python3 scripts/replay_wz7_motion_proxy.py /tmp/wz7_mono.f32 --plot docs/wz7-motion-proxy.png
 ./scripts/compile-check-mic-analyzer.sh
 ```
 
