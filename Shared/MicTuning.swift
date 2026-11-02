@@ -167,8 +167,8 @@ enum MicTuning {
         let s = clampSensitivity(sensitivity)
         let span = sensitivityMax - sensitivityMin
         let norm = span > 0 ? (s - sensitivityMin) / span : 0.5
-        let high = 0.44
-        let low = 0.13
+        let high: Float = 0.44
+        let low: Float = 0.13
         return high - norm * (high - low)
     }
 
