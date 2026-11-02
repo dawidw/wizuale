@@ -9,6 +9,8 @@ struct MilkPreset: Equatable, Identifiable, Sendable, Codable {
     var file: String
     /// Optional thumbnail path relative to the `Presets` folder (e.g. `thumbs/foo.jpg`).
     var thumb: String?
+    /// Playlist section (`MilkDrop` stock presets, then `Study of Space`).
+    var group: String?
 
     var displayName: String { name }
 }
@@ -22,6 +24,18 @@ enum MilkPresetCatalog {
     static var presets: [MilkPreset] { loaded }
 
     static var count: Int { loaded.count }
+
+    /// Presets grouped for the Mic picker (order preserved).
+    static var groupedPresets: [(group: String, presets: [MilkPreset])] {
+        var order: [String] = []
+        var buckets: [String: [MilkPreset]] = [:]
+        for preset in loaded {
+            let key = preset.group ?? "Presets"
+            if buckets[key] == nil { order.append(key) }
+            buckets[key, default: []].append(preset)
+        }
+        return order.map { ($0, buckets[$0]!) }
+    }
 
     static func preset(at index: Int) -> MilkPreset? {
         guard loaded.indices.contains(index) else { return nil }

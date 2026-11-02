@@ -1,0 +1,33 @@
+{
+  "presets": [
+    { "name": "Study of Space - Fangor Rings", "file": "files/Study of Space - Fangor Rings.milk", "thumb": "thumbs/Study of Space - Fangor Rings.jpg" },
+    { "name": "Study of Space - Soft Ring", "file": "files/Study of Space - Soft Ring.milk", "thumb": "thumbs/Study of Space - Soft Ring.jpg" },
+    { "name": "Study of Space - Soft Squares Orchid", "file": "files/Study of Space - Soft Squares Orchid.milk", "thumb": "thumbs/Study of Space - Soft Squares Orchid.jpg" },
+    { "name": "Study of Space - Soft Squares Sunset", "file": "files/Study of Space - Soft Squares Sunset.milk", "thumb": "thumbs/Study of Space - Soft Squares Sunset.jpg" },
+    { "name": "Study of Space - Dream", "file": "files/Study of Space - Dream.milk", "thumb": "thumbs/Study of Space - Dream.jpg" },
+    { "name": "Study of Space - Oscillogram", "file": "files/Study of Space - Oscillogram.milk", "thumb": "thumbs/Study of Space - Oscillogram.jpg" },
+    { "name": "Study of Space - Stripes and Disc", "file": "files/Study of Space - Stripes and Disc.milk", "thumb": "thumbs/Study of Space - Stripes and Disc.jpg" },
+    { "name": "Study of Space - Neon Multiply and Rotate", "file": "files/Study of Space - Neon Multiply and Rotate.milk", "thumb": "thumbs/Study of Space - Neon Multiply and Rotate.jpg" },
+    { "name": "Study of Space - Wavy Stripes", "file": "files/Study of Space - Wavy Stripes.milk", "thumb": "thumbs/Study of Space - Wavy Stripes.jpg" },
+    { "name": "Study of Space - Constructivist", "file": "files/Study of Space - Constructivist.milk", "thumb": "thumbs/Study of Space - Constructivist.jpg" },
+    { "name": "Study of Space - Block Letters", "file": "files/Study of Space - Block Letters.milk", "thumb": "thumbs/Study of Space - Block Letters.jpg" },
+    { "name": "Study of Space - Unism", "file": "files/Study of Space - Unism.milk", "thumb": "thumbs/Study of Space - Unism.jpg" },
+    { "name": "Study of Space - Organic Rhythm", "file": "files/Study of Space - Organic Rhythm.milk", "thumb": "thumbs/Study of Space - Organic Rhythm.jpg" },
+    { "name": "Study of Space - Election Constructivism", "file": "files/Study of Space - Election Constructivism.milk", "thumb": "thumbs/Study of Space - Election Constructivism.jpg" },
+    { "name": "Study of Space - Spatial Planes", "file": "files/Study of Space - Spatial Planes.milk", "thumb": "thumbs/Study of Space - Spatial Planes.jpg" },
+    { "name": "Study of Space - Wooden Relief", "file": "files/Study of Space - Wooden Relief.milk", "thumb": "thumbs/Study of Space - Wooden Relief.jpg" },
+    { "name": "Study of Space - Woven Strips", "file": "files/Study of Space - Woven Strips.milk", "thumb": "thumbs/Study of Space - Woven Strips.jpg" },
+    { "name": "Study of Space - Paper Cutout", "file": "files/Study of Space - Paper Cutout.milk", "thumb": "thumbs/Study of Space - Paper Cutout.jpg" },
+    { "name": "Study of Space - Outlined Stains", "file": "files/Study of Space - Outlined Stains.milk", "thumb": "thumbs/Study of Space - Outlined Stains.jpg" },
+    { "name": "Study of Space - Rhythm Bars", "file": "files/Study of Space - Rhythm Bars.milk", "thumb": "thumbs/Study of Space - Rhythm Bars.jpg" },
+    { "name": "Study of Space - Sunburst and Rings", "file": "files/Study of Space - Sunburst and Rings.milk", "thumb": "thumbs/Study of Space - Sunburst and Rings.jpg" },
+    { "name": "Study of Space - Halftone", "file": "files/Study of Space - Halftone.milk", "thumb": "thumbs/Study of Space - Halftone.jpg" },
+    { "name": "Study of Space - Moire", "file": "files/Study of Space - Moire.milk", "thumb": "thumbs/Study of Space - Moire.jpg" },
+    { "name": "Study of Space - Stripes Baron", "file": "files/Study of Space - Stripes Baron.milk", "thumb": "thumbs/Study of Space - Stripes Baron.jpg" },
+    { "name": "Study of Space - Split Rings", "file": "files/Study of Space - Split Rings.milk", "thumb": "thumbs/Study of Space - Split Rings.jpg" },
+    { "name": "Study of Space - Mosaic", "file": "files/Study of Space - Mosaic.milk", "thumb": "thumbs/Study of Space - Mosaic.jpg" },
+    { "name": "Study of Space - Halo Blob", "file": "files/Study of Space - Halo Blob.milk", "thumb": "thumbs/Study of Space - Halo Blob.jpg" },
+    { "name": "Study of Space - Triangles", "file": "files/Study of Space - Triangles.milk", "thumb": "thumbs/Study of Space - Triangles.jpg" },
+    { "name": "Study of Space - Steps", "file": "files/Study of Space - Steps.milk", "thumb": "thumbs/Study of Space - Steps.jpg" }
+  ]
+}

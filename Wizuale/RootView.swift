@@ -29,10 +29,58 @@ struct RootView: View {
                     renderState: visuals.projectMState,
                     audioHub: visuals.audioHub,
                     micReceiver: visuals.micReceiver,
+                    micSource: visuals.micSource,
                     paused: scenePhase != .active,
+                    beatPunch: visuals.beatPunchState,
+                    beatStrength: visuals.beatStrength,
+                    sceneIntensity: visuals.sceneIntensity,
+                    testSyntheticKick: visuals.testSyntheticKick,
+                    beatSensitivity: visuals.sensitivity,
+                    onAudioFrame: { drive, metrics, punch, modulation in
+                        Task { @MainActor in
+                            visuals.noteAudioFrame(
+                                drive: drive,
+                                metrics: metrics,
+                                punch: punch,
+                                modulation: modulation
+                            )
+                        }
+                    },
                     failure: $failure
                 )
                 .ignoresSafeArea()
+
+                Color.black
+                    .opacity(visuals.pictureDimOpacity)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+
+            if visuals.showAudioDebug {
+                BeatTestOverlay(
+                    drive: visuals.audioDebugDrive,
+                    metrics: visuals.audioDebugMetrics,
+                    punchFlash: visuals.beatPunchFlash,
+                    kickEnvelope: visuals.beatSceneEnvelope
+                )
+                .zIndex(399)
+                MicAudioDebugOverlay(
+                    drive: visuals.audioDebugDrive,
+                    metrics: visuals.audioDebugMetrics,
+                    latencyMs: visuals.latencyMs,
+                    beatStrength: visuals.beatStrength,
+                    sceneIntensity: visuals.sceneIntensity,
+                    punchesPerMinute: visuals.beatPunchesPerMinute,
+                    kickEnvelope: visuals.beatSceneEnvelope,
+                    kickFlash: visuals.beatPunchFlash,
+                    lastKickPeak: visuals.beatLastKickPeak,
+                    detectionThreshold: visuals.beatDetectionThreshold,
+                    testSyntheticKick: visuals.testSyntheticKick,
+                    phoneSensitivity: visuals.sensitivity,
+                    modulation: visuals.sceneModTrace
+                )
+                .zIndex(400)
+                .allowsHitTesting(false)
             }
 
             NowPlayingOverlay(
@@ -77,6 +125,10 @@ struct RootView: View {
                     sensitivity: visuals.sensitivity,
                     latencyMs: visuals.latencyMs,
                     continuityStatus: visuals.continuityStatus,
+                    showAudioDebug: visuals.showAudioDebug,
+                    testSyntheticKick: visuals.testSyntheticKick,
+                    onAudioDebug: { visuals.setShowAudioDebug($0) },
+                    onTestSyntheticKick: { visuals.setTestSyntheticKick($0) },
                     onSource: { visuals.setMicSource($0) },
                     onSensitivity: { visuals.setSensitivity($0) },
                     onLatency: { visuals.setLatency($0) },

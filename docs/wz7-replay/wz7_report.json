@@ -1,0 +1,36 @@
+{
+  "audio": "/tmp/wz7_mono.f32",
+  "hop": 512,
+  "duration_s": 39.01866666666667,
+  "before": {
+    "label": "before",
+    "onset_peaks": 16,
+    "punch_triggers": 16,
+    "matched": 16,
+    "missed_onsets": 0,
+    "mean_delay_ms": 0.0,
+    "median_bass_tv": 1.5860287613504602,
+    "bass_tv_p90_p10": 3.117115305348455,
+    "quiet_bass_tv_mean": 1.5512410106093473,
+    "unmatched_onset_times_s": []
+  },
+  "after": {
+    "label": "after",
+    "onset_peaks": 16,
+    "punch_triggers": 16,
+    "matched": 16,
+    "missed_onsets": 0,
+    "mean_delay_ms": 0.0,
+    "median_bass_tv": 1.4827538222837284,
+    "bass_tv_p90_p10": 3.1311756763123793,
+    "quiet_bass_tv_mean": 1.4989132414309374,
+    "unmatched_onset_times_s": []
+  },
+  "root_causes": [
+    "TV follow bass attack ~6 ms + release 240 ms \u2192 ruch basu za telefonem przy spokojnej muzyce.",
+    "Normalizer bez wolnej \u015bredniej 3\u20135 s \u2192 cichsze partie nie podnosz\u0105 bass_tv mimo max Sensitivity.",
+    "Bramka onset \u03bc+k\u00b7\u03c3 + bass/loudness min + refractory 120 ms \u2192 cz\u0119\u015b\u0107 kick\u00f3w w wz7 poni\u017cej progu (miss).",
+    "Onset TV: follow 2 ms + max() na nowym pakiecie OK; op\u00f3\u017anienie punch \u2248 follow + pr\u00f3g BeatPunch, nie UDP.",
+    "AGC PCM (\u03c4~280 ms) nie wp\u0142ywa na cechy UDP \u2014 lag obrazu z continuous bass to g\u0142\u00f3wnie follow + AGC na \u015bcie\u017cce PCM."
+  ]
+}

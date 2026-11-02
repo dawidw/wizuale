@@ -61,23 +61,34 @@ final class ProjectMController {
 
     func setBeatSensitivity(_ value: Float) {
         guard let handle else { return }
-        projectm_set_beat_sensitivity(handle, MicTuning.clampSensitivity(value))
+        projectm_set_beat_sensitivity(handle, MicTuning.clampProjectMBeatSensitivity(value))
     }
 
     /// GLKView draws into its own framebuffer (not 0), so render into whatever is bound.
-    func render() {
+    func render(toFramebuffer fbo: UInt32) {
         guard let handle else { return }
-        var fbo: GLint = 0
-        glGetIntegerv(GLenum(GL_FRAMEBUFFER_BINDING), &fbo)
-        projectm_opengl_render_frame_fbo(handle, UInt32(fbo))
+        projectm_opengl_render_frame_fbo(handle, fbo)
+    }
+
+    func setRenderFPS(_ fps: Float) {
+        guard let handle else { return }
+        let clamped = min(max(fps, 24), 120)
+        projectm_set_fps(handle, Int32(clamped.rounded()))
     }
 
     /// Mono floats in -1...1 (already paced and levelled by ProjectMAudioHub).
+    /// Duplicated to stereo interleaved — matches MilkDrop's PCM path for bass_att / motion.
     func addPCM(floats: [Float]) {
         guard let handle, !floats.isEmpty else { return }
-        floats.withUnsafeBufferPointer { ptr in
+        var stereo = [Float]()
+        stereo.reserveCapacity(floats.count * 2)
+        for sample in floats {
+            stereo.append(sample)
+            stereo.append(sample)
+        }
+        stereo.withUnsafeBufferPointer { ptr in
             guard let base = ptr.baseAddress else { return }
-            projectm_pcm_add_float(handle, base, UInt32(ptr.count), PROJECTM_MONO)
+            projectm_pcm_add_float(handle, base, UInt32(floats.count), PROJECTM_STEREO)
         }
     }
 
@@ -90,10 +101,16 @@ final class ProjectMController {
             loadedIndex = index
             return
         }
+        if smooth {
+            "idle://".withCString { idle in
+                projectm_load_preset_file(handle, idle, false)
+            }
+        }
         path.withCString { cPath in
             projectm_load_preset_file(handle, cPath, smooth)
         }
         loadedIndex = index
+        // Preset files reset libprojectM beat sensitivity — caller must re-apply each frame.
     }
 }
 

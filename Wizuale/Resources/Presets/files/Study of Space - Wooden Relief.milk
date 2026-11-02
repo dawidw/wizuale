@@ -1,0 +1,137 @@
+MILKDROP_PRESET_VERSION=201
+PSVERSION=2
+PSVERSION_WARP=2
+PSVERSION_COMP=2
+[preset00]
+fRating=5.000000
+fGammaAdj=1.000
+fDecay=1.000
+fVideoEchoZoom=1.000
+fVideoEchoAlpha=0.000
+nVideoEchoOrientation=1
+nWaveMode=0
+bAdditiveWaves=0
+bWaveDots=0
+bWaveThick=0
+bModWaveAlphaByVolume=0
+bMaximizeWaveColor=0
+bTexWrap=0
+bDarkenCenter=0
+bRedBlueStereo=0
+bBrighten=0
+bDarken=0
+bSolarize=0
+bInvert=0
+fWaveAlpha=0.000
+fWaveScale=0.010
+fWaveSmoothing=0.750
+fWaveParam=0.000
+fModWaveAlphaStart=0.750
+fModWaveAlphaEnd=0.950
+fWarpAnimSpeed=1.000
+fWarpScale=1.000
+fZoomExponent=0.01000
+fShader=0.000
+zoom=1.00000
+rot=0.00000
+cx=0.500
+cy=0.500
+dx=0.00000
+dy=0.00000
+warp=0.00000
+sx=1.00000
+sy=1.00000
+wave_r=0.000
+wave_g=0.000
+wave_b=0.000
+wave_x=0.000
+wave_y=0.000
+ob_size=0.000
+ob_r=0.000
+ob_g=0.000
+ob_b=0.000
+ob_a=0.000
+ib_size=0.000
+ib_r=0.000
+ib_g=0.000
+ib_b=0.000
+ib_a=0.000
+nMotionVectorsX=12.000
+nMotionVectorsY=9.000
+mv_dx=0.000
+mv_dy=0.000
+mv_l=0.900
+mv_r=1.000
+mv_g=1.000
+mv_b=1.000
+mv_a=0.000
+b1n=0.000
+b2n=0.000
+b3n=0.000
+b1x=1.000
+b2x=1.000
+b3x=1.000
+b1ed=0.250
+wavecode_0_enabled=0
+wavecode_0_samples=512
+wavecode_0_sep=0
+wavecode_0_bSpectrum=0
+wavecode_0_bUseDots=0
+wavecode_0_bDrawThick=0
+per_frame_init_1=dir=1;
+per_frame_init_2=lastb=0;
+per_frame_init_3=pulse=0;
+per_frame_init_4=acc=0;
+per_frame_init_5=spin=0;
+per_frame_init_6=bc=0;
+per_frame_init_7=rnd=0.3;
+per_frame_1=trig = above(bass, bass_att*1.12 + 0.04)*above(time - lastb, 0.22);
+per_frame_2=trig = max(trig, below(bass+mid+treb, 0.15)*above(time - lastb, 0.55));
+per_frame_3=lastb = if(trig, time, lastb);
+per_frame_4=pulse = max(pulse*0.86, trig);
+per_frame_5=bc = if(trig, bc + 1, bc);
+per_frame_6=bc = if(above(bc, 63), 0, bc);
+per_frame_7=rnd = if(trig, rand(1000)*0.001, rnd);
+per_frame_8=dir = if(trig*below(rand(4),1), -dir, dir);
+per_frame_9=fr = max(fps, 15);
+per_frame_10=acc = acc + (0.5 + 1.3*min(bass_att,2) + 3*pulse)/fr;
+per_frame_11=spin = spin + dir*(0.12 + 0.5*min(bass_att,2) + 1.5*pulse)/fr;
+per_frame_12=q1 = min(bass, 2.5);
+per_frame_13=q2 = min(mid, 2.5);
+per_frame_14=q3 = min(treb, 2.5);
+per_frame_15=q4 = pulse;
+per_frame_16=q5 = acc;
+per_frame_17=q6 = spin;
+per_frame_18=q7 = bc;
+per_frame_19=q8 = rnd;
+per_frame_20=wave_a = 0;
+
+per_frame_21=dy = 0.005*dir*(1.0 + q4);
+per_frame_22=zoom = 1.0 + 0.04*pulse;
+
+warp_1=`shader_body
+warp_2=`{
+warp_3=`float2 p = uv_orig - 0.5;
+warp_4=`p.x *= texsize.x*texsize.w;
+warp_7=`float3 fb = tex2D(sampler_main, uv).xyz;
+warp_8=`float3 col = float3(0.12,0.1,0.08);
+warp_9=`float m = 0.0;
+warp_10=`float bands = sin(p.y*18.0 + q5*0.3)*0.5+0.5;
+warp_11=`float3 wood1 = float3(0.91,0.85,0.66); float3 wood2 = float3(0.66,0.48,0.28);
+warp_12=`col = lerp(wood2, wood1, bands);
+warp_13=`float ridge = smoothstep(0.48,0.52, sin(p.x*8.0+q6));
+warp_14=`col = lerp(col, wood1*1.1, ridge*0.35);
+warp_15=`m = 0.85;
+warp_16=`ret = saturate(lerp(fb*0.93 - 0.004, col, saturate(m)));
+warp_17=`}
+comp_1=`shader_body
+comp_2=`{
+comp_3=`float2 u = uv;
+comp_4=`
+comp_5=`float2 off = (u - 0.5)*0.014*q4;
+comp_6=`float3 c;
+comp_7=`c.x = tex2D(sampler_main, u + off).x;
+comp_8=`c.y = tex2D(sampler_main, u).y;
+comp_9=`c.z = tex2D(sampler_main, u - off).z;
+comp_10=`ret = saturate(c);
+comp_11=`}

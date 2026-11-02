@@ -1,4 +1,5 @@
 import GLKit
+import OpenGLES
 import SwiftUI
 import UIKit
 
@@ -7,11 +8,25 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
     var renderState: ProjectMRenderState
     var audioHub: ProjectMAudioHub
     var micReceiver: MicReceiver
+    var micSource: MicInputSource
     var paused: Bool
+    var beatPunch: BeatPunchState
+    var beatStrength: Int
+    var sceneIntensity: Int
+    var testSyntheticKick: Bool
+    var beatSensitivity: Float
+    var onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame, SceneModulationTrace) -> Void)?
     @Binding var failure: String?
 
     func makeUIViewController(context: Context) -> ProjectMViewController {
-        let controller = ProjectMViewController(renderState: renderState, audioHub: audioHub, micReceiver: micReceiver)
+        let controller = ProjectMViewController(
+            renderState: renderState,
+            audioHub: audioHub,
+            micReceiver: micReceiver,
+            micSource: micSource,
+            beatPunch: beatPunch,
+            onAudioFrame: onAudioFrame
+        )
         controller.onFailure = { message in
             DispatchQueue.main.async { failure = message }
         }
@@ -20,6 +35,11 @@ struct ProjectMCanvasView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: ProjectMViewController, context: Context) {
         controller.paused = paused
+        controller.micSource = micSource
+        controller.beatStrength = beatStrength
+        controller.sceneIntensity = sceneIntensity
+        controller.testSyntheticKick = testSyntheticKick
+        controller.beatSensitivity = beatSensitivity
     }
 }
 
@@ -27,20 +47,39 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     private let renderState: ProjectMRenderState
     private let audioHub: ProjectMAudioHub
     private let micReceiver: MicReceiver
+    private let beatPunch: BeatPunchState
+    private let onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame, SceneModulationTrace) -> Void)?
     private var lastFrameTime: CFTimeInterval = 0
+    private var renderFpsEma: Float = 60
     private let projectM = ProjectMController()
+    private let kickWaveCompositor = ProjectMKickWaveCompositor()
     private var glView: GLKView!
     private var context: EAGLContext!
     private var displayLink: CADisplayLink?
     private var lastIndex = -1
 
     var paused = false
+    var micSource: MicInputSource = .phone
+    var beatStrength: Int = MicTuning.loadTVBeatStrength()
+    var sceneIntensity: Int = MicTuning.loadTVSceneIntensity()
+    var testSyntheticKick = false
+    var beatSensitivity: Float = MicTuning.loadSensitivity()
     var onFailure: ((String) -> Void)?
 
-    init(renderState: ProjectMRenderState, audioHub: ProjectMAudioHub, micReceiver: MicReceiver) {
+    init(
+        renderState: ProjectMRenderState,
+        audioHub: ProjectMAudioHub,
+        micReceiver: MicReceiver,
+        micSource: MicInputSource,
+        beatPunch: BeatPunchState,
+        onAudioFrame: ((MicDrive, ProjectMAudioHub.Metrics, BeatPunchFrame, SceneModulationTrace) -> Void)?
+    ) {
         self.renderState = renderState
         self.audioHub = audioHub
         self.micReceiver = micReceiver
+        self.micSource = micSource
+        self.beatPunch = beatPunch
+        self.onAudioFrame = onAudioFrame
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -60,9 +99,11 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         glView.drawableDepthFormat = .format24
         glView.enableSetNeedsDisplay = false
         glView.delegate = self
+        glView.backgroundColor = .black
         view.addSubview(glView)
 
         EAGLContext.setCurrent(ctx)
+        kickWaveCompositor.createIfNeeded(in: ctx)
         projectM.create(in: ctx, size: pixelSize)
         if !projectM.isReady {
             onFailure?("libprojectM did not start. Run scripts/build-projectm-tvos.sh on a Mac.")
@@ -73,6 +114,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         super.viewDidLayoutSubviews()
         EAGLContext.setCurrent(context)
         projectM.resize(pixelSize)
+        kickWaveCompositor.resizeIfNeeded(pixelSize, context: context)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -88,6 +130,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     deinit {
         stopDisplayLink()
         EAGLContext.setCurrent(context)
+        kickWaveCompositor.destroy(in: context)
         projectM.destroy()
     }
 
@@ -111,27 +154,68 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
     /// enableSetNeedsDisplay is false, so setNeedsDisplay() would be ignored; draw explicitly.
     @objc private func tick() {
         guard !paused else { return }
-        // The Metal renderer used to call sample() every frame; projectM does not.
-        // sample() is what reports mic liveness (the green "Mic" chip) to VisualSession.
-        let now = CACurrentMediaTime()
-        let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : 1.0 / 60.0
-        lastFrameTime = now
-        _ = micReceiver.sample(dt: dt)
         glView.display()
     }
 
     func glkView(_ view: GLKView, drawIn rect: CGRect) {
         guard !paused, let context else { return }
         EAGLContext.setCurrent(context)
+        var drawableFBO: GLint = 0
+        glGetIntegerv(GLenum(GL_FRAMEBUFFER_BINDING), &drawableFBO)
+        let now = CACurrentMediaTime()
+        let dt = lastFrameTime > 0 ? Float(now - lastFrameTime) : Float(1.0 / 60.0)
+        lastFrameTime = now
+        if dt > 1e-4 {
+            let instant = min(max(1 / dt, 24), 120)
+            renderFpsEma = renderFpsEma * 0.9 + instant * 0.1
+            projectM.setRenderFPS(renderFpsEma)
+        }
+        let drive = micReceiver.sample(dt: dt)
+        beatPunch.setStrengthPercent(beatStrength)
+        beatPunch.setSyntheticKickEnabled(testSyntheticKick)
+        let punchFrame = beatPunch.advance(
+            drive: drive,
+            dt: dt,
+            now: now,
+            beatSensitivity: beatSensitivity
+        )
         let snap = renderState.snapshot()
-        projectM.setBeatSensitivity(snap.beatSensitivity)
+        let modulation = MicSceneModulation.compute(
+            baseBeatSensitivity: snap.beatSensitivity,
+            kickEnvelope: punchFrame.sceneEnvelope,
+            beatStrengthPercent: beatStrength,
+            sceneIntensityPermille: sceneIntensity,
+            bass: drive.bass,
+            bassSlowMean: drive.bassSlowMean
+        )
         if snap.targetIndex != lastIndex {
             projectM.loadPreset(index: snap.targetIndex, smooth: lastIndex >= 0)
             lastIndex = snap.targetIndex
         }
-        audioHub.feed { projectM.addPCM(floats: $0) }
+        projectM.setBeatSensitivity(modulation.projectMSensitivity)
+        audioHub.feed(
+            micSource: micSource,
+            scenePunch: punchFrame.sceneEnvelope,
+            pcmKickMix: modulation.pcmKickMix,
+            now: now
+        ) { projectM.addPCM(floats: $0) }
+        onAudioFrame?(drive, audioHub.metricsSnapshot(), punchFrame, modulation.trace)
+        kickWaveCompositor.resizeIfNeeded(pixelSize, context: context)
+        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), kickWaveCompositor.sceneFramebuffer)
+        glViewport(0, 0, GLsizei(pixelSize.width), GLsizei(pixelSize.height))
         glClearColor(0, 0, 0, 1)
         glClear(UInt32(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT))
-        projectM.render()
+        projectM.render(toFramebuffer: kickWaveCompositor.sceneFramebuffer)
+
+        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), GLuint(drawableFBO))
+        glViewport(0, 0, GLsizei(view.drawableWidth), GLsizei(view.drawableHeight))
+        glClearColor(0, 0, 0, 1)
+        glClear(UInt32(GL_COLOR_BUFFER_BIT))
+        kickWaveCompositor.drawKickWave(
+            envelope: punchFrame.sceneEnvelope,
+            kickAgeSeconds: punchFrame.kickAgeSeconds,
+            strengthScale: modulation.trace.strengthScale,
+            drawableSize: pixelSize
+        )
     }
 }

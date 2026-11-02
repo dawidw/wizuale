@@ -8,6 +8,10 @@ struct PresetStrip: View {
     var known: Bool
     var onSelect: (Int) -> Void
 
+    private var scrollTarget: Int {
+        cycling ? Int(PresetWire.auto) : active
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("PRESETS")
@@ -23,36 +27,57 @@ struct PresetStrip: View {
                             onSelect(Int(PresetWire.auto))
                         }
                         .id(Int(PresetWire.auto))
-                        ForEach(MilkPresetCatalog.presets) { preset in
-                            PresetCard(
-                                title: preset.displayName,
-                                thumbnail: PresetThumbnails.image(for: preset),
-                                selected: known && preset.id == active && !cycling,
-                                playing: known && preset.id == active
-                            ) {
-                                onSelect(preset.id)
+                        ForEach(MilkPresetCatalog.groupedPresets, id: \.group) { section in
+                            PresetGroupLabel(title: section.group)
+                            ForEach(section.presets) { preset in
+                                PresetCard(
+                                    title: preset.displayName,
+                                    thumbnail: PresetThumbnails.image(for: preset),
+                                    selected: known && preset.id == active && !cycling,
+                                    playing: known && preset.id == active
+                                ) {
+                                    onSelect(preset.id)
+                                }
+                                .id(preset.id)
                             }
-                            .id(preset.id)
                         }
                     }
                     .padding(.horizontal, 22)
                     .padding(.vertical, 2)
                 }
                 .onAppear {
-                    proxy.scrollTo(active, anchor: .center)
+                    proxy.scrollTo(scrollTarget, anchor: .center)
                 }
-                .onChange(of: active) { _, value in
+                .onChange(of: active) { _, _ in
                     withAnimation(.easeInOut(duration: 0.28)) {
-                        proxy.scrollTo(value, anchor: .center)
+                        proxy.scrollTo(scrollTarget, anchor: .center)
                     }
                 }
                 .onChange(of: cycling) { _, _ in
                     withAnimation(.easeInOut(duration: 0.28)) {
-                        proxy.scrollTo(active, anchor: .center)
+                        proxy.scrollTo(scrollTarget, anchor: .center)
+                    }
+                }
+                .onChange(of: known) { _, _ in
+                    withAnimation(.easeInOut(duration: 0.28)) {
+                        proxy.scrollTo(scrollTarget, anchor: .center)
                     }
                 }
             }
         }
+    }
+}
+
+private struct PresetGroupLabel: View {
+    var title: String
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: 9.5, weight: .bold))
+            .tracking(1.1)
+            .foregroundStyle(.white.opacity(0.42))
+            .frame(height: 58, alignment: .bottomLeading)
+            .padding(.leading, 2)
     }
 }
 

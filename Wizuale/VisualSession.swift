@@ -1,9 +1,12 @@
 import Combine
 import Foundation
+import SwiftUI
 
 /// Which picture is showing, and the small title card in the corner.
 @MainActor
 final class VisualSession: ObservableObject {
+    private static let audioDebugKey = "wizuale.tv.audioDebug"
+
     let projectMState = ProjectMRenderState()
     let audioHub = ProjectMAudioHub()
     let beatClock: BeatClock
@@ -23,6 +26,40 @@ final class VisualSession: ObservableObject {
     @Published private(set) var showHint = true
     @Published private(set) var micLive = false
     @Published private(set) var micName = ""
+    @Published private(set) var showAudioDebug = UserDefaults.standard.bool(forKey: VisualSession.audioDebugKey)
+    @Published private(set) var testSyntheticKick = MicTuning.loadTVTestSyntheticKick()
+    @Published private(set) var pictureBrightness = MicTuning.loadTVPictureBrightness()
+    @Published private(set) var pictureDimOpacity = VisualSession.dimOpacity(
+        for: MicTuning.loadTVPictureBrightness()
+    )
+    @Published private(set) var beatStrength = MicTuning.loadTVBeatStrength()
+    @Published private(set) var sceneIntensity = MicTuning.loadTVSceneIntensity()
+    @Published private(set) var beatSceneEnvelope: Float = 0
+    @Published private(set) var beatPunchFlash = false
+    @Published private(set) var beatLastKickPeak: Float = 0
+    @Published private(set) var beatDetectionThreshold: Float = MicTuning.kickOnsetTriggerThreshold(
+        sensitivity: MicTuning.loadSensitivity()
+    )
+    @Published private(set) var beatPunchesPerMinute = 0
+    @Published private(set) var sceneModTrace = SceneModulationTrace(
+        beatStrengthPercent: MicTuning.loadTVBeatStrength(),
+        sceneIntensityPermille: MicTuning.loadTVSceneIntensity(),
+        intensityMultiplier: MicTuning.sceneIntensityMultiplier(MicTuning.loadTVSceneIntensity()),
+        strengthScale: Float(MicTuning.loadTVBeatStrength()) / 100,
+        kickEnvelope: 0,
+        kickSensitivityBoost: 0,
+        continuousSensitivityBoost: 0,
+        projectMBeatSensitivity: MicTuning.sensitivityDefault,
+        pcmKickMix: 0,
+        tsunamiMaxDisplacement: 0
+    )
+    @Published private(set) var audioDebugDrive = MicDrive.silent
+    @Published private(set) var audioDebugMetrics = ProjectMAudioHub.Metrics(
+        fifoSamples: 0, fifoMs: 0, lastChunk: 0, rms: 0, agcGain: ProjectMAudioHub.defaultAgcGain,
+        streamLive: false, feedState: .fallback, micSource: .phone,
+        pcmPacketsPerSec: 0, gapAvgMs: 0, gapMaxMs: 0, underrunTotal: 0, pcmInRms: 0,
+        projectMFeedSps: 0, scenePunch: 0
+    )
     @Published var micSource = MicTuning.loadSource()
     @Published var sensitivity = MicTuning.loadSensitivity()
     @Published var latencyMs = MicTuning.loadLatency()
@@ -39,6 +76,9 @@ final class VisualSession: ObservableObject {
     private var cycleToken = UUID()
     private var hideToken = UUID()
     private var hintToken = UUID()
+    private var dimAnimToken = UUID()
+    private let beatPunch = BeatPunchState()
+    var beatPunchState: BeatPunchState { beatPunch }
 
     var currentPresetName: String {
         MilkPresetCatalog.preset(at: presetIndex)?.displayName ?? "Preset"
@@ -67,6 +107,7 @@ final class VisualSession: ObservableObject {
                     guard let self else { return }
                     self.latencyMs = ms
                     self.sensitivity = sens
+                    self.beatDetectionThreshold = MicTuning.kickOnsetTriggerThreshold(sensitivity: sens)
                     self.beatClock.setVisualLatency(ms: ms)
                     self.audioHub.setLatency(ms)
                     self.projectMState.setBeatSensitivity(sens)
@@ -76,12 +117,50 @@ final class VisualSession: ObservableObject {
             micReceiver.onPCM = { [weak self] rate, samples in
                 self?.audioHub.enqueue(sampleRate: rate, samples: samples)
             }
+            micReceiver.onDebugOverlay = { [weak self] show in
+                Task { @MainActor in
+                    self?.applyShowAudioDebug(show, fromPhone: true)
+                }
+            }
+            micReceiver.onTestSyntheticKick = { [weak self] enabled in
+                Task { @MainActor in
+                    self?.applyTestSyntheticKick(enabled, fromPhone: true)
+                }
+            }
+            micReceiver.onDimming = { [weak self] percent in
+                Task { @MainActor in
+                    self?.applyPictureBrightness(percent)
+                }
+            }
+            micReceiver.onBeatStrength = { [weak self] percent in
+                Task { @MainActor in
+                    self?.applyBeatStrength(percent)
+                }
+            }
+            micReceiver.onSceneIntensity = { [weak self] permille in
+                Task { @MainActor in
+                    self?.applySceneIntensity(permille)
+                }
+            }
+            micReceiver.setAckAudioDebug(showAudioDebug)
+            micReceiver.setAckTestSyntheticKick(testSyntheticKick)
+            beatPunch.setSyntheticKickEnabled(testSyntheticKick)
+            micReceiver.setAckPictureBrightness(MicTuning.loadTVPictureBrightness())
+            micReceiver.setAckBeatStrength(MicTuning.loadTVBeatStrength())
+            micReceiver.setAckSceneIntensity(MicTuning.loadTVSceneIntensity())
+            micReceiver.onAdoptPhoneSource = { [weak self] in
+                Task { @MainActor in
+                    self?.micSource = .phone
+                }
+            }
             micReceiver.onCycle = { [weak self] auto, seconds in
                 Task { @MainActor in
                     guard let self else { return }
                     self.autoCycle = auto
                     self.cycleSeconds = seconds
                     self.projectMState.setAutoCycle(auto, seconds: seconds)
+                    let cycling = auto && !self.phoneLocked
+                    self.micReceiver.setShown(index: self.presetIndex, cycling: cycling)
                     if auto && !self.phoneLocked { self.armCycle() }
                 }
             }
@@ -89,6 +168,89 @@ final class VisualSession: ObservableObject {
             micReceiver.start()
             if micSource == .continuity {
                 startContinuity()
+            }
+        }
+    }
+
+    func noteAudioFrame(
+        drive: MicDrive,
+        metrics: ProjectMAudioHub.Metrics,
+        punch: BeatPunchFrame,
+        modulation: SceneModulationTrace
+    ) {
+        beatSceneEnvelope = punch.sceneEnvelope
+        beatPunchFlash = punch.flash
+        beatLastKickPeak = punch.lastKickPeak
+        beatDetectionThreshold = beatPunch.lastDetectionThreshold
+        beatPunchesPerMinute = beatPunch.punchesPerMinute
+        sceneModTrace = modulation
+        guard showAudioDebug else { return }
+        audioDebugDrive = drive
+        audioDebugMetrics = metrics
+    }
+
+    func setShowAudioDebug(_ enabled: Bool) {
+        applyShowAudioDebug(enabled, fromPhone: false)
+    }
+
+    func setTestSyntheticKick(_ enabled: Bool) {
+        applyTestSyntheticKick(enabled, fromPhone: false)
+    }
+
+    private func applyShowAudioDebug(_ enabled: Bool, fromPhone: Bool) {
+        showAudioDebug = enabled
+        UserDefaults.standard.set(enabled, forKey: VisualSession.audioDebugKey)
+        micReceiver.setAckAudioDebug(enabled)
+        _ = fromPhone
+    }
+
+    private func applyTestSyntheticKick(_ enabled: Bool, fromPhone: Bool) {
+        testSyntheticKick = enabled
+        MicTuning.saveTVTestSyntheticKick(enabled)
+        micReceiver.setAckTestSyntheticKick(enabled)
+        beatPunch.setSyntheticKickEnabled(enabled)
+        _ = fromPhone
+    }
+
+    private static func dimOpacity(for percent: Int) -> Double {
+        1.0 - Double(MicTuning.clampPictureBrightness(percent)) / 100.0
+    }
+
+    func applyPictureBrightness(_ percent: Int) {
+        let clamped = MicTuning.clampPictureBrightness(percent)
+        pictureBrightness = clamped
+        MicTuning.saveTVPictureBrightness(clamped)
+        micReceiver.setAckPictureBrightness(clamped)
+        animatePictureDim(to: VisualSession.dimOpacity(for: clamped))
+    }
+
+    func applyBeatStrength(_ percent: Int) {
+        let clamped = MicTuning.clampBeatStrength(percent)
+        beatStrength = clamped
+        MicTuning.saveTVBeatStrength(clamped)
+        micReceiver.setAckBeatStrength(clamped)
+        beatPunch.setStrengthPercent(clamped)
+    }
+
+    func applySceneIntensity(_ permille: Int) {
+        let clamped = MicTuning.clampSceneIntensity(permille)
+        sceneIntensity = clamped
+        MicTuning.saveTVSceneIntensity(clamped)
+        micReceiver.setAckSceneIntensity(clamped)
+    }
+
+    private func animatePictureDim(to target: Double) {
+        dimAnimToken = UUID()
+        let token = dimAnimToken
+        let start = pictureDimOpacity
+        Task { @MainActor in
+            let steps = 14
+            for step in 1...steps {
+                try? await Task.sleep(nanoseconds: 22_000_000)
+                guard token == dimAnimToken else { return }
+                let t = Double(step) / Double(steps)
+                let eased = t * t * (3 - 2 * t)
+                pictureDimOpacity = start + (target - start) * eased
             }
         }
     }
@@ -116,6 +278,7 @@ final class VisualSession: ObservableObject {
     func setSensitivity(_ value: Float) {
         let clamped = MicTuning.clampSensitivity(value)
         sensitivity = clamped
+        beatDetectionThreshold = MicTuning.kickOnsetTriggerThreshold(sensitivity: clamped)
         micReceiver.setSensitivity(clamped)
         projectMState.setBeatSensitivity(clamped)
         audioHub.setBeatSensitivity(clamped)
@@ -155,7 +318,10 @@ final class VisualSession: ObservableObject {
         } else {
             let created = ContinuityMic()
             created.onPCM = { [weak self] samples, rate in
-                self?.audioHub.enqueue(sampleRate: rate, samples: samples)
+                Task { @MainActor in
+                    guard let self, self.micSource == .continuity else { return }
+                    self.audioHub.enqueue(sampleRate: rate, samples: samples)
+                }
             }
             created.onStatus = { [weak self] text in
                 Task { @MainActor in
