@@ -28,6 +28,23 @@ Presety `.milk` bez zmian. TestFlight nie uruchamiany.
 
 ---
 
+## Dawid 1.1(5) — kick / DEBUG / suwaki (`20c5584`)
+
+### Przyczyny (root cause)
+1. **Metronom przy ciszy** — syntetyczny kick co 500 ms był włączany przez `showAudioDebug` (`RootView` → `audioDebugSyntheticKick`), więc sam overlay DEBUG odpalał fale bez muzyki.
+2. **Fałszywy rytm onsetu** — `BandAnalyzer` przepuszczał słaby flux przy niskim progu (μ+1.05σ); `BeatPunchState` miał stały próg 0.30 niezależny od suwaka **Sensitivity** (Mic).
+3. **Panel DEBUG „martwy”** — `noteAudioFrame` wołane z wątku GL bez `@MainActor`; `@Published` (PCM, RMS, RX) nie odświeżały się co klatkę.
+4. **Tsunami bez gradacji** — `triggerPeak ≈ onset × siła` ignorował nadmiar nad progiem i energię basu 40–120 Hz → każdy trigger podobnej wielkości.
+
+### Naprawa
+- **Testowy kick** — osobny toggle (domyślnie OFF) na Mic + TV settings; sync **kind 12** + pole ack @26; TV zeruje timer metronomu przy OFF.
+- **Sensitivity** — `MicTuning.kickOnsetTriggerThreshold(sensitivity)` steruje bramką kicka na TV; **Intensywność** nadal tylko przez `MicSceneModulation` (permille → PCM/tsunami).
+- **Kick proporcjonalny** — `kickPeakMagnitude(onset, próg, bass)`; cisza: bramka `presence`/`loudness` + ostrzejszy flux w `BandAnalyzer`.
+- **DEBUG live** — `Task { @MainActor in noteAudioFrame }`; wiersze: próg, szczyt kicka, Test kick, RX suwaki.
+- **Test offline**: `python3 scripts/simulate_beat_punch_kicks.py`
+
+---
+
 ## Intensywność sceny (~10× domyślnie) — build 1.1(3)+
 
 ### Semantyka suwaków
