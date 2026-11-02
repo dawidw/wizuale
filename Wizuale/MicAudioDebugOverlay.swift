@@ -10,6 +10,10 @@ struct MicAudioDebugOverlay: View {
     var punchesPerMinute: Int
     var kickEnvelope: Float
     var kickFlash: Bool
+    var lastKickPeak: Float
+    var detectionThreshold: Float
+    var testSyntheticKick: Bool
+    var phoneSensitivity: Float
     var modulation: SceneModulationTrace
 
     var body: some View {
@@ -34,13 +38,24 @@ struct MicAudioDebugOverlay: View {
             row("Feat age", String(format: "%.0f ms", drive.featureAgeMs))
             row("Onset", String(format: "%.2f  Bass %.2f", drive.onset, drive.bass))
             row(
+                "Próg / czułość",
+                String(format: "%.2f  sens %.2f×", detectionThreshold, phoneSensitivity)
+            )
+            row(
                 "Detekcja bitu",
                 String(format: "%.2f/s  ~%d bpm", Float(punchesPerMinute) / 60, punchesPerMinute)
             )
             row(
                 "Kick env",
-                String(format: "%.2f  %@  Siła %d%%", kickEnvelope, kickFlash ? "ONSET" : "—", beatStrength)
+                String(
+                    format: "%.2f  %@  szczyt %.2f  Siła %d%%",
+                    kickEnvelope,
+                    kickFlash ? "ONSET" : "—",
+                    lastKickPeak,
+                    beatStrength
+                )
             )
+            row("Test kick", testSyntheticKick ? "ON (500 ms)" : "off")
             row(
                 "Scene punch",
                 String(format: "PCM %.2f", metrics.scenePunch)

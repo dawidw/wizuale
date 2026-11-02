@@ -9,6 +9,8 @@ struct BeatPunchFrame: Equatable {
     var kickAgeSeconds: Float
     /// True for one frame when a punch was triggered (syncs BEAT TEST dot).
     var flash: Bool
+    /// Peak envelope scale from the last real or synthetic trigger (DEBUG).
+    var lastKickPeak: Float
 }
 
 /// Detects kicks from `MicDrive.onset` (same path as the TV mic receiver) and animates punch envelope.
@@ -17,8 +19,7 @@ final class BeatPunchState {
     static let attackSeconds: Float = 1.0 / 60.0
     static let releaseTau: Float = MicTuning.kickWaveReleaseTau
     static let refractorySeconds: Float = 0.12
-    static let onsetTriggerThreshold: Float = 0.30
-    static let onsetRearmThreshold: Float = 0.16
+    static let syntheticKickInterval: CFTimeInterval = 0.5
 
     private var kickArmed = true
     private var lastTrigger: CFTimeInterval = 0
@@ -26,43 +27,72 @@ final class BeatPunchState {
     private var envelope: Float = 0
     private var recentTriggers: [CFTimeInterval] = []
     private(set) var strengthPercent: Int = MicTuning.loadTVBeatStrength()
+    private(set) var lastKickPeak: Float = 0
+    private(set) var lastDetectionThreshold: Float = MicTuning.kickOnsetTriggerThreshold(
+        sensitivity: MicTuning.loadSensitivity()
+    )
+
+    private var lastSyntheticKick: CFTimeInterval = 0
+    private var syntheticKickEnabled = false
 
     func setStrengthPercent(_ percent: Int) {
         strengthPercent = MicTuning.clampBeatStrength(percent)
     }
 
-    private var lastSyntheticKick: CFTimeInterval = 0
+    /// When test mode turns off, drop the 500 ms metronome state (no orphan triggers).
+    func setSyntheticKickEnabled(_ enabled: Bool) {
+        guard syntheticKickEnabled != enabled else { return }
+        syntheticKickEnabled = enabled
+        if !enabled {
+            lastSyntheticKick = 0
+        }
+    }
 
-    /// DEBUG: 500 ms synthetic full kick when AUDIO DEBUG is on (no room music required).
-    func injectSyntheticKickIfDue(now: CFTimeInterval, enabled: Bool) -> Bool {
-        guard enabled else { return false }
-        guard now - lastSyntheticKick >= 0.5 else { return false }
+    /// DEBUG: irregular full-strength kick every 500 ms when **Testowy kick** is on (not AUDIO DEBUG).
+    func injectSyntheticKickIfDue(now: CFTimeInterval) -> Bool {
+        guard syntheticKickEnabled else { return false }
+        guard now - lastSyntheticKick >= Self.syntheticKickInterval else { return false }
         lastSyntheticKick = now
         let strength = Float(strengthPercent) / 100
         guard strength > 0 else { return false }
         triggerPeak = strength
+        lastKickPeak = strength
         lastTrigger = now
         kickArmed = false
         recordTrigger(now)
         return true
     }
 
-    func advance(drive: MicDrive, dt: Float, now: CFTimeInterval, syntheticKickDebug: Bool = false) -> BeatPunchFrame {
+    func advance(
+        drive: MicDrive,
+        dt: Float,
+        now: CFTimeInterval,
+        beatSensitivity: Float
+    ) -> BeatPunchFrame {
         let dtSafe = min(max(dt, 0), 0.1)
         let onset = drive.onset
         let strength = Float(strengthPercent) / 100
+        let threshold = MicTuning.kickOnsetTriggerThreshold(sensitivity: beatSensitivity)
+        let rearm = MicTuning.kickOnsetRearmThreshold(sensitivity: beatSensitivity)
+        lastDetectionThreshold = threshold
         var flash = false
 
-        if injectSyntheticKickIfDue(now: now, enabled: syntheticKickDebug) {
+        if injectSyntheticKickIfDue(now: now) {
             flash = true
         }
 
-        if strength > 0, kickArmed, onset > Self.onsetTriggerThreshold {
+        let roomLive = drive.presence > 0.1 || drive.loudness > 0.07
+        if strength > 0, kickArmed, roomLive, onset > threshold {
             let since = now - lastTrigger
             if since >= Double(Self.refractorySeconds) {
-                let magnitude = min(max(onset, 0), 1)
+                let magnitude = MicTuning.kickPeakMagnitude(
+                    onset: onset,
+                    threshold: threshold,
+                    bass: drive.bass
+                )
                 triggerPeak = magnitude * strength
                 if triggerPeak > 0.04 {
+                    lastKickPeak = triggerPeak
                     lastTrigger = now
                     kickArmed = false
                     recordTrigger(now)
@@ -70,7 +100,7 @@ final class BeatPunchState {
                 }
             }
         }
-        if onset < Self.onsetRearmThreshold {
+        if onset < rearm {
             kickArmed = true
         }
 
@@ -94,7 +124,12 @@ final class BeatPunchState {
             if envelope < 0.008 { envelope = 0 }
         }
 
-        return BeatPunchFrame(sceneEnvelope: envelope, kickAgeSeconds: kickAge, flash: flash)
+        return BeatPunchFrame(
+            sceneEnvelope: envelope,
+            kickAgeSeconds: kickAge,
+            flash: flash,
+            lastKickPeak: lastKickPeak
+        )
     }
 
     var punchesPerMinute: Int {

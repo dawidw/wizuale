@@ -125,12 +125,15 @@ struct BandAnalyzer {
 
     /// Adaptive onset gate: mean + k·σ over ~1 s on kick-band (40–120 Hz) spectral flux.
     static let onsetAdaptiveWindowSeconds: Float = 1.0
-    static let onsetAdaptiveK: Float = 1.05
+    static let onsetAdaptiveK: Float = 1.12
     static let onsetRefractorySeconds: Float = 0.12
-    static let onsetReleaseTau: Float = 0.042
-    static let onsetBassLevelMin: Float = 0.18
-    static let onsetLoudnessMin: Float = 0.08
-    static let onsetGateFloor: Float = 0.00004
+    static let onsetReleaseTau: Float = 0.038
+    static let onsetBassLevelMin: Float = 0.20
+    static let onsetLoudnessMin: Float = 0.10
+    static let onsetGateFloor: Float = 0.00006
+    static let onsetFluxMargin: Float = 1.18
+    static let silenceLoudnessMax: Float = 0.055
+    static let silenceBassMax: Float = 0.07
     private var havePrevious = false
     private var havePreviousKick = false
     private var noise = MicNoiseFloor.zero
@@ -224,8 +227,12 @@ struct BandAnalyzer {
         let variance = max(kickFluxMeanSq - kickFluxMean * kickFluxMean, 1e-12)
         let gate = kickFluxMean + Self.onsetAdaptiveK * sqrtf(variance)
         let threshold = max(gate, Self.onsetGateFloor)
+        let silent = loudness < Self.silenceLoudnessMax && shaped[0] < Self.silenceBassMax
 
-        if kickFlux > threshold
+        if silent {
+            onset *= expf(-dt / (Self.onsetReleaseTau * 0.65))
+            refractory = max(0, refractory - dt)
+        } else if kickFlux > threshold * Self.onsetFluxMargin
             && shaped[0] > Self.onsetBassLevelMin
             && loudness > Self.onsetLoudnessMin
             && refractory <= 0
