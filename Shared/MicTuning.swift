@@ -48,20 +48,22 @@ enum MicTuning {
     static let sceneIntensityMaxPermille = 4000
     static let sceneIntensityDefaultPermille = 2000
 
-    /// PCM kick mix and beat-sensitivity punch boost at 1× intensity (f301047).
-    static let scenePunchPCMSMixBaseline: Float = 0.38
-    static let scenePunchSensitivityBoostBaseline: Float = 0.42
-    /// Continuous room-energy → beat sensitivity (Intensywność only, not kick envelope).
-    static let sceneContinuousSensitivityBaseline: Float = 0.55
+    /// Short kick accent @ 1× Intensywność and 100% Siła bitu (on top of continuous bass).
+    static let scenePunchPCMSMixBaseline: Float = 0.16
+    static let scenePunchSensitivityBoostBaseline: Float = 0.20
+    /// Continuous room bass → `projectm_set_beat_sensitivity` (dominant “boom boom”; Intensywność).
+    static let sceneContinuousSensitivityBaseline: Float = 0.88
+    /// Tanh ceiling for kick-only sensitivity accent (keeps bass headroom when kick fires).
+    static let sceneKickAccentSensitivityCeiling: Float = 2.4
 
     /// Radial tsunami compositor (UV displacement, brightness-neutral).
-    static let kickWaveReleaseTau: Float = 0.20
+    static let kickWaveReleaseTau: Float = 0.095
     static let kickWaveRingFrequency: Float = 18
     static let kickWavePhaseSpeed: Float = 18
     /// Radial falloff in compositor shader (`exp(-r * falloff)`).
     static let kickWaveRingFalloff: Float = 0.85
-    /// Max outward UV shift at envelope=1, Siła bitu=100% (visible tsunami on TV).
-    static let kickWaveMaxDisplacement: Float = 0.12
+    /// Max outward UV shift at envelope=1, Siła bitu=100% — smaller than continuous preset motion.
+    static let kickWaveMaxDisplacement: Float = 0.058
     /// Caps `projectm_set_beat_sensitivity` during a punch so presets stay stable at max slider.
     static let sceneBeatSensitivityCeiling: Float = 10
 
@@ -289,10 +291,18 @@ enum MicTuning {
         return min(max(value, sensitivityMin), sceneBeatSensitivityCeiling)
     }
 
-    static func clampSceneBeatSensitivity(base: Float, punchBoost: Float) -> Float {
+    /// Sum base slider + saturated continuous bass boost + smaller saturated kick accent.
+    static func clampSceneBeatSensitivity(
+        base: Float,
+        kickBoost: Float,
+        continuousBoost: Float
+    ) -> Float {
         let baseClamped = clampSensitivity(base)
-        let boost = punchBoost.isFinite ? max(0, punchBoost) : 0
-        let combined = baseClamped + sceneSoftSaturate(boost)
+        let cont = continuousBoost.isFinite ? max(0, continuousBoost) : 0
+        let kick = kickBoost.isFinite ? max(0, kickBoost) : 0
+        let combined = baseClamped
+            + sceneSoftSaturate(cont, at: sceneBeatSensitivityCeiling)
+            + sceneSoftSaturate(kick, at: sceneKickAccentSensitivityCeiling)
         return clampProjectMBeatSensitivity(combined)
     }
 

@@ -195,7 +195,7 @@ final class ProjectMViewController: UIViewController, GLKViewDelegate {
         audioHub.feed(
             micSource: micSource,
             scenePunch: punchFrame.sceneEnvelope,
-            beatStrengthPercent: beatStrength,
+            pcmKickMix: modulation.pcmKickMix,
             now: now
         ) { projectM.addPCM(floats: $0) }
         onAudioFrame?(drive, audioHub.metricsSnapshot(), punchFrame, modulation.trace)

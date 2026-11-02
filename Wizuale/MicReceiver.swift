@@ -289,7 +289,7 @@ final class MicReceiver: @unchecked Sendable {
         if isNew, target.onset > onset {
             onset = target.onset
         }
-        bass = follow(bass, target.bass, dt: dtSafe, attack: 0.005, release: 0.105)
+        bass = follow(bass, target.bass, dt: dtSafe, attack: 0.006, release: 0.24)
         lowMid = follow(lowMid, target.lowMid, dt: dtSafe, attack: 0.014, release: 0.18)
         mid = follow(mid, target.mid, dt: dtSafe, attack: 0.016, release: 0.11)
         high = follow(high, target.high, dt: dtSafe, attack: 0.012, release: 0.075)

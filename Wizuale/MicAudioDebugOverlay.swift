@@ -88,6 +88,16 @@ struct MicAudioDebugOverlay: View {
                 )
             )
             row(
+                "Mix bas/kick",
+                String(
+                    format: "cont/kick %.1f  PCM %.2f  UV %.3f",
+                    modulation.continuousSensitivityBoost
+                        / max(modulation.kickSensitivityBoost, 0.001),
+                    modulation.pcmKickMix,
+                    modulation.tsunamiMaxDisplacement
+                )
+            )
+            row(
                 "Tsunami UV",
                 String(format: "peak %.3f  PCM mix %.2f", modulation.tsunamiMaxDisplacement, modulation.pcmKickMix)
             )

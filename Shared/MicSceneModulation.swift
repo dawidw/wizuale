@@ -29,15 +29,16 @@ enum MicSceneModulation {
         let strength = Float(beatPct) / 100
         let env = min(max(kickEnvelope, 0), 1.4)
 
-        let kickBoost = env * MicTuning.scenePunchSensitivityBoostBaseline * strength
-        let continuousBoost = min(max(bass, 0), 2.2)
+        let kickBoost = env * MicTuning.scenePunchSensitivityBoostBaseline * strength * intensity
+        let continuousBoost = min(max(bass, 0), 2.8)
             * MicTuning.sceneContinuousSensitivityBaseline
             * intensity
         let projectMSens = MicTuning.clampSceneBeatSensitivity(
             base: baseBeatSensitivity,
-            punchBoost: kickBoost + continuousBoost
+            kickBoost: kickBoost,
+            continuousBoost: continuousBoost
         )
-        let pcmMix = env * MicTuning.scenePunchPCMSMixBaseline * strength
+        let pcmMix = env * MicTuning.scenePunchPCMSMixBaseline * strength * intensity
         let tsunamiDisp = MicTuning.kickWaveEffectiveDisplacement(envelope: env, strengthScale: strength)
 
         let trace = SceneModulationTrace(
