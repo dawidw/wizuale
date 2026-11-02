@@ -187,3 +187,26 @@ Brak nowego kind UDP — onset nadal w pakiecie audio (40 B, pole `onset` f32).
 - Offline: `scripts/render_kick_envelope_test.py` → `docs/kick-envelope-test/envelope_{0,0.5,1.0}.png`.
 
 (Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)
+
+---
+
+## Build 1.1(6)+ — bas ciągły + słabszy kick
+
+### Problem
+Po `20c5584` wrażenie „tylko kick”: suma `kickBoost + continuousBoost` szła przez **jeden tanh** → spike kicka saturował łączny boost `projectm_set_beat_sensitivity`; kick PCM/tsunami (bez Intensywności w `applyScenePunch`) dominował nad płynnym zoomem z `MicDrive.bass`.
+
+### Mix (domyślnie Intensywność 20×, Siła 85%)
+| Ścieżka | Trigger | Skala | Parametry @1× |
+|---------|---------|-------|----------------|
+| **Bas ciągły** | `drive.bass`, TV follow τ_release **240 ms** | **Intensywność** | sensitivity boost **0.88×** bass (cap 2.8), tanh sufit **10** |
+| **Kick akcent** | onset + Siła | **Intensywność × Siła** | sensitivity **+0.20×env**, PCM **0.16×env**, UV max **0.058**, tanh sufit kick **2.4**, envelope τ **95 ms** |
+
+Przy basie 0.75 i env kick 0.55: stosunek boostów cont/kick ≈ **7×**; `projectM` sensitivity idle→hit nie spada (osobne tanh).
+
+### DEBUG
+- Wiersz **Mix bas/kick**: stosunek cont/kick, PCM mix, UV peak.
+
+### Test offline
+`python3 scripts/simulate_scene_modulation_mix.py`
+
+(Wklej do PR #4 przed `<!-- CURSOR_AGENT_PR_BODY_END -->`.)
