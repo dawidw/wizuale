@@ -36,7 +36,6 @@ final class MicCapture: ObservableObject {
             heldSensitivity = clamped
             flag.unlock()
             guard !applyingRemote, clamped != oldValue else { return }
-            MicTuning.saveSensitivity(clamped)
             scheduleSettings()
         }
     }
@@ -48,15 +47,13 @@ final class MicCapture: ObservableObject {
                 return
             }
             guard !applyingRemote, clamped != oldValue else { return }
-            MicTuning.saveLatency(clamped)
             scheduleSettings()
         }
     }
     @Published var autoCycle: Bool = MicTuning.loadAutoCycle() {
         didSet {
             guard !applyingRemote, autoCycle != oldValue else { return }
-            MicTuning.saveAutoCycle(autoCycle)
-            scheduleCycle()
+            emitCycle()
         }
     }
     @Published var cycleSeconds: Int = MicTuning.loadCycleSeconds() {
@@ -67,8 +64,7 @@ final class MicCapture: ObservableObject {
                 return
             }
             guard !applyingRemote, clamped != oldValue else { return }
-            MicTuning.saveCycleSeconds(clamped)
-            scheduleCycle()
+            scheduleCycleFlush()
         }
     }
 
@@ -113,6 +109,17 @@ final class MicCapture: ObservableObject {
     private var latHold = 0
     private var sensHoldUntil: CFTimeInterval = 0
     private var latHoldUntil: CFTimeInterval = 0
+    /// Finger is down on a settings slider. Remote acks must not move that slider.
+    private var controlScrubCount = 0
+    /// Main-queue clock. Covers the drag and a short tail so an ack already
+    /// queued for the main thread cannot snap the thumb backwards.
+    private var remoteIgnoreUntil: CFTimeInterval = 0
+    private var settingsNeedFlush = false
+    private var cycleNeedFlush = false
+    private var settingsTrailing: DispatchWorkItem?
+    private var cycleTrailing: DispatchWorkItem?
+    private var lastSettingsFlush: CFTimeInterval = 0
+    private var lastCycleFlush: CFTimeInterval = 0
     private var startGeneration = 0
     private var interruption: NSObjectProtocol?
     private var calibrateOn = false
@@ -305,6 +312,8 @@ final class MicCapture: ObservableObject {
         setWantsLink(true)
         let sens = sensitivity
         let latency = latencyMs
+        let auto = autoCycle
+        let seconds = cycleSeconds
         network.async { [weak self] in
             guard let self else { return }
             if self.lastSettings == nil {
@@ -313,7 +322,7 @@ final class MicCapture: ObservableObject {
                     sequence: 1, latencyMs: latency, sensitivity: sens
                 )
             }
-            self.scheduleCycleOnNetwork()
+            self.scheduleCycleOnNetwork(auto: auto, seconds: seconds)
             self.startBrowser()
         }
     }
@@ -500,7 +509,46 @@ final class MicCapture: ObservableObject {
         return epoch
     }
 
+    /// The phone UI calls this around a slider drag. While it is true, an ack
+    /// from the TV must not write sensitivity or latency back over the finger.
+    func setControlScrubbing(_ active: Bool) {
+        if active {
+            controlScrubCount += 1
+            return
+        }
+        controlScrubCount = max(0, controlScrubCount - 1)
+        if controlScrubCount == 0 {
+            remoteIgnoreUntil = CACurrentMediaTime() + 0.45
+        }
+        if settingsNeedFlush { flushSettings() }
+        if cycleNeedFlush { emitCycle() }
+    }
+
+    /// Coalesce disk and UDP. The in-memory value (and the audio packet's copy
+    /// of sensitivity) already updated in `didSet`; this path must not run on
+    /// every touch sample.
     private func scheduleSettings() {
+        settingsNeedFlush = true
+        let now = CACurrentMediaTime()
+        if now - lastSettingsFlush >= 0.032 {
+            flushSettings()
+            return
+        }
+        guard settingsTrailing == nil else { return }
+        let wait = 0.032 - (now - lastSettingsFlush)
+        let work = DispatchWorkItem { [weak self] in
+            self?.flushSettings()
+        }
+        settingsTrailing = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work)
+    }
+
+    private func flushSettings() {
+        guard settingsNeedFlush else { return }
+        settingsTrailing?.cancel()
+        settingsTrailing = nil
+        settingsNeedFlush = false
+        lastSettingsFlush = CACurrentMediaTime()
         let sens = sensitivity
         let latency = latencyMs
         flag.lock()
@@ -511,6 +559,8 @@ final class MicCapture: ObservableObject {
         let packet = MicWire.encodeSettings(sequence: seq, latencyMs: latency, sensitivity: sens)
         network.async { [weak self] in
             guard let self else { return }
+            MicTuning.saveSensitivity(sens)
+            MicTuning.saveLatency(latency)
             self.sensHold = sens
             self.latHold = latency
             self.sensHoldUntil = CACurrentMediaTime() + 0.45
@@ -521,15 +571,37 @@ final class MicCapture: ObservableObject {
         }
     }
 
-    private func scheduleCycle() {
+    private func scheduleCycleFlush() {
+        cycleNeedFlush = true
+        let now = CACurrentMediaTime()
+        if now - lastCycleFlush >= 0.032 {
+            emitCycle()
+            return
+        }
+        guard cycleTrailing == nil else { return }
+        let wait = 0.032 - (now - lastCycleFlush)
+        let work = DispatchWorkItem { [weak self] in
+            self?.emitCycle()
+        }
+        cycleTrailing = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work)
+    }
+
+    private func emitCycle() {
+        cycleTrailing?.cancel()
+        cycleTrailing = nil
+        cycleNeedFlush = false
+        lastCycleFlush = CACurrentMediaTime()
+        let auto = autoCycle
+        let seconds = cycleSeconds
         network.async { [weak self] in
-            self?.scheduleCycleOnNetwork()
+            MicTuning.saveAutoCycle(auto)
+            MicTuning.saveCycleSeconds(seconds)
+            self?.scheduleCycleOnNetwork(auto: auto, seconds: seconds)
         }
     }
 
-    private func scheduleCycleOnNetwork() {
-        let auto = autoCycle
-        let seconds = cycleSeconds
+    private func scheduleCycleOnNetwork(auto: Bool, seconds: Int) {
         flag.lock()
         cycleSequence &+= 1
         if cycleSequence == 0 { cycleSequence = 1 }
@@ -760,7 +832,8 @@ final class MicCapture: ObservableObject {
         }()
         guard nextSens != nil || nextLat != nil else { return }
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.controlScrubCount == 0 else { return }
+            guard CACurrentMediaTime() >= self.remoteIgnoreUntil else { return }
             self.applyingRemote = true
             if let nextSens {
                 self.sensitivity = nextSens
